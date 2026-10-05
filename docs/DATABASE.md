@@ -1,10 +1,10 @@
 # FlowVision database
 
-FlowVision runs on the project's own schema: **17 tables + 3 views**, MariaDB 11 (hosted) or MySQL 8 (local).
+FlowVision runs on the project's own schema: **20 tables + 3 views**, MariaDB 11 (hosted) or MySQL 8 (local).
 
 - **Source of truth:** [`database/flowvision-complete-schema.sql`](../database/flowvision-complete-schema.sql). It's the phpMyAdmin export with `DEFINER` clauses removed so it imports anywhere.
 - **Models:** `server/lib/models.ts` mirrors it column for column and never runs `sync()`.
-- **No schema changes:** the app needs no extra columns or tables.
+- **Existing databases:** `npm run db:migrate` adds any newer tables and columns without touching data. To add only the AI chat-history tables (e.g. on the hosted database), run `node scripts/db-add-ai-history.ts --remote`.
 
 ## How the app uses each table
 
@@ -25,6 +25,8 @@ FlowVision runs on the project's own schema: **17 tables + 3 views**, MariaDB 11
 | `notifications` | `title`, `message`, `action_url` (where clicking goes), `is_read`. |
 | `auth_sessions` | Cookie sessions. `token` holds the **SHA-256** of the `fv_session` cookie, never the raw token. Logging out or revoking deletes the row. `expires_at` slides forward (renewed at most hourly). |
 | `audit_logs` | `action`, `entity_type`, `entity_id`, `old_values` / `new_values` (JSON), `ip_address`. |
+| `ai_conversations` | One AI Assistant chat thread. **Private to `user_id`**: every API read and write is scoped to the owner, not the organization. `title` comes from the first question. `updated_at` = last activity, so the sidebar lists recent threads first. Only the newest 200 per user are kept. |
+| `ai_messages` | The questions and answers of a thread, ordered by `created_at` (millisecond precision). `/api/ai/chat` writes both sides itself, so an answer is saved even if the page closed mid-reply. `model` = which AI wrote the answer, `tools` = JSON list of the lookups behind it. `is_error` rows are error notices and `failed` marks a question that got no answer; both are left out of the history sent to the AI, and a retry deletes them. Deleting a conversation cascades here. |
 
 The views `active_documents_by_office`, `liaison_performance` and `pending_approvals` are not used by the app, but the data it writes keeps them meaningful. For example, `pending_approvals` lists exactly the documents waiting for each STAFF member.
 

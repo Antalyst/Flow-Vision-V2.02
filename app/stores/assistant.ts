@@ -35,24 +35,31 @@ export interface Conversation {
   createdAt: string
   updatedAt: string
   messages: AssistantMessage[]
+  /** The messages have been fetched (the list only carries titles). */
+  loaded?: boolean
+  /** Not saved yet: the server hasn't confirmed the first question. */
+  draft?: boolean
 }
 
+type ConversationSummary = Omit<Conversation, 'messages' | 'loaded' | 'draft'>
+
 type StreamEvent =
+  | { type: 'saved'; conversation: ConversationSummary; question: { id: string; at: string } }
   | { type: 'tool_start'; id: string; name: string; label: string }
   | { type: 'tool_done'; id: string; name: string; label: string; summary: string; ok: boolean }
-  | { type: 'reply'; content: string; model: string | null; tools: AssistantTool[] }
-  | { type: 'error'; message: string }
+  | { type: 'reply'; id: string; at: string; content: string; model: string | null; tools: AssistantTool[] }
+  | { type: 'error'; id?: string; at?: string; message: string }
 
+// Before conversations were saved to the database they lived in localStorage under this prefix.
+// They're imported once, then removed from the browser.
 const STORAGE_PREFIX = 'fv_assistant_'
-const MAX_CONVERSATIONS = 40
-const MAX_MESSAGES = 80
 const newId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`
 const titleFrom = (text: string) => {
   const t = text.replace(/\s+/g, ' ').trim()
   return t.length > 60 ? `${t.slice(0, 57)}…` : t
 }
 
-/** Removes every saved conversation in this browser (called on sign-out). */
+/** Removes any conversations left in this browser from before they were saved to the account (called on sign-out). */
 export function clearAssistantStorage() {
   if (!import.meta.client) return
   try {
@@ -63,8 +70,9 @@ export function clearAssistantStorage() {
 }
 
 /**
- * Assistant conversations, kept in this browser per account (localStorage) and cleared on
- * sign-out. Nothing is stored on the server.
+ * Assistant conversations, saved to the user's account (ai_conversations / ai_messages), so they
+ * follow the user to any device. The list loads first; a thread's messages load when it's opened.
+ * The server stores each question and answer itself as part of /api/ai/chat.
  */
 export const useAssistantStore = defineStore('assistant', () => {
   const auth = useAuthStore()
@@ -75,6 +83,9 @@ export const useAssistantStore = defineStore('assistant', () => {
   const canvasOpen = ref(false)
   const activeCanvasId = ref<string | null>(null)
   const models = ref<ModelStatus | null>(null)
+  /** Fetching the conversation list / the open thread. */
+  const listLoading = ref(false)
+  const threadLoading = ref(false)
   let loadedFor: string | null = null
 
   /** The automatic failover list (which free models are ready or resting). */
@@ -86,32 +97,58 @@ export const useAssistantStore = defineStore('assistant', () => {
     }
   }
 
-  const storageKey = () => (auth.user ? `${STORAGE_PREFIX}${auth.user.id}` : null)
+  const toConversation = (c: ConversationSummary): Conversation => ({ ...c, messages: [], loaded: false })
 
-  function load() {
-    const key = storageKey()
-    if (!import.meta.client || !key || loadedFor === key) return
-    loadedFor = key
-    try {
-      const saved = JSON.parse(localStorage.getItem(key) ?? '[]')
-      conversations.value = Array.isArray(saved) ? saved : []
-    } catch {
-      conversations.value = []
-    }
+  /** The signed-in user's conversations. Runs once per account. */
+  async function load() {
+    const userId = auth.user?.id
+    if (!import.meta.client || !userId || loadedFor === userId) return
+    loadedFor = userId
+    conversations.value = []
     activeId.value = null
+    listLoading.value = true
+    try {
+      await importLocal(userId)
+      const { data } = await useApi().get<{ data: ConversationSummary[] }>('/ai/conversations')
+      // Keep a thread that was started while the list was loading.
+      const drafts = conversations.value.filter((c) => c.draft || c.loaded)
+      conversations.value = [...drafts, ...data.filter((c) => !drafts.some((d) => d.id === c.id)).map(toConversation)]
+    } catch (err) {
+      loadedFor = null
+      useUiStore().error('Could not load your conversations', apiErrorMessage(err))
+    } finally {
+      listLoading.value = false
+    }
   }
 
-  function persist() {
-    const key = storageKey()
-    if (!import.meta.client || !key) return
-    const kept = [...conversations.value]
-      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-      .slice(0, MAX_CONVERSATIONS)
-      .map((c) => ({ ...c, messages: c.messages.slice(-MAX_MESSAGES) }))
+  /** Moves conversations saved in this browser (older versions) into the account, then forgets them. */
+  async function importLocal(userId: string) {
+    const key = `${STORAGE_PREFIX}${userId}`
+    let saved: unknown
     try {
-      localStorage.setItem(key, JSON.stringify(kept))
+      saved = JSON.parse(localStorage.getItem(key) ?? 'null')
     } catch {
-      /* storage full or blocked: the conversation still works for this visit */
+      return
+    }
+    if (!Array.isArray(saved) || !saved.length) {
+      if (saved !== null) localStorage.removeItem(key)
+      return
+    }
+    await useApi().post('/ai/conversations/import', { conversations: saved })
+    localStorage.removeItem(key)
+  }
+
+  /** Fetches a thread's messages the first time it's opened. */
+  async function fetchThread(convo: Conversation) {
+    if (convo.loaded || convo.draft) return
+    threadLoading.value = true
+    try {
+      const full = await useApi().get<ConversationSummary & { messages: AssistantMessage[] }>(`/ai/conversations/${convo.id}`)
+      Object.assign(convo, { title: full.title, updatedAt: full.updatedAt, messages: full.messages, loaded: true })
+    } catch (err) {
+      useUiStore().error('Could not open the conversation', apiErrorMessage(err))
+    } finally {
+      threadLoading.value = false
     }
   }
 
@@ -140,43 +177,63 @@ export const useAssistantStore = defineStore('assistant', () => {
     activeId.value = id
     canvasOpen.value = false
     activeCanvasId.value = null
+    const convo = conversations.value.find((c) => c.id === id)
+    if (convo) void fetchThread(convo)
   }
 
   const startNew = () => select(null)
 
-  function remove(id: string) {
+  /** Deletes a conversation for good. It disappears at once and comes back if the server refuses. */
+  async function remove(id: string) {
     if (pendingId.value === id) return
-    conversations.value = conversations.value.filter((c) => c.id !== id)
+    const index = conversations.value.findIndex((c) => c.id === id)
+    const convo = conversations.value[index]
+    if (!convo) return
+    conversations.value.splice(index, 1)
     if (activeId.value === id) select(null)
-    persist()
+    if (convo.draft) return
+    try {
+      await useApi().del(`/ai/conversations/${id}`)
+    } catch (err) {
+      conversations.value.splice(index, 0, convo)
+      useUiStore().error('Could not delete the conversation', apiErrorMessage(err))
+    }
   }
 
-  function fail(convo: Conversation, question: AssistantMessage, message: string) {
+  function fail(convo: Conversation, question: AssistantMessage, message: string, saved?: { id?: string; at?: string }) {
     question.failed = true
-    convo.messages.push({ id: newId(), role: 'assistant', content: message, at: new Date().toISOString(), error: true })
+    convo.messages.push({ id: saved?.id ?? newId(), role: 'assistant', content: message, at: saved?.at ?? new Date().toISOString(), error: true })
   }
 
   function handle(e: StreamEvent, convo: Conversation, question: AssistantMessage) {
-    if (e.type === 'tool_start') liveTools.value.push({ id: e.id, name: e.name, label: e.label, done: false })
+    if (e.type === 'saved') {
+      // The server's ids replace the temporary ones; a new thread becomes a saved conversation.
+      const wasId = convo.id
+      Object.assign(convo, { id: e.conversation.id, title: e.conversation.title, createdAt: e.conversation.createdAt, draft: false, loaded: true })
+      if (activeId.value === wasId) activeId.value = convo.id
+      if (pendingId.value === wasId) pendingId.value = convo.id
+      question.id = e.question.id
+      question.at = e.question.at
+    } else if (e.type === 'tool_start') liveTools.value.push({ id: e.id, name: e.name, label: e.label, done: false })
     else if (e.type === 'tool_done') {
       const t = liveTools.value.find((x) => x.id === e.id)
       if (t) Object.assign(t, { summary: e.summary, ok: e.ok, done: true })
     } else if (e.type === 'reply') {
-      const msg: AssistantMessage = { id: newId(), role: 'assistant', content: e.content, at: new Date().toISOString(), model: e.model, tools: e.tools.map((t) => ({ ...t, done: true })) }
+      const msg: AssistantMessage = { id: e.id, role: 'assistant', content: e.content, at: e.at, model: e.model, tools: e.tools.map((t) => ({ ...t, done: true })) }
       convo.messages.push(msg)
       const made = splitCanvas(msg.content, msg.id).flatMap((s) => (s.kind === 'canvas' ? [s.canvas] : []))
       if (made.length && activeId.value === convo.id) openCanvas(made.at(-1)!.id)
-    } else if (e.type === 'error') fail(convo, question, e.message)
+    } else if (e.type === 'error') fail(convo, question, e.message, e)
   }
 
-  async function send(text: string) {
+  async function send(text: string, retryOf?: string) {
     const content = text.trim()
     if (!content || pending.value) return
 
     let convo = active.value
     if (!convo) {
       const now = new Date().toISOString()
-      conversations.value.push({ id: newId(), title: titleFrom(content), createdAt: now, updatedAt: now, messages: [] })
+      conversations.value.push({ id: newId(), title: titleFrom(content), createdAt: now, updatedAt: now, messages: [], draft: true, loaded: true })
       // The reactive copy, so later pushes update the page.
       convo = conversations.value.at(-1)!
       activeId.value = convo.id
@@ -186,15 +243,14 @@ export const useAssistantStore = defineStore('assistant', () => {
     convo.updatedAt = question.at
     pendingId.value = convo.id
     liveTools.value = []
-    persist()
 
-    const history = convo.messages.filter((m) => !m.error && !m.failed).map(({ role, content }) => ({ role, content }))
     try {
       const res = await fetch('/api/ai/chat', {
         method: 'POST',
         credentials: 'same-origin',
         headers: { 'content-type': 'application/json', accept: 'application/x-ndjson' },
-        body: JSON.stringify({ messages: history }),
+        // The server keeps the history; only the new question travels.
+        body: JSON.stringify({ message: content, conversationId: convo.draft ? undefined : convo.id, retryOf }),
       })
       if (res.status === 401) {
         auth.clear()
@@ -232,7 +288,6 @@ export const useAssistantStore = defineStore('assistant', () => {
       convo.updatedAt = new Date().toISOString()
       pendingId.value = null
       liveTools.value = []
-      persist()
       refreshModels()
     }
   }
@@ -244,7 +299,8 @@ export const useAssistantStore = defineStore('assistant', () => {
     const i = convo.messages.findIndex((m) => m.id === questionId)
     if (i < 0) return
     const [question] = convo.messages.splice(i, convo.messages[i + 1]?.error ? 2 : 1)
-    await send(question!.content)
+    // The server drops its saved copy of the unanswered question (and its error notice) too.
+    await send(question!.content, question!.id)
   }
 
   return {
@@ -259,6 +315,8 @@ export const useAssistantStore = defineStore('assistant', () => {
     liveTools,
     models,
     refreshModels,
+    listLoading,
+    threadLoading,
     canvasOpen,
     activeCanvasId,
     canvases,

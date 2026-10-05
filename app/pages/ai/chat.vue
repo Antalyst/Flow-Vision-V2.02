@@ -198,8 +198,12 @@ onMounted(() => {
       </div>
 
       <nav class="flex-1 overflow-y-auto px-3 pb-4">
-        <p v-if="!groups.length" class="px-3 pt-4 text-[13px] leading-relaxed text-night-text-2">
-          Your conversations will appear here. They stay in this browser and are cleared when you sign out.
+        <div v-if="assistant.listLoading && !groups.length" class="space-y-2 px-1 pt-3" role="status" aria-label="Loading conversations">
+          <div class="h-2.5 w-16 animate-pulse rounded-full bg-white/[0.08]" />
+          <div v-for="i in 6" :key="i" class="h-9 animate-pulse rounded-xl bg-white/[0.05]" :style="{ width: `${92 - (i % 3) * 14}%`, animationDelay: `${i * 80}ms` }" />
+        </div>
+        <p v-else-if="!groups.length" class="px-3 pt-4 text-[13px] leading-relaxed text-night-text-2">
+          Your conversations will appear here. They're saved to your account, so they follow you to any device. Only you can see them.
         </p>
         <div v-for="g in groups" :key="g.label" class="mt-3 first:mt-1">
           <p class="px-3 pb-1.5 text-[10.5px] font-semibold tracking-[0.14em] text-night-text-2/80 uppercase">{{ g.label }}</p>
@@ -241,6 +245,9 @@ onMounted(() => {
         </div>
         <p class="mt-1 flex items-center gap-1.5 px-2 text-[11.5px] text-night-text-2">
           <FIcon name="shield" :size="12" /> {{ auth.role ? SCOPE_HINT[auth.role] : '' }}
+        </p>
+        <p class="mt-1 flex items-center gap-1.5 px-2 text-[11.5px] text-night-text-2">
+          <FIcon name="cloud" :size="12" /> Chats saved to your account
         </p>
       </div>
     </aside>
@@ -295,7 +302,22 @@ onMounted(() => {
       <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto" aria-live="polite">
         <div class="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
           <!-- Empty state -->
-          <div v-if="!assistant.messages.length" class="flex min-h-[calc(100dvh-16rem)] flex-col justify-center">
+          <!-- Opening a saved conversation -->
+          <div v-if="assistant.threadLoading && !assistant.messages.length" class="space-y-7 pt-2" role="status" aria-label="Loading conversation">
+            <div v-for="i in 3" :key="i" class="space-y-7">
+              <div class="flex justify-end"><div class="skeleton h-11 w-2/5 rounded-3xl" /></div>
+              <div class="flex gap-3">
+                <div class="skeleton size-8 shrink-0 rounded-full" />
+                <div class="flex-1 space-y-2.5 pt-1">
+                  <div class="skeleton h-3.5 w-11/12" />
+                  <div class="skeleton h-3.5 w-4/5" />
+                  <div class="skeleton h-3.5 w-3/5" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-else-if="!assistant.messages.length" class="flex min-h-[calc(100dvh-16rem)] flex-col justify-center">
             <span class="mb-5 grid size-14 place-items-center overflow-hidden rounded-2xl border border-line bg-white shadow-soft">
               <img src="~/assets/logo/icon.png" alt="FlowVision" class="size-12" />
             </span>

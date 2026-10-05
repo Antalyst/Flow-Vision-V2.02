@@ -738,6 +738,46 @@ CREATE TABLE `knowledge_files` (
   CONSTRAINT `fk_knowledge_files_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_knowledge_files_uploader` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Files whose text the AI uses as organization knowledge';
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `ai_conversations` (AI Assistant chat history)
+--
+
+CREATE TABLE `ai_conversations` (
+  `id` char(36) NOT NULL,
+  `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `user_id` char(36) NOT NULL COMMENT 'Owner: only this user can read the conversation',
+  `title` varchar(255) NOT NULL COMMENT 'From the first question',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_ai_conversations_user` (`user_id`,`updated_at`),
+  CONSTRAINT `fk_ai_conversations_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_ai_conversations_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='AI Assistant conversations, one per chat thread';
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `ai_messages` (AI Assistant chat history)
+--
+
+CREATE TABLE `ai_messages` (
+  `id` char(36) NOT NULL,
+  `conversation_id` char(36) NOT NULL COMMENT 'Conversation reference',
+  `role` enum('user','assistant') NOT NULL COMMENT 'Who wrote it',
+  `content` mediumtext NOT NULL COMMENT 'Markdown; assistant answers may contain <canvas> blocks',
+  `model` varchar(100) DEFAULT NULL COMMENT 'AI model that wrote an answer',
+  `tools` text DEFAULT NULL COMMENT 'JSON list of lookups the assistant ran for this answer',
+  `is_error` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Assistant error notice (left out of the AI history)',
+  `failed` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Question that got no answer (left out of the AI history)',
+  `created_at` timestamp(3) NOT NULL DEFAULT current_timestamp(3) COMMENT 'Millisecond precision keeps the order of a thread',
+  PRIMARY KEY (`id`),
+  KEY `idx_ai_messages_conversation` (`conversation_id`,`created_at`),
+  CONSTRAINT `fk_ai_messages_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `ai_conversations` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Messages of AI Assistant conversations';
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;

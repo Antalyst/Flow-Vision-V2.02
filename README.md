@@ -8,11 +8,11 @@ Document tracking and workflow management for **Bago City LGU**. Each document f
 | --------- | ----- |
 | App       | Nuxt 4 (SSR) · Vue 3 · Tailwind CSS 4 · Pinia |
 | Server    | Nitro API routes (`server/api`) · Sequelize 6 · MariaDB 11 / MySQL 8 · cookie sessions · native WebSockets |
-| Database  | 17 tables + 3 views — `database/flowvision-complete-schema.sql` |
+| Database  | 20 tables + 3 views — `database/flowvision-complete-schema.sql` |
 
 ## Quick start
 
-Requirements: **Node.js 22.18+** (the DB scripts use Node's built-in TypeScript support) and **MariaDB 11 / MySQL 8**. The schema is `database/flowvision-complete-schema.sql` (17 tables + 3 views); see [docs/DATABASE.md](docs/DATABASE.md) for how the app uses it.
+Requirements: **Node.js 22.18+** (the DB scripts use Node's built-in TypeScript support) and **MariaDB 11 / MySQL 8**. The schema is `database/flowvision-complete-schema.sql` (20 tables + 3 views); see [docs/DATABASE.md](docs/DATABASE.md) for how the app uses it.
 
 **Against the hosted database** (schema already imported via phpMyAdmin):
 
@@ -128,7 +128,7 @@ docs/                        API.md · DATABASE.md · DESIGN.md
 | `npm run build`     | Production build into `.output/` |
 | `npm start`         | Run the production build (reads `.env` if present) |
 | `npm run typecheck` | `vue-tsc` over app **and** server |
-| `npm run db:schema` | (Re)create all 17 tables — destructive |
+| `npm run db:schema` | (Re)create all 20 tables — destructive |
 | `npm run db:seed`   | Load demo data into an empty schema |
 | `npm run db:reset`  | Both of the above |
 
@@ -157,7 +157,7 @@ NODE_ENV=production PORT=3000 node --env-file=.env .output/server/index.mjs
 ## Status
 
 **Done:**
-- All 17 tables.
+- All 20 tables.
 - Server-rendered pages with cookie auth.
 - Every A/B/C/D page.
 - Route builder with versioning.

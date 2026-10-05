@@ -319,6 +319,32 @@ export const KnowledgeFile = define('knowledge_files', {
   uploaded_by: DataTypes.CHAR(36),
 })
 
+/** AI Assistant: one chat thread, private to the user who started it. */
+export const AiConversation = define('ai_conversations', {
+  id: uuidPk,
+  org_id: { type: DataTypes.CHAR(36), allowNull: false },
+  user_id: { type: DataTypes.CHAR(36), allowNull: false },
+  title: { type: DataTypes.STRING(255), allowNull: false },
+})
+
+/** AI Assistant: one question or answer. `tools` is a JSON list of the lookups behind an answer. */
+export const AiMessage = define(
+  'ai_messages',
+  {
+    id: uuidPk,
+    conversation_id: { type: DataTypes.CHAR(36), allowNull: false },
+    role: { type: DataTypes.ENUM('user', 'assistant'), allowNull: false },
+    content: { type: DataTypes.TEXT('medium'), allowNull: false },
+    model: DataTypes.STRING(100),
+    tools: DataTypes.TEXT,
+    is_error: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    failed: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // Set explicitly (millisecond precision) so a question always sorts before its answer.
+    created_at: { type: DataTypes.DATE(3), allowNull: false, defaultValue: DataTypes.NOW },
+  },
+  { timestamps: false },
+)
+
 // ---------------------------------------------------------------------------
 // Associations
 // ---------------------------------------------------------------------------
@@ -360,5 +386,8 @@ Message.belongsTo(User, { foreignKey: 'sender_id', as: 'sender' })
 Message.belongsTo(User, { foreignKey: 'recipient_id', as: 'recipient' })
 
 KnowledgeFile.belongsTo(User, { foreignKey: 'uploaded_by', as: 'uploader' })
+
+AiConversation.hasMany(AiMessage, { foreignKey: 'conversation_id', as: 'messages' })
+AiMessage.belongsTo(AiConversation, { foreignKey: 'conversation_id', as: 'conversation' })
 
 export { sequelize }

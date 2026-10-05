@@ -102,7 +102,8 @@ try {
   // Organization Settings: document types and AI knowledge files. The DDL comes straight from the
   // schema file, so the two can't drift apart.
   const schemaSql = await fs.readFile(path.resolve(import.meta.dirname, '../database/flowvision-complete-schema.sql'), 'utf8')
-  for (const table of ['document_types', 'knowledge_files', 'document_files']) {
+  // …plus AI Assistant chat history (conversations before their messages, for the foreign key).
+  for (const table of ['document_types', 'knowledge_files', 'document_files', 'ai_conversations', 'ai_messages']) {
     if (await hasTable(table)) {
       console.log(`[migrate] ${table} already present`)
       continue
