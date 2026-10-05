@@ -1,0 +1,51 @@
+/* Lumio — FlowVision colour tokens: warm ivory, near-black ink, one crimson accent. */
+:root {
+  /* Base — Warm Ivory + Ink */
+  --lumio-page-bg: #F6F5F1;
+  --lumio-card-bg: #FFFFFF;
+  --lumio-text: #111113;
+  --lumio-text-secondary: #77767B;
+  --lumio-text-muted: #AEADB2;
+  --lumio-line: #E6E3DE;
+
+  /* Readable secondary text for paragraphs (secondary is reserved for short meta labels) */
+  --lumio-text-body: #46464A;
+
+  /* Actions — Crimson is the single brand accent */
+  --lumio-accent-primary: #E5322D;        /* Crimson */
+  --lumio-accent-primary-hover: #C92520;
+  --lumio-accent-success: #10B981;
+  --lumio-accent-warning: #F59E0B;
+  --lumio-accent-error: #D92D20;
+  --lumio-accent-info: #2A81FF;
+
+  /* Darker tints for text on light tinted backgrounds (keeps badges legible) */
+  --lumio-success-ink: #047857;
+  --lumio-warning-ink: #B45309;
+  --lumio-error-ink: #B42318;
+  --lumio-info-ink: #004493;
+  --lumio-primary-ink: #B3201B;
+
+  /* Signature gradients — ember (black → crimson) */
+  --lumio-grad-aura: linear-gradient(135deg, #2A0A08 0%, #8F1A12 55%, #E5322D 100%);
+  --lumio-grad-sunset: linear-gradient(135deg, #E5322D 0%, #FF7A45 100%);
+  --lumio-grad-emerald: linear-gradient(135deg, #10B981 0%, #14B8A6 100%);
+
+  /* Dark surface (sidebar, footer) */
+  --lumio-dark: #111113;
+  --lumio-dark-2: #1F1F22;
+  --lumio-dark-line: rgba(246, 245, 241, 0.08);
+  --lumio-dark-text: #F4F2EE;
+  --lumio-dark-text-secondary: #9E9DA3;
+
+  /* Glass — Level 1 cards: white 70% + 24px blur; Level 2 overlays: 90%+ */
+  --lumio-glass: rgba(255, 255, 255, 0.72);
+  --lumio-glass-strong: rgba(255, 255, 255, 0.94);
+  --lumio-glass-border: rgba(255, 255, 255, 0.8);
+  --lumio-glass-blur: 24px;
+
+  /* Shadows are always a low-opacity tint of Ink */
+  --lumio-shadow-sm: 0 1px 2px rgba(17, 17, 19, 0.04);
+  --lumio-shadow: 0 1px 2px rgba(17, 17, 19, 0.03), 0 10px 30px -6px rgba(17, 17, 19, 0.06);
+  --lumio-shadow-lg: 0 10px 30px rgba(17, 17, 19, 0.05), 0 24px 60px -20px rgba(17, 17, 19, 0.16);
+}

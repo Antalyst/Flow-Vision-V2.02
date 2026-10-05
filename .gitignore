@@ -1,0 +1,25 @@
+# Dependencies
+node_modules
+
+# Nuxt build output
+.output
+.data
+.nuxt
+.nitro
+.cache
+dist
+
+# Uploaded attachments
+uploads/
+
+# Environment files (copy .env.example → .env)
+.env
+.env.*
+!.env.example
+
+# Logs & OS / editor files
+logs
+*.log
+.DS_Store
+.fleet
+.idea

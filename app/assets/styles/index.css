@@ -1,0 +1,252 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+@import '@fontsource-variable/jetbrains-mono';
+@import './lumio.css';
+@import './glassmorphic.css';
+
+/* Map Lumio tokens into Tailwind utilities: bg-cream, text-ink-2, border-line, bg-terracotta … */
+@theme inline {
+  --color-cream: var(--lumio-page-bg);
+  --color-card: var(--lumio-card-bg);
+  --color-ink: var(--lumio-text);
+  --color-ink-body: var(--lumio-text-body);
+  --color-ink-2: var(--lumio-text-secondary);
+  --color-ink-3: var(--lumio-text-muted);
+  --color-line: var(--lumio-line);
+
+  --color-terracotta: var(--lumio-accent-primary);
+  --color-terracotta-hover: var(--lumio-accent-primary-hover);
+  --color-terracotta-ink: var(--lumio-primary-ink);
+  --color-sage: var(--lumio-accent-success);
+  --color-sage-ink: var(--lumio-success-ink);
+  --color-amber: var(--lumio-accent-warning);
+  --color-amber-ink: var(--lumio-warning-ink);
+  --color-danger: var(--lumio-accent-error);
+  --color-danger-ink: var(--lumio-error-ink);
+  --color-info: var(--lumio-accent-info);
+  --color-info-ink: var(--lumio-info-ink);
+
+  --color-night: var(--lumio-dark);
+  --color-night-2: var(--lumio-dark-2);
+  --color-night-text: var(--lumio-dark-text);
+  --color-night-text-2: var(--lumio-dark-text-secondary);
+
+  --font-display: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --shadow-soft: var(--lumio-shadow);
+  --shadow-lift: var(--lumio-shadow-lg);
+}
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    background: var(--lumio-page-bg);
+    color: var(--lumio-text);
+    font-family: var(--font-sans);
+    font-weight: 400;
+    font-feature-settings: 'cv11', 'ss01';
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    font-weight: 700;
+    letter-spacing: -0.03em;
+    color: var(--lumio-text);
+  }
+  ::selection {
+    background: rgba(229, 50, 45, 0.18);
+  }
+  :focus-visible {
+    outline: 2px solid var(--lumio-accent-primary);
+    outline-offset: 2px;
+  }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-thumb { background: var(--lumio-line); border-radius: 9999px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+}
+
+@layer components {
+  /* Cards */
+  .card {
+    @apply glass rounded-[2rem];
+  }
+  .card-pad {
+    @apply p-6 sm:p-8;
+  }
+
+  /* Buttons — 44px minimum touch target */
+  .btn {
+    @apply inline-flex min-h-11 select-none items-center justify-center gap-2 rounded-full px-5 text-sm font-semibold whitespace-nowrap transition-colors duration-150 disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-sm {
+    @apply min-h-9 px-3.5 text-[13px];
+  }
+  /* Primary actions are solid ink pills; crimson is kept for the one action that must stand out */
+  .btn-primary {
+    @apply bg-ink text-white hover:bg-[#2B2B2F];
+    box-shadow: 0 8px 20px -8px rgba(17, 17, 19, 0.45);
+  }
+  .btn-accent {
+    @apply bg-terracotta text-white hover:bg-terracotta-hover;
+    box-shadow: 0 8px 20px -8px rgba(229, 50, 45, 0.55);
+  }
+  .btn-secondary {
+    @apply border border-line bg-white text-ink hover:border-ink/25;
+  }
+  .btn-ghost {
+    @apply border border-line bg-white/60 text-ink hover:bg-white;
+  }
+  .btn-danger {
+    @apply bg-danger/12 text-danger-ink hover:bg-danger/20;
+  }
+  .btn-success {
+    @apply text-white hover:brightness-110;
+    background: var(--lumio-grad-emerald);
+    box-shadow: 0 8px 20px -6px rgba(16, 185, 129, 0.5);
+  }
+
+  /* Forms */
+  .field-label {
+    @apply mb-1.5 block text-[13px] font-medium text-ink-body;
+  }
+  .input {
+    @apply block min-h-12 w-full rounded-2xl border border-line bg-[#FBFAF6] px-4 text-[15px] font-medium text-ink placeholder:text-ink-3 transition-colors focus:border-terracotta focus:ring-4 focus:ring-terracotta/12 focus:outline-none;
+  }
+  textarea.input {
+    @apply py-3;
+  }
+  .field-hint {
+    @apply mt-1.5 text-xs text-ink-2;
+  }
+
+  /* Typography helpers */
+  .eyebrow {
+    @apply text-xs leading-none font-semibold tracking-[0.05em] text-ink-2 uppercase;
+  }
+  .mono {
+    @apply font-mono text-[12.5px] tracking-tight;
+  }
+
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] leading-none font-semibold whitespace-nowrap;
+  }
+
+  /* Tabs */
+  .tab {
+    @apply inline-flex min-h-10 items-center gap-2 rounded-full px-4 text-sm font-medium text-ink-2 transition-colors hover:text-ink;
+  }
+  .text-gradient {
+    background: var(--lumio-grad-aura);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .tab-active {
+    @apply bg-card text-ink shadow-sm;
+  }
+}
+
+@keyframes fv-rise {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+.fv-rise {
+  animation: fv-rise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fv-rise { animation: none; }
+}
+
+/* Ember: "photographic" surfaces built from light (crimson glows on ink, film grain). Used by the public pages. */
+@layer components {
+  .ember {
+    position: relative;
+    isolation: isolate;
+  }
+  .ember::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    opacity: 0.22;
+    mix-blend-mode: overlay;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .ember-a {
+    background:
+      radial-gradient(55% 70% at 72% 28%, rgba(229, 50, 45, 0.95), transparent 62%),
+      radial-gradient(45% 55% at 18% 88%, rgba(122, 18, 12, 0.9), transparent 70%),
+      radial-gradient(30% 30% at 82% 22%, rgba(255, 170, 140, 0.55), transparent 70%),
+      #120707;
+  }
+  .ember-b {
+    background:
+      radial-gradient(60% 65% at 30% 45%, rgba(194, 38, 31, 0.95), transparent 65%),
+      radial-gradient(50% 55% at 88% 85%, rgba(255, 106, 77, 0.45), transparent 70%),
+      #1A0A09;
+  }
+  .ember-c {
+    background:
+      radial-gradient(40% 50% at 62% 42%, rgba(229, 50, 45, 0.6), transparent 70%),
+      radial-gradient(60% 40% at 20% 10%, rgba(255, 255, 255, 0.06), transparent 70%),
+      #0D0D0F;
+  }
+  .ember-d {
+    background:
+      radial-gradient(55% 70% at 82% 18%, rgba(229, 50, 45, 0.85), transparent 62%),
+      radial-gradient(70% 80% at 8% 100%, rgba(255, 220, 210, 0.9), transparent 70%),
+      #E7CFC8;
+  }
+
+  /* Photo: any stock photo pulled into the palette. Default is a crimson duotone; .photo-mono is black and white.
+     Markup: <div class="photo"><img …> …content…</div> — the image and tint sit behind the content. */
+  .photo {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+    background: #120707;
+  }
+  .photo > img {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    filter: grayscale(1) contrast(1.15) brightness(1.1);
+  }
+  .photo::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(145deg, #FF6B57 0%, #E5322D 38%, #4A0A06 100%);
+    mix-blend-mode: multiply;
+  }
+  .photo-mono {
+    background: #0D0D0F;
+  }
+  .photo-mono > img {
+    filter: grayscale(1) contrast(1.1) brightness(0.9);
+  }
+  .photo-mono::before {
+    background: linear-gradient(180deg, transparent 35%, rgba(13, 13, 15, 0.65) 100%);
+    mix-blend-mode: normal;
+  }
+  /* Darkens the bottom so captions stay readable */
+  .photo-shade::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(180deg, transparent 45%, rgba(10, 4, 3, 0.7) 100%);
+  }
+}
