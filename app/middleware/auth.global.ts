@@ -37,6 +37,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // Scanning moves paper: messengers pick up, office staff receive. The CLIENT administrator only follows along.
   if (to.path === '/scan' && auth.role === 'CLIENT') return navigateTo(auth.homePath)
 
+  // The AI assistant serves CLIENT, EMPLOYEE and STAFF accounts.
+  if (to.path.startsWith('/ai') && auth.role === 'LIAISON') return navigateTo(auth.homePath)
+
   // Liaisons carry documents but don't upload them.
   if ((to.path === '/documents' || to.path === '/documents/new') && auth.role === 'LIAISON') {
     return navigateTo(auth.homePath)

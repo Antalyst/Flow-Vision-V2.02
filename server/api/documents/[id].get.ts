@@ -1,10 +1,11 @@
 import { Op } from 'sequelize'
 import { Approval, Document, Office, User } from '~~/server/lib/models.ts'
-import { availableActions, documentTimeline, getCurrentVisit, myPendingApproval, renderDocumentQr } from '~~/server/lib/documents.ts'
+import { availableActions, documentHistory, getCurrentVisit, myPendingApproval, renderDocumentQr } from '~~/server/lib/documents.ts'
 import { documentAttributes, documentIncludes, openableWhere, userAttrs } from '~~/server/lib/document-queries.ts'
 import { getRouteWithSteps } from '~~/server/lib/routes.ts'
 import { approvalDto, documentDtoOne, routeDto } from '~~/server/lib/serializers.ts'
 import { notFound } from '~~/server/lib/errors.ts'
+import { documentFileList } from '~~/server/lib/document-files.ts'
 
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event)
@@ -15,9 +16,9 @@ export default defineApiHandler(async (event) => {
   })
   if (!doc) throw notFound('Document')
 
-  const [route, tracking, approvals, qr, visit] = await Promise.all([
+  const [route, history, approvals, qr, visit, files] = await Promise.all([
     getRouteWithSteps(doc.route_id),
-    documentTimeline(doc),
+    documentHistory(doc),
     Approval.findAll({
       where: { document_id: doc.id },
       include: [
@@ -28,6 +29,7 @@ export default defineApiHandler(async (event) => {
     }),
     renderDocumentQr(doc.id),
     doc.status === 'CREATED' ? null : getCurrentVisit(doc),
+    documentFileList(doc),
   ])
 
   const steps: any[] = route?.steps ?? []
@@ -38,6 +40,7 @@ export default defineApiHandler(async (event) => {
   const pending = await myPendingApproval(doc, user, visit)
   const permissions = availableActions(doc, user, {
     received: Boolean(visit?.handler_id),
+    handlerId: visit?.handler_id ?? null,
     visitLiaisonId: visit?.liaison_id ?? null,
     isFinalStep,
     nextOfficeId: nextStep?.office_id ?? null,
@@ -58,10 +61,14 @@ export default defineApiHandler(async (event) => {
   return {
     document: await documentDtoOne(doc),
     route: route ? routeDto(route) : null,
-    tracking,
+    tracking: history.tracking,
+    // Office by office: what happened inside each office up to the hand-over to the next.
+    routing: history.routing,
     approvals: [...(anyPending ? [approvalDto(anyPending)] : []), ...decided.map((a) => approvalDto(a))],
     pending_approval: pending ? approvalDto(pending) : null,
     active_qr: canSeeQr ? qr : null,
+    // Every file of the document (several for a bulk upload, all under the one QR).
+    files,
     permissions,
   }
 })

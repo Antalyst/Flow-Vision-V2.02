@@ -41,7 +41,9 @@ const pickupDoc = ref<FlowDocument | null>(null)
         <StatCard label="Awaiting pickup" :value="data.counts.awaiting_pickup" icon="package" tone="neutral" :hint="`${data.counts.received_today} received today`" to="/employee/queue?tab=pickup" />
       </section>
 
-      <section class="mt-6">
+      <OfficeForecast />
+
+      <section class="mt-8">
         <h2 class="mb-4 text-lg">At your office now</h2>
         <div v-if="!data.documents.length" class="card">
           <EmptyState icon="check-circle" title="Desk is clear" description="Nothing is waiting at your office. New arrivals appear here instantly." />
@@ -50,9 +52,10 @@ const pickupDoc = ref<FlowDocument | null>(null)
           <DocumentCard v-for="d in data.documents" :key="d.id" :doc="d" show-submitter>
             <template #actions>
               <NuxtLink v-if="!d.received_at" to="/scan" class="btn btn-sm btn-primary"><FIcon name="maximize" :size="14" /> Scan to receive</NuxtLink>
-              <button v-else-if="!d.pickup_requested_at && d.next_office_name" class="btn btn-sm btn-primary" @click="pickupDoc = d">
+              <button v-else-if="!d.pickup_requested_at && d.next_office_name && releasesDocument(d, auth.user?.id)" class="btn btn-sm btn-primary" @click="pickupDoc = d">
                 <FIcon name="truck" :size="14" /> Release → {{ d.next_office_name }}
               </button>
+              <ToneBadge v-else-if="!d.pickup_requested_at && d.next_office_name" tone="info" icon="user">Received by {{ fullName(d.received_by) }} — they release it</ToneBadge>
               <NuxtLink v-else-if="!d.next_office_name" :to="`/documents/${d.id}#approval`" class="btn btn-sm btn-success"><FIcon name="check-square" :size="14" /> Last office — review &amp; approve</NuxtLink>
               <ToneBadge v-else tone="warning" icon="package">Waiting for {{ d.liaison ? fullName(d.liaison) : 'messenger' }}</ToneBadge>
               <NuxtLink :to="`/documents/${d.id}`" class="btn btn-sm btn-ghost ml-auto">Details</NuxtLink>

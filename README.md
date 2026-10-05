@@ -81,7 +81,7 @@ STAFF (final office) ──► COMPLETED   or   RETURNED (remarks required; uplo
   - STAFF without it see the blue "YOU DO NOT HAVE APPROVAL AUTHORITY" banner, and are redirected from `/staff/approval` to the read-only `/staff/view`.
   - The redirect happens during server rendering, before any page is sent.
 - **Origin (step 0):** a document starts where its uploader belongs. A messenger carries it from there to the route's first office. If the uploader works at that first office, it starts there instead, already received.
-- **Messengers (liaisons):** the origin, or an office once it has received the document, assigns one named messenger, and only that messenger can scan it for pickup. Until pickup, the messenger can be reassigned (the replaced one is told).
+- **Messengers (liaisons):** at the origin, the uploader (or CLIENT / origin office) assigns one named messenger. At an office, **any** of its staff can scan an incoming document in, and **the person who scanned it in** is the one who releases it and assigns, reassigns or unassigns its messenger. Only that messenger can scan it for pickup. Until pickup, the messenger can be reassigned (the replaced one is told).
   - Only *free* messengers can be chosen: on duty, with nothing waiting to be picked up and nothing in hand. Two offices can't pick the same one at once.
   - A messenger can't go off duty while they still have a document.
 - **Receiving:** always a scan of the QR label (camera, or typing the code under it). Only EMPLOYEE/STAFF of the office the document is at, or is being carried to, can receive it. Whoever scans it is recorded as the receiver.

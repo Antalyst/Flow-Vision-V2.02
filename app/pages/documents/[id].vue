@@ -18,7 +18,7 @@ onMounted(() => {
   joinDocument(id.value)
   // Just uploaded (?print=1): print the document with its QR label straight away, once.
   if (route.query.print === '1') {
-    if (data.value?.active_qr && data.value.document) qrApi.printWithDocument(data.value.active_qr, data.value.document)
+    if (data.value?.active_qr && data.value.document) qrApi.printWithDocument(data.value.active_qr, data.value.document, data.value.files)
     router.replace({ query: { ...route.query, print: undefined } })
   }
 })
@@ -120,6 +120,24 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
         </p>
       </header>
 
+      <!-- A co-worker at the office that holds it: the receiver handles the release. -->
+      <div
+        v-if="
+          doc.received_by &&
+          doc.received_by.id !== auth.user?.id &&
+          (doc.current_step_number ?? 0) > 0 &&
+          ['START', 'ARRIVED_AT_OFFICE'].includes(doc.status) &&
+          auth.user?.office?.id === doc.current_office_id &&
+          doc.next_office_name
+        "
+        class="mb-4 flex items-start gap-3 rounded-2xl bg-info/10 p-4 text-sm text-info-ink"
+      >
+        <FIcon name="user-check" :size="18" class="mt-0.5 shrink-0" />
+        <span>
+          <strong>{{ fullName(doc.received_by) }}</strong> received this document, so only they can release it and assign its messenger<template v-if="doc.liaison"> (now {{ fullName(doc.liaison) }})</template>.
+        </span>
+      </div>
+
       <!-- Actions available to this user right now -->
       <div v-if="anyAction" class="card mb-6 flex flex-wrap items-center gap-2 p-4">
         <span class="mr-2 text-sm font-medium text-ink-body">Your next step:</span>
@@ -200,6 +218,14 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
             <ApprovalCard :approval="{ ...data.pending_approval, document: doc }" @decided="refresh()" />
           </section>
 
+          <section v-if="data.routing?.length" class="card card-pad">
+            <div class="mb-5">
+              <h2 class="text-lg">Routing details</h2>
+              <p class="mt-1 text-sm text-ink-body">Inside each office — arrival, receipt, processing and release to a messenger — up to its transfer to the next office.</p>
+            </div>
+            <OfficeRouting :visits="data.routing" :origin-name="doc.origin?.name" />
+          </section>
+
           <section class="card card-pad">
             <h2 class="mb-5 text-lg">Timeline</h2>
             <DocumentTimeline :events="data.tracking" />
@@ -235,11 +261,22 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
               </div>
             </dl>
             <p v-if="doc.description" class="mt-5 border-t border-line/60 pt-4 text-sm whitespace-pre-wrap text-ink-body">{{ doc.description }}</p>
-            <button v-if="doc.file_name" class="btn btn-ghost mt-5 w-full justify-start" @click="docsApi.openFile(doc)">
-              <FIcon name="paperclip" :size="16" />
-              <span class="min-w-0 flex-1 truncate text-left">{{ doc.file_name }}</span>
-              <span class="text-xs text-ink-2">{{ formatBytes(doc.file_size) }}</span>
-            </button>
+            <!-- Every file of the document (a bulk upload has several, all under one QR) -->
+            <div v-if="data.files.length" class="mt-5 border-t border-line/60 pt-4">
+              <p class="mb-2 flex items-center justify-between text-xs text-ink-2">
+                <span>{{ data.files.length }} file{{ data.files.length === 1 ? '' : 's' }}<template v-if="data.files.length > 1"> · one QR code</template></span>
+                <span v-if="doc.pages">{{ doc.pages }} page{{ doc.pages === 1 ? '' : 's' }}</span>
+              </p>
+              <ul class="max-h-72 space-y-1 overflow-y-auto">
+                <li v-for="f in data.files" :key="f.id">
+                  <a :href="f.url" target="_blank" rel="noopener" class="btn btn-ghost w-full justify-start">
+                    <FIcon name="paperclip" :size="16" />
+                    <span class="min-w-0 flex-1 truncate text-left">{{ f.name }}</span>
+                    <span class="text-xs text-ink-2">{{ formatBytes(f.size) }}</span>
+                  </a>
+                </li>
+              </ul>
+            </div>
           </section>
 
           <section v-if="data.active_qr" class="card card-pad">
@@ -247,6 +284,7 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
             <QRDisplay
               :qr="data.active_qr"
               :doc="doc"
+              :files="data.files"
               :can-regenerate="['EMPLOYEE', 'STAFF'].includes(auth.role ?? '') && auth.user?.office?.id === doc.current_office_id && ['START', 'ARRIVED_AT_OFFICE'].includes(doc.status)"
               @regenerated="refresh()"
             />

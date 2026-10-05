@@ -148,6 +148,10 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
     file_name: fileName,
     file_mime: d.file_type ?? null,
     file_size: d.file_size ?? null,
+    // A bulk upload has several files under one QR; older documents have just file_url.
+    file_count: Number(val(d, 'file_count') ?? 0) || (d.file_url ? 1 : 0),
+    // Pages/sheets of the paper document (entered for photos; otherwise the number of files).
+    pages: d.pages ?? null,
     target_date: d.target_completion_date ? iso(d.target_completion_date)!.slice(0, 10) : null,
     // Set from the route's total processing time when the document enters it.
     target_at: iso(d.target_completion_date),
@@ -208,13 +212,116 @@ export function timelineEvents(doc: Row, visits: Row[], users: Map<string, Row>)
 
 const officeLite = (o: Row | null | undefined) => (o ? { id: o.id, code: o.code, name: o.name } : null)
 
+const minutesBetween = (from: string | null | undefined, to: string | null | undefined) =>
+  from && to ? Math.max(0, Math.round(((new Date(to).getTime() - new Date(from).getTime()) / 60_000) * 10) / 10) : null
+
+/**
+ * The document's path office by office: for every visit, what happened inside the office
+ * (arrival, receipt, notes, release to a messenger, pickup) up to the hand-over to the next
+ * office, with how long each stage took. `offices` must contain every office referenced by
+ * the visits' events (from/next office ids).
+ */
+export function routingVisits(visits: Row[], users: Map<string, Row>, offices: Map<string, Row>) {
+  const now = new Date().toISOString()
+  const person = (id: unknown) => (typeof id === 'string' ? userSummary(users.get(id)) : null)
+  const office = (id: unknown) => (typeof id === 'string' ? officeLite(offices.get(id)) : null)
+
+  return visits.map((visit, index) => {
+    const log = readLog(visit)
+    const first = (...types: string[]) => log.find((e) => types.includes(e.type))
+    const last = (...types: string[]) => log.filter((e) => types.includes(e.type)).at(-1)
+
+    const entry = first('ARRIVED', 'SUBMITTED', 'RESUBMITTED')
+    const arrivedAt = entry?.at ?? iso(visit.arrived_at) ?? iso(visit.created_at)!
+    const received = first('RECEIVED')
+    const release = last('PICKUP_REQUESTED', 'MESSENGER_REASSIGNED')
+    const pickedUp = last('PICKED_UP')
+    const decision = last('APPROVED', 'RETURNED')
+    const failed = last('DELIVERY_FAILED')
+    // Still here (or still being carried away) when nothing closed the visit.
+    const open = !visit.completed_at || ['START', 'ARRIVED_AT_OFFICE', 'PICKED_UP', 'IN_TRANSIT'].includes(visit.status)
+    const nextVisit = visits[index + 1]
+
+    let state: 'AT_OFFICE' | 'IN_TRANSIT' | 'TRANSFERRED' | 'APPROVED' | 'RETURNED' | 'CLOSED'
+    if (decision) state = decision.type === 'APPROVED' ? 'APPROVED' : 'RETURNED'
+    else if (pickedUp && (!failed || failed.at < pickedUp.at)) state = nextVisit && visit.status === 'COMPLETED' ? 'TRANSFERRED' : 'IN_TRANSIT'
+    else if (open) state = 'AT_OFFICE'
+    // Carried over by hand (no messenger): the next office scanned it in straight from here.
+    else state = nextVisit && readLog(nextVisit).some((e) => e.type === 'ARRIVED') ? 'TRANSFERRED' : 'CLOSED'
+
+    // When the paper left the office: picked up by the messenger, or decided here.
+    const leftAt = pickedUp?.at ?? decision?.at ?? (open ? null : iso(visit.completed_at))
+    const processedUntil = release?.at ?? decision?.at ?? leftAt ?? (state === 'AT_OFFICE' ? now : null)
+    const toOfficeId = (pickedUp?.meta?.next_office_id ?? release?.meta?.next_office_id ?? null) as string | null
+
+    return {
+      id: visit.id as string,
+      step_number: visit.step_number as number,
+      office: officeLite(visit.office),
+      state,
+      arrived_at: arrivedAt,
+      arrival: entry
+        ? {
+            kind: entry.type as 'ARRIVED' | 'SUBMITTED' | 'RESUBMITTED',
+            from_office: office(entry.meta?.from_office_id),
+            messenger: entry.type === 'ARRIVED' ? person(entry.by) : null,
+            by_hand: Boolean(entry.meta?.by_hand),
+            delivery_minutes: typeof entry.meta?.delivery_minutes === 'number' ? (entry.meta.delivery_minutes as number) : null,
+          }
+        : null,
+      received_at: received?.at ?? null,
+      received_by: person(received?.by ?? visit.handler_id),
+      released_at: release?.at ?? null,
+      released_by: person(release?.by),
+      messenger: person(release?.meta?.liaison_id ?? visit.liaison_id),
+      picked_up_at: pickedUp?.at ?? null,
+      decided_at: decision?.at ?? null,
+      decided_by: person(decision?.by),
+      left_at: leftAt,
+      to_office: office(toOfficeId) ?? (state === 'TRANSFERRED' ? officeLite(nextVisit?.office) : null),
+      durations: {
+        // Arrival → scanned in by the office.
+        waiting_receipt: received ? minutesBetween(arrivedAt, received.at) : state === 'AT_OFFICE' ? minutesBetween(arrivedAt, now) : null,
+        // Received → released to a messenger (or decided).
+        processing: received ? minutesBetween(received.at, processedUntil) : null,
+        // Released → messenger picked it up.
+        waiting_pickup: release ? minutesBetween(release.at, pickedUp && pickedUp.at >= release.at ? pickedUp.at : state === 'AT_OFFICE' ? now : null) : null,
+        total: minutesBetween(arrivedAt, leftAt ?? (open ? now : null)),
+      },
+      events: log.map((e) => ({
+        id: e.id,
+        type: e.type,
+        at: e.at,
+        actor: person(e.by),
+        remarks: e.remarks ?? null,
+        messenger: e.type === 'PICKUP_REQUESTED' || e.type === 'MESSENGER_REASSIGNED' ? person(e.meta?.liaison_id) : null,
+      })),
+    }
+  })
+}
+
+/** Office ids referenced by visit events (where a delivery came from / was heading). */
+export function referencedOfficeIds(visits: Row[]) {
+  const ids = new Set<string>()
+  for (const v of visits) {
+    if (v.office_id) ids.add(v.office_id)
+    for (const e of readLog(v)) {
+      for (const key of ['from_office_id', 'next_office_id']) if (typeof e.meta?.[key] === 'string') ids.add(e.meta[key] as string)
+    }
+  }
+  return [...ids]
+}
+
 /** All user ids referenced by a set of visits (handlers, liaisons, event authors). */
 export function referencedUserIds(doc: Row, visits: Row[]) {
   const ids = new Set<string>([doc.submitted_by])
   for (const v of visits) {
     if (v.handler_id) ids.add(v.handler_id)
     if (v.liaison_id) ids.add(v.liaison_id)
-    for (const e of readLog(v)) if (e.by) ids.add(e.by)
+    for (const e of readLog(v)) {
+      if (e.by) ids.add(e.by)
+      if (typeof e.meta?.liaison_id === 'string') ids.add(e.meta.liaison_id)
+    }
   }
   return [...ids]
 }

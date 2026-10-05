@@ -693,6 +693,26 @@ CREATE TABLE `document_types` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `document_files` (several files under one document and one QR)
+--
+
+CREATE TABLE `document_files` (
+  `id` char(36) NOT NULL,
+  `document_id` char(36) NOT NULL COMMENT 'Document reference',
+  `file_url` varchar(500) NOT NULL COMMENT '"<uuid>/<original name>" under UPLOAD_DIR',
+  `file_name` varchar(255) NOT NULL COMMENT 'Original file name',
+  `file_type` varchar(100) DEFAULT NULL COMMENT 'MIME type (or extension)',
+  `file_size` int(11) NOT NULL DEFAULT 0 COMMENT 'Bytes',
+  `sort_order` int(11) NOT NULL DEFAULT 0 COMMENT 'Order within the document',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `idx_document_files_document` (`document_id`,`sort_order`),
+  CONSTRAINT `fk_document_files_document` FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Every file attached to a document (documents.file_url is the first one)';
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `knowledge_files` (Organization Settings)
 --
 

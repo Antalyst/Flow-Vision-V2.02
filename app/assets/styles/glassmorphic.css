@@ -25,6 +25,15 @@
   border: 1px solid var(--lumio-dark-line);
 }
 
+/* Scrolls, but without a visible scrollbar (sidebar nav) */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 .fv-ambient {
   position: fixed;
   inset: 0;

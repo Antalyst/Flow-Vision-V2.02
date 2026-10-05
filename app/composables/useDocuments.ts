@@ -1,12 +1,14 @@
-import type { Approval, DocumentPermissions, FlowDocument, OrgRoute, QrInfo, TrackingEvent } from '~/types'
+import type { Approval, DocumentFileInfo, DocumentPermissions, FlowDocument, OrgRoute, QrInfo, RoutingVisit, TrackingEvent } from '~/types'
 
 export interface DocumentDetail {
   document: FlowDocument
   route: OrgRoute | null
   tracking: TrackingEvent[]
+  routing: RoutingVisit[]
   approvals: Approval[]
   pending_approval: Approval | null
   active_qr: QrInfo | null
+  files: DocumentFileInfo[]
   permissions: DocumentPermissions
 }
 

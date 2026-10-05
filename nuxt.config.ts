@@ -10,6 +10,9 @@ export default defineNuxtConfig({
 
   modules: ['@pinia/nuxt'],
 
+  // Page-local components (e.g. pages/ai/components/) are not routes.
+  pages: { pattern: ['**/*.vue', '!**/components/**'] },
+
   css: ['~/assets/styles/index.css'],
 
   // Old CLIENT-only URLs; uploading and the document list are shared pages now.
@@ -44,6 +47,17 @@ export default defineNuxtConfig({
         { name: 'viewport', content: 'width=device-width, initial-scale=1, viewport-fit=cover' },
         { name: 'description', content: 'Document tracking and workflow management for Bago City LGU' },
         { name: 'theme-color', content: '#F6F5F1' },
+      ],
+      link: [
+        { rel: 'icon', type: 'image/png', href: '/favicon.png' },
+        { rel: 'apple-touch-icon', href: '/favicon.png' },
+      ],
+      // Lets CSS hide [data-reveal] content until GSAP animates it in. If the app never hydrates, show everything.
+      script: [
+        {
+          innerHTML:
+            "document.documentElement.classList.add('fv-js');setTimeout(function(){if(!document.documentElement.dataset.hydrated)document.documentElement.classList.remove('fv-js')},4000)",
+        },
       ],
     },
   },

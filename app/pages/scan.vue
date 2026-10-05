@@ -213,7 +213,7 @@ onBeforeUnmount(() => {
 
     <!-- Camera -->
     <section v-show="phase === 'scanning' || phase === 'verifying'" class="card overflow-hidden p-2">
-      <div class="relative aspect-square overflow-hidden rounded-2xl bg-night">
+      <div class="relative aspect-square overflow-hidden rounded-3xl bg-night">
         <video ref="video" class="size-full object-cover" muted playsinline />
         <div v-if="cameraError" class="absolute inset-0 grid place-items-center p-8 text-center text-sm text-night-text-2">
           <div class="flex max-w-sm flex-col items-center gap-4">

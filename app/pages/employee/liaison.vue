@@ -51,7 +51,8 @@ const pickupDoc = ref<FlowDocument | null>(null)
           <div v-else class="grid grid-cols-1 gap-3">
             <DocumentCard v-for="d in ready" :key="d.id" :doc="d">
               <template #actions>
-                <button class="btn btn-sm btn-primary" @click="pickupDoc = d"><FIcon name="truck" :size="14" /> Release → {{ d.next_office_name }}</button>
+                <button v-if="releasesDocument(d, auth.user?.id)" class="btn btn-sm btn-primary" @click="pickupDoc = d"><FIcon name="truck" :size="14" /> Release → {{ d.next_office_name }}</button>
+                <ToneBadge v-else tone="info" icon="user">Received by {{ fullName(d.received_by) }} — they release it</ToneBadge>
               </template>
             </DocumentCard>
           </div>

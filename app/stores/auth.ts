@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import type { CurrentUser } from '~/types'
+import { clearAssistantStorage } from './assistant'
 
 /**
  * Who is signed in. The session itself is an httpOnly cookie set by the server,
@@ -17,6 +18,8 @@ export const useAuthStore = defineStore('auth', () => {
   function clear() {
     user.value = null
     useNotificationsStore().reset()
+    // AI conversations hold organization data: never leave them on a shared computer.
+    clearAssistantStorage()
     disconnectRealtime()
   }
 

@@ -12,11 +12,12 @@ const route = [
     <SiteNav />
 
     <div class="mx-auto grid min-h-dvh max-w-6xl gap-8 px-4 pt-28 pb-8 sm:px-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-16 lg:pt-24">
-      <!-- Brand panel: an ember surface like the landing page hero -->
-      <section class="ember ember-a relative hidden flex-col overflow-hidden rounded-[2rem] p-10 text-white lg:flex">
-        <p class="relative text-[11px] font-semibold tracking-[0.16em] text-white/55 uppercase">Bago City LGU</p>
+      <!-- Brand panel: a duotone photo like the landing page hero -->
+      <section class="photo photo-shade hidden flex-col rounded-[2rem] p-10 text-white lg:flex">
+        <img src="/images/landing/monitors.jpg" alt="" width="1280" height="853" />
+        <p v-reveal="{ scroll: false }" class="relative text-[11px] font-semibold tracking-[0.16em] text-white/55 uppercase">Bago City LGU</p>
 
-        <div class="relative mt-auto max-w-md">
+        <div v-reveal="{ stagger: 0.12, scroll: false, delay: 0.2 }" class="relative mt-auto max-w-md">
           <h1 class="text-[40px] leading-[1.04] font-semibold tracking-[-0.04em] text-white">Every document, every office, one clear line.</h1>
           <p class="mt-4 text-[15px] leading-relaxed text-white/65">
             Route paperwork through your offices, hand it off with a scan, and know exactly who approved what, and when.
@@ -48,7 +49,7 @@ const route = [
       </section>
 
       <section class="flex items-center justify-center py-6">
-        <div class="w-full max-w-[420px]">
+        <div class="w-full max-w-[420px]" data-page-enter>
           <slot />
         </div>
       </section>

@@ -9,12 +9,7 @@ const tones = { success: 'text-sage-ink', danger: 'text-danger-ink', info: 'text
     class="pointer-events-none fixed inset-x-0 bottom-4 z-[60] flex flex-col items-center gap-2 px-4 sm:inset-x-auto sm:right-6 sm:bottom-6 sm:items-end"
     aria-live="polite"
   >
-    <TransitionGroup
-      enter-active-class="transition duration-300 ease-out"
-      enter-from-class="translate-y-2 opacity-0"
-      leave-active-class="transition duration-200 ease-in"
-      leave-to-class="opacity-0"
-    >
+    <TransitionGroup :css="false" @enter="toastMotion.onEnter" @leave="toastMotion.onLeave">
       <div v-for="t in ui.toasts" :key="t.id" class="glass-strong pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-2xl p-4">
         <FIcon :name="icons[t.tone]" :size="18" :class="tones[t.tone]" class="mt-0.5" />
         <div class="min-w-0 flex-1">

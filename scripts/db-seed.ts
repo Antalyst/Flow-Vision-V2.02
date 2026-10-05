@@ -134,7 +134,7 @@ async function main() {
   const create = (
     input: { title: string; document_type?: string; description?: string; priority?: string },
     { submit = true, route = 'standard', by = p.client }: { submit?: boolean; route?: keyof typeof ROUTES; by?: Actor } = {},
-  ) => workflow.createDocument(by, { priority: 'NORMAL', ...input, route_id: routeIds[route], submit }, null, metaFor(by))
+  ) => workflow.createDocument(by, { priority: 'NORMAL', ...input, route_id: routeIds[route], submit }, [], metaFor(by))
 
   // Each document's QR label is scanned at every hand-off, exactly as in the app.
   const scan = async (docId: string, action: 'PICKUP' | 'RECEIVE', by: Actor) => workflow.performScan(await workflow.routingCodeOf(docId), action, by)

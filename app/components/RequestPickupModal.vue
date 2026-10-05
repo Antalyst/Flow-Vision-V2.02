@@ -102,7 +102,15 @@ const availabilityLabel = { AVAILABLE: 'free', BUSY: 'busy', OFF_DUTY: 'off duty
       <input v-model="search" class="input pl-10" placeholder="Search messengers by name" aria-label="Search messengers" />
     </div>
     <div class="max-h-72 space-y-2 overflow-y-auto">
-      <p v-if="loading && !liaisons.length" class="py-6 text-center text-sm text-ink-2">Loading messengers…</p>
+      <div v-if="loading && !liaisons.length" class="space-y-2 py-2" role="status" aria-label="Loading messengers">
+        <div v-for="i in 3" :key="i" class="flex items-center gap-3 rounded-2xl border border-line p-3">
+          <div class="skeleton size-9 shrink-0 rounded-full" />
+          <div class="flex-1 space-y-2">
+            <div class="skeleton h-3.5 w-1/2" />
+            <div class="skeleton h-3 w-1/3" />
+          </div>
+        </div>
+      </div>
       <p v-else-if="!filtered.length" class="py-6 text-center text-sm text-ink-2">No messengers found.</p>
       <button
         v-for="l in filtered"

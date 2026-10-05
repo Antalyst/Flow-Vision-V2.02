@@ -3,12 +3,11 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: Oct 04, 2026 at 11:34 PM
+-- Generation Time: Oct 05, 2026 at 09:00 AM
 -- Server version: 11.8.9-MariaDB-log
 -- PHP Version: 7.2.34
 
 SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
-START TRANSACTION;
 SET time_zone = "+00:00";
 
 
@@ -20,6 +19,8 @@ SET time_zone = "+00:00";
 --
 -- Database: `u520834156_flowVsionDB`
 --
+CREATE DATABASE IF NOT EXISTS `u520834156_flowVsionDB` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE `u520834156_flowVsionDB`;
 
 -- --------------------------------------------------------
 
@@ -27,6 +28,7 @@ SET time_zone = "+00:00";
 -- Stand-in structure for view `active_documents_by_office`
 -- (See below for the actual view)
 --
+DROP VIEW IF EXISTS `active_documents_by_office`;
 CREATE TABLE `active_documents_by_office` (
 `id` char(36)
 ,`title` varchar(255)
@@ -44,6 +46,7 @@ CREATE TABLE `active_documents_by_office` (
 -- Table structure for table `approvals`
 --
 
+DROP TABLE IF EXISTS `approvals`;
 CREATE TABLE `approvals` (
   `id` char(36) NOT NULL,
   `document_id` char(36) NOT NULL COMMENT 'Document reference',
@@ -63,6 +66,7 @@ CREATE TABLE `approvals` (
 -- Table structure for table `audit_logs`
 --
 
+DROP TABLE IF EXISTS `audit_logs`;
 CREATE TABLE `audit_logs` (
   `id` char(36) NOT NULL,
   `user_id` char(36) DEFAULT NULL COMMENT 'User who performed action',
@@ -81,6 +85,7 @@ CREATE TABLE `audit_logs` (
 -- Table structure for table `auth_sessions`
 --
 
+DROP TABLE IF EXISTS `auth_sessions`;
 CREATE TABLE `auth_sessions` (
   `id` char(36) NOT NULL,
   `user_id` char(36) NOT NULL COMMENT 'User reference',
@@ -98,6 +103,7 @@ CREATE TABLE `auth_sessions` (
 -- Table structure for table `documents`
 --
 
+DROP TABLE IF EXISTS `documents`;
 CREATE TABLE `documents` (
   `id` char(36) NOT NULL,
   `org_id` char(36) NOT NULL COMMENT 'Organization reference',
@@ -127,11 +133,12 @@ CREATE TABLE `documents` (
 -- Table structure for table `document_tracking`
 --
 
+DROP TABLE IF EXISTS `document_tracking`;
 CREATE TABLE `document_tracking` (
   `id` char(36) NOT NULL,
   `document_id` char(36) NOT NULL COMMENT 'Document reference',
   `step_number` int(11) NOT NULL COMMENT 'Step number',
-  `office_id` char(36) NOT NULL COMMENT 'Office location',
+  `office_id` char(36) DEFAULT NULL COMMENT 'Office location (NULL = the organization itself, for step 0 of a CLIENT upload)',
   `status` enum('CREATED','START','PICKED_UP','IN_TRANSIT','ARRIVED_AT_OFFICE','COMPLETED','RETURNED') NOT NULL COMMENT 'Event status',
   `handler_id` char(36) DEFAULT NULL COMMENT 'Employee handling document',
   `liaison_id` char(36) DEFAULT NULL COMMENT 'Liaison handling delivery',
@@ -145,9 +152,31 @@ CREATE TABLE `document_tracking` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `document_types`
+--
+
+DROP TABLE IF EXISTS `document_types`;
+CREATE TABLE `document_types` (
+  `id` char(36) NOT NULL,
+  `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `name` varchar(100) NOT NULL COMMENT 'Shown in the upload form, e.g. Purchase Request',
+  `description` varchar(500) DEFAULT NULL COMMENT 'What this type covers (also given to the AI)',
+  `processing_days` int(11) NOT NULL DEFAULT 0 COMMENT 'How long a document of this type may take: days',
+  `processing_hours` int(11) NOT NULL DEFAULT 0 COMMENT '… plus hours (0–23); 0 + 0 = no deadline',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Offered when uploading',
+  `sort_order` int(11) NOT NULL DEFAULT 0 COMMENT 'Position in the list',
+  `created_by` char(36) DEFAULT NULL COMMENT 'CLIENT who added it',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Document types an organization offers when uploading';
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `issues`
 --
 
+DROP TABLE IF EXISTS `issues`;
 CREATE TABLE `issues` (
   `id` char(36) NOT NULL,
   `document_id` char(36) NOT NULL COMMENT 'Document reference',
@@ -168,9 +197,36 @@ CREATE TABLE `issues` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `knowledge_files`
+--
+
+DROP TABLE IF EXISTS `knowledge_files`;
+CREATE TABLE `knowledge_files` (
+  `id` char(36) NOT NULL,
+  `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `title` varchar(255) NOT NULL COMMENT 'Name shown in settings',
+  `description` text DEFAULT NULL COMMENT 'What the file is about',
+  `file_url` varchar(500) NOT NULL COMMENT '"knowledge/<uuid>/<original name>" under UPLOAD_DIR',
+  `file_name` varchar(255) NOT NULL COMMENT 'Original file name',
+  `file_type` varchar(100) DEFAULT NULL COMMENT 'MIME type',
+  `file_size` bigint(20) NOT NULL COMMENT 'Bytes',
+  `content` longtext DEFAULT NULL COMMENT 'Text extracted from the file, used as AI knowledge',
+  `char_count` int(11) NOT NULL DEFAULT 0 COMMENT 'Length of content',
+  `status` enum('READY','NO_TEXT','FAILED') NOT NULL DEFAULT 'READY' COMMENT 'Whether text could be extracted',
+  `error` varchar(500) DEFAULT NULL COMMENT 'Why extraction failed',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Used by the AI',
+  `uploaded_by` char(36) DEFAULT NULL COMMENT 'CLIENT who uploaded it',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Files whose text the AI uses as organization knowledge';
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `liaisons`
 --
 
+DROP TABLE IF EXISTS `liaisons`;
 CREATE TABLE `liaisons` (
   `id` char(36) NOT NULL,
   `user_id` char(36) NOT NULL COMMENT 'User reference',
@@ -194,6 +250,7 @@ CREATE TABLE `liaisons` (
 -- Stand-in structure for view `liaison_performance`
 -- (See below for the actual view)
 --
+DROP VIEW IF EXISTS `liaison_performance`;
 CREATE TABLE `liaison_performance` (
 `id` char(36)
 ,`full_name` varchar(255)
@@ -212,6 +269,7 @@ CREATE TABLE `liaison_performance` (
 -- Table structure for table `messages`
 --
 
+DROP TABLE IF EXISTS `messages`;
 CREATE TABLE `messages` (
   `id` char(36) NOT NULL,
   `document_id` char(36) DEFAULT NULL COMMENT 'Related document (optional)',
@@ -232,6 +290,7 @@ CREATE TABLE `messages` (
 -- Table structure for table `notifications`
 --
 
+DROP TABLE IF EXISTS `notifications`;
 CREATE TABLE `notifications` (
   `id` char(36) NOT NULL,
   `user_id` char(36) NOT NULL COMMENT 'Recipient user ID',
@@ -251,6 +310,7 @@ CREATE TABLE `notifications` (
 -- Table structure for table `offices`
 --
 
+DROP TABLE IF EXISTS `offices`;
 CREATE TABLE `offices` (
   `id` char(36) NOT NULL,
   `org_id` char(36) NOT NULL COMMENT 'Organization reference',
@@ -275,6 +335,7 @@ CREATE TABLE `offices` (
 -- Table structure for table `organizations`
 --
 
+DROP TABLE IF EXISTS `organizations`;
 CREATE TABLE `organizations` (
   `id` char(36) NOT NULL,
   `name` varchar(255) NOT NULL COMMENT 'Organization name',
@@ -293,6 +354,7 @@ CREATE TABLE `organizations` (
 -- Table structure for table `organization_routes`
 --
 
+DROP TABLE IF EXISTS `organization_routes`;
 CREATE TABLE `organization_routes` (
   `id` char(36) NOT NULL,
   `org_id` char(36) NOT NULL COMMENT 'Organization reference',
@@ -310,6 +372,7 @@ CREATE TABLE `organization_routes` (
 -- Stand-in structure for view `pending_approvals`
 -- (See below for the actual view)
 --
+DROP VIEW IF EXISTS `pending_approvals`;
 CREATE TABLE `pending_approvals` (
 `id` char(36)
 ,`title` varchar(255)
@@ -326,6 +389,7 @@ CREATE TABLE `pending_approvals` (
 -- Table structure for table `qr_codes`
 --
 
+DROP TABLE IF EXISTS `qr_codes`;
 CREATE TABLE `qr_codes` (
   `id` char(36) NOT NULL,
   `document_id` char(36) NOT NULL COMMENT 'Document reference',
@@ -342,12 +406,14 @@ CREATE TABLE `qr_codes` (
 -- Table structure for table `route_steps`
 --
 
+DROP TABLE IF EXISTS `route_steps`;
 CREATE TABLE `route_steps` (
   `id` char(36) NOT NULL,
   `route_id` char(36) NOT NULL COMMENT 'Organization route reference',
   `step_number` int(11) NOT NULL COMMENT 'Step sequence number',
   `office_id` char(36) NOT NULL COMMENT 'Office at this step',
   `sla_days` int(11) DEFAULT NULL COMMENT 'Service level agreement days',
+  `sla_hours` int(11) NOT NULL DEFAULT 0,
   `action_description` varchar(255) DEFAULT NULL COMMENT 'Action to perform at this step',
   `is_final_checkpoint` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Is this the final approval step',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp()
@@ -359,6 +425,7 @@ CREATE TABLE `route_steps` (
 -- Table structure for table `users`
 --
 
+DROP TABLE IF EXISTS `users`;
 CREATE TABLE `users` (
   `id` char(36) NOT NULL,
   `org_id` char(36) NOT NULL COMMENT 'Organization reference',
@@ -436,6 +503,14 @@ ALTER TABLE `document_tracking`
   ADD KEY `idx_document_tracking_liaison_id` (`liaison_id`);
 
 --
+-- Indexes for table `document_types`
+--
+ALTER TABLE `document_types`
+  ADD PRIMARY KEY (`id`),
+  ADD UNIQUE KEY `uq_document_types_org_name` (`org_id`,`name`),
+  ADD KEY `fk_document_types_creator` (`created_by`);
+
+--
 -- Indexes for table `issues`
 --
 ALTER TABLE `issues`
@@ -445,6 +520,14 @@ ALTER TABLE `issues`
   ADD KEY `idx_issues_priority` (`priority`),
   ADD KEY `idx_issues_reported_by` (`reported_by`),
   ADD KEY `idx_issues_assigned_to` (`assigned_to`);
+
+--
+-- Indexes for table `knowledge_files`
+--
+ALTER TABLE `knowledge_files`
+  ADD PRIMARY KEY (`id`),
+  ADD KEY `idx_knowledge_files_org` (`org_id`,`is_active`),
+  ADD KEY `fk_knowledge_files_uploader` (`uploaded_by`);
 
 --
 -- Indexes for table `liaisons`
@@ -505,7 +588,8 @@ ALTER TABLE `organization_routes`
 --
 ALTER TABLE `qr_codes`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `uq_qr_codes_document` (`document_id`);
+  ADD UNIQUE KEY `uq_qr_codes_document` (`document_id`),
+  ADD UNIQUE KEY `uq_qr_codes_data` (`qr_code_data`);
 
 --
 -- Indexes for table `route_steps`
@@ -532,6 +616,7 @@ ALTER TABLE `users`
 --
 DROP TABLE IF EXISTS `active_documents_by_office`;
 
+DROP VIEW IF EXISTS `active_documents_by_office`;
 CREATE ALGORITHM=UNDEFINED DEFINER=`u520834156_usrFV2026`@`127.0.0.1` SQL SECURITY DEFINER VIEW `active_documents_by_office`  AS SELECT `d`.`id` AS `id`, `d`.`title` AS `title`, `d`.`priority` AS `priority`, `d`.`status` AS `status`, `d`.`current_office_id` AS `current_office_id`, `o`.`name` AS `office_name`, `u`.`full_name` AS `submitted_by`, `d`.`created_at` AS `created_at` FROM ((`documents` `d` left join `offices` `o` on(`d`.`current_office_id` = `o`.`id`)) left join `users` `u` on(`d`.`submitted_by` = `u`.`id`)) WHERE `d`.`status` in ('START','PICKED_UP','IN_TRANSIT','ARRIVED_AT_OFFICE') ;
 
 -- --------------------------------------------------------
@@ -541,6 +626,7 @@ CREATE ALGORITHM=UNDEFINED DEFINER=`u520834156_usrFV2026`@`127.0.0.1` SQL SECURI
 --
 DROP TABLE IF EXISTS `liaison_performance`;
 
+DROP VIEW IF EXISTS `liaison_performance`;
 CREATE ALGORITHM=UNDEFINED DEFINER=`u520834156_usrFV2026`@`127.0.0.1` SQL SECURITY DEFINER VIEW `liaison_performance`  AS SELECT `l`.`id` AS `id`, `u`.`full_name` AS `full_name`, `u`.`email` AS `email`, `l`.`available` AS `available`, `l`.`deliveries_today` AS `deliveries_today`, `l`.`total_deliveries` AS `total_deliveries`, `l`.`average_delivery_time` AS `average_delivery_time`, `l`.`success_rate` AS `success_rate`, `l`.`last_delivery` AS `last_delivery` FROM (`liaisons` `l` left join `users` `u` on(`l`.`user_id` = `u`.`id`)) ;
 
 -- --------------------------------------------------------
@@ -550,6 +636,7 @@ CREATE ALGORITHM=UNDEFINED DEFINER=`u520834156_usrFV2026`@`127.0.0.1` SQL SECURI
 --
 DROP TABLE IF EXISTS `pending_approvals`;
 
+DROP VIEW IF EXISTS `pending_approvals`;
 CREATE ALGORITHM=UNDEFINED DEFINER=`u520834156_usrFV2026`@`127.0.0.1` SQL SECURITY DEFINER VIEW `pending_approvals`  AS SELECT `d`.`id` AS `id`, `d`.`title` AS `title`, `d`.`priority` AS `priority`, `a`.`staff_id` AS `staff_id`, `u`.`full_name` AS `staff_name`, `o`.`name` AS `office_name`, `a`.`created_at` AS `pending_since` FROM (((`documents` `d` join `approvals` `a` on(`d`.`id` = `a`.`document_id`)) join `users` `u` on(`a`.`staff_id` = `u`.`id`)) join `offices` `o` on(`a`.`office_id` = `o`.`id`)) WHERE `a`.`status` = 'PENDING' ;
 
 --
@@ -595,12 +682,26 @@ ALTER TABLE `document_tracking`
   ADD CONSTRAINT `fk_tracking_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`);
 
 --
+-- Constraints for table `document_types`
+--
+ALTER TABLE `document_types`
+  ADD CONSTRAINT `fk_document_types_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_document_types_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE;
+
+--
 -- Constraints for table `issues`
 --
 ALTER TABLE `issues`
   ADD CONSTRAINT `fk_issues_assigned_to` FOREIGN KEY (`assigned_to`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_issues_document` FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE CASCADE,
   ADD CONSTRAINT `fk_issues_reported_by` FOREIGN KEY (`reported_by`) REFERENCES `users` (`id`);
+
+--
+-- Constraints for table `knowledge_files`
+--
+ALTER TABLE `knowledge_files`
+  ADD CONSTRAINT `fk_knowledge_files_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  ADD CONSTRAINT `fk_knowledge_files_uploader` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL;
 
 --
 -- Constraints for table `liaisons`
@@ -657,7 +758,6 @@ ALTER TABLE `route_steps`
 ALTER TABLE `users`
   ADD CONSTRAINT `fk_users_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`) ON DELETE SET NULL,
   ADD CONSTRAINT `fk_users_organization` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE;
-COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;

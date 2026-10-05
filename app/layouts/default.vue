@@ -22,7 +22,7 @@ const route = useRoute()
 /** Each role's sidebar, grouped by what the role does. */
 const ROLE_NAV: Record<AccountType, NavGroup[]> = {
   CLIENT: [
-    { id: 'overview', title: null, items: [{ to: '/client/dashboard', label: 'Dashboard', icon: 'home' }] },
+    { id: 'overview', title: null, items: [{ to: '/client/dashboard', label: 'Dashboard', icon: 'home' }, { to: '/ai/chat', label: 'AI Assistant', icon: 'zap' }] },
     {
       id: 'documents',
       title: 'Documents',
@@ -43,7 +43,7 @@ const ROLE_NAV: Record<AccountType, NavGroup[]> = {
     },
   ],
   EMPLOYEE: [
-    { id: 'overview', title: null, items: [{ to: '/employee/dashboard', label: 'Dashboard', icon: 'home' }] },
+    { id: 'overview', title: null, items: [{ to: '/employee/dashboard', label: 'Dashboard', icon: 'home' }, { to: '/ai/chat', label: 'AI Assistant', icon: 'zap' }] },
     {
       id: 'office',
       title: 'Office work',
@@ -64,7 +64,7 @@ const ROLE_NAV: Record<AccountType, NavGroup[]> = {
     { id: 'team', title: 'Team', items: [{ to: '/employee/team', label: 'Staff & messengers', icon: 'users' }] },
   ],
   STAFF: [
-    { id: 'overview', title: null, items: [{ to: '/staff/dashboard', label: 'Dashboard', icon: 'home' }] },
+    { id: 'overview', title: null, items: [{ to: '/staff/dashboard', label: 'Dashboard', icon: 'home' }, { to: '/ai/chat', label: 'AI Assistant', icon: 'zap' }] },
     {
       id: 'review',
       title: 'Review',
@@ -214,7 +214,7 @@ onMounted(() => connectRealtime())
         </p>
       </div>
 
-      <nav class="flex-1 overflow-x-hidden overflow-y-auto" :class="rail ? 'px-2' : 'px-3'">
+      <nav class="no-scrollbar flex-1 overflow-x-hidden overflow-y-auto" :class="rail ? 'px-2' : 'px-3'">
         <div v-for="(g, gi) in groups" :key="g.id" :class="gi > 0 && (rail ? 'mt-2 border-t border-white/[0.06] pt-2' : 'mt-4')">
           <!-- Group header: folds the group (hidden in the icon strip) -->
           <button
@@ -285,7 +285,9 @@ onMounted(() => connectRealtime())
           <span class="flex-1">You're using a temporary password. Set your own password now.</span>
           <FIcon name="arrow-right" :size="16" />
         </NuxtLink>
-        <slot />
+        <div data-page-enter>
+          <slot />
+        </div>
       </div>
     </main>
   </div>

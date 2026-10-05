@@ -6,6 +6,7 @@ useHead({ title: 'Office queue · FlowVision' })
 const route = useRoute()
 const router = useRouter()
 const docsApi = useDocuments()
+const auth = useAuthStore()
 const { busy, run } = useAction()
 
 type TabKey = 'incoming' | 'arrived' | 'process' | 'pickup' | 'outbound'
@@ -76,12 +77,15 @@ async function cancelPickup(d: FlowDocument) {
             <NuxtLink to="/scan" class="btn btn-sm btn-primary"><FIcon name="maximize" :size="14" /> Scan to receive</NuxtLink>
           </template>
           <template v-else-if="tab === 'process'">
-            <button v-if="d.next_office_name" class="btn btn-sm btn-primary" @click="pickupDoc = d"><FIcon name="truck" :size="14" /> Release → {{ d.next_office_name }}</button>
+            <template v-if="d.next_office_name">
+              <button v-if="releasesDocument(d, auth.user?.id)" class="btn btn-sm btn-primary" @click="pickupDoc = d"><FIcon name="truck" :size="14" /> Release → {{ d.next_office_name }}</button>
+              <ToneBadge v-else tone="info" icon="user">Received by {{ fullName(d.received_by) }} — they release it</ToneBadge>
+            </template>
             <NuxtLink v-else :to="`/documents/${d.id}#approval`" class="btn btn-sm btn-success"><FIcon name="check-square" :size="14" /> Last office — review &amp; approve</NuxtLink>
           </template>
           <template v-else-if="tab === 'pickup'">
             <ToneBadge tone="warning" icon="user">Waiting for {{ fullName(d.liaison) }}</ToneBadge>
-            <button class="btn btn-sm btn-ghost" :disabled="busy === `cancel-${d.id}`" @click="cancelPickup(d)">Cancel release</button>
+            <button v-if="releasesDocument(d, auth.user?.id)" class="btn btn-sm btn-ghost" :disabled="busy === `cancel-${d.id}`" @click="cancelPickup(d)">Cancel release</button>
           </template>
           <template v-else-if="tab === 'incoming'">
             <ToneBadge tone="info" icon="truck">{{ fullName(d.liaison) }} · from {{ d.currentOffice?.name ?? d.origin?.name }}</ToneBadge>

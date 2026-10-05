@@ -1,6 +1,6 @@
-import { Document } from '~~/server/lib/models.ts'
+import { sequelize, Document, DocumentFile } from '~~/server/lib/models.ts'
 import { audit } from '~~/server/lib/audit.ts'
-import { conflict, forbidden, notFound } from '~~/server/lib/errors.ts'
+import { badRequest, conflict, forbidden, notFound } from '~~/server/lib/errors.ts'
 import { allowedHoursFor, canManageDocument, SUBMITTER_TYPES } from '~~/server/lib/documents.ts'
 import { routeForNewDocument } from '~~/server/lib/routes.ts'
 import { autoPriority } from '~~/server/lib/priority.ts'
@@ -16,7 +16,7 @@ export default defineApiHandler(async (event) => {
   if (!canManageDocument(doc, user)) throw forbidden('Only the person who uploaded this draft can edit it')
   if (doc.status !== 'CREATED') throw conflict('Only drafts can be edited')
 
-  const { fields, file } = await parseDocumentForm(await readMultipartFormData(event))
+  const { fields, files } = await parseDocumentForm(await readMultipartFormData(event))
   try {
     const before = doc.toJSON()
     const updates: Record<string, unknown> = {}
@@ -33,15 +33,31 @@ export default defineApiHandler(async (event) => {
       document_type: 'category' in updates ? (updates.category as string | null) : doc.category,
       routeHours: (await allowedHoursFor(user.org_id, 'category' in updates ? (updates.category as string | null) : doc.category, routeIdAfter)) || null,
     })
-    const oldFile = file ? doc.file_url : null
-    if (file) Object.assign(updates, { file_url: file.fileUrl, file_type: file.fileType, file_size: file.size })
+    // New files replace all of the draft's files (one, or a bulk set).
+    const first = files[0]
+    const oldFiles = first ? [doc.file_url, ...(await DocumentFile.findAll({ where: { document_id: doc.id }, attributes: ['file_url'] })).map((f) => f.file_url)] : []
+    if (first) Object.assign(updates, { file_url: first.fileUrl, file_type: first.fileType, file_size: first.size, pages: files.length })
+    if (fields.pages) {
+      const pages = Number(fields.pages)
+      if (!Number.isInteger(pages) || pages < 1 || pages > 9999) throw badRequest('Number of pages must be a whole number from 1 to 9999', { field: 'pages' })
+      updates.pages = pages
+    }
 
-    await doc.update(updates)
-    removeUpload(oldFile)
+    await sequelize.transaction(async (transaction) => {
+      await doc.update(updates, { transaction })
+      if (first) {
+        await DocumentFile.destroy({ where: { document_id: doc.id }, transaction })
+        await DocumentFile.bulkCreate(
+          files.map((f, i) => ({ document_id: doc.id, file_url: f.fileUrl, file_name: f.name, file_type: f.fileType, file_size: f.size, sort_order: i })),
+          { transaction },
+        )
+      }
+    })
+    for (const url of new Set(oldFiles)) removeUpload(url)
     await audit(requestMeta(event), { action: 'DOCUMENT_UPDATE', entityType: 'document', entityId: doc.id, before, after: doc.toJSON() })
     return { document: await loadDocumentDto(doc.id) }
   } catch (err) {
-    removeUpload(file?.fileUrl)
+    files.forEach((f) => removeUpload(f.fileUrl))
     throw err
   }
 })

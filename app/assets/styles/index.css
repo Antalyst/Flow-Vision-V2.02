@@ -151,6 +151,76 @@
   }
 }
 
+/* Rendered Markdown from the AI assistant (chat answers and canvases) */
+@layer components {
+  .fv-prose {
+    @apply text-[14.5px] leading-relaxed text-ink-body;
+  }
+  .fv-prose > * + * {
+    margin-top: 0.75em;
+  }
+  .fv-prose h2 {
+    @apply mt-6 text-[18px] text-ink;
+  }
+  .fv-prose h3 {
+    @apply mt-5 text-[16px] text-ink;
+  }
+  .fv-prose h4 {
+    @apply mt-4 text-[15px] text-ink;
+  }
+  .fv-prose > :first-child {
+    margin-top: 0;
+  }
+  .fv-prose strong {
+    @apply font-semibold text-ink;
+  }
+  .fv-prose ul {
+    @apply list-disc pl-5;
+  }
+  .fv-prose ol {
+    @apply list-decimal pl-5;
+  }
+  .fv-prose li + li {
+    margin-top: 0.3em;
+  }
+  .fv-prose li::marker {
+    color: var(--lumio-text-muted);
+  }
+  .fv-prose code {
+    @apply rounded-md bg-ink/[0.06] px-1.5 py-0.5 font-mono text-[12.5px];
+  }
+  .fv-prose pre {
+    @apply overflow-x-auto rounded-2xl bg-night p-4 text-[12.5px] text-night-text;
+  }
+  .fv-prose pre code {
+    @apply bg-transparent p-0;
+  }
+  .fv-prose blockquote {
+    @apply border-l-2 border-terracotta/50 pl-4 text-ink-2 italic;
+  }
+  .fv-prose hr {
+    @apply border-line;
+  }
+  .fv-table-wrap {
+    @apply overflow-x-auto rounded-2xl border border-line bg-white/70;
+  }
+  .fv-prose table {
+    @apply w-full border-collapse text-left text-[13px];
+  }
+  .fv-prose th {
+    @apply border-b border-line bg-ink/[0.04] px-3 py-2.5 text-[11px] font-semibold tracking-[0.05em] whitespace-nowrap text-ink-2 uppercase;
+  }
+  .fv-prose td {
+    @apply border-b border-line/60 px-3 py-2.5 align-top;
+  }
+  .fv-prose tbody tr:last-child td {
+    border-bottom: 0;
+  }
+  .fv-prose tbody tr:hover td {
+    @apply bg-ink/[0.02];
+  }
+}
+
 @keyframes fv-rise {
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
@@ -160,6 +230,46 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .fv-rise { animation: none; }
+}
+
+/* GSAP reveal (app/plugins/gsap.ts): hidden until animated in; never hidden without JS or with reduced motion */
+@media (prefers-reduced-motion: no-preference) {
+  .fv-js [data-reveal] { opacity: 0; }
+}
+
+/* Landing intro loader: only when JS will run to lift it away */
+.fv-preloader { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .fv-js .fv-preloader { display: flex; }
+}
+
+/* AI assistant avatar while it works */
+@keyframes fv-thinking {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(0.86) rotate(-8deg); }
+}
+.fv-thinking { animation: fv-thinking 1.2s ease-in-out infinite; }
+
+/* Skeleton shimmer */
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: rgba(17, 17, 19, 0.06);
+}
+.skeleton::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.7), transparent);
+  animation: fv-shimmer 1.4s ease-in-out infinite;
+}
+@keyframes fv-shimmer {
+  to { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .fv-thinking, .skeleton::after { animation: none; }
 }
 
 /* Ember: "photographic" surfaces built from light (crimson glows on ink, film grain). Used by the public pages. */

@@ -127,6 +127,7 @@ export const Document = define('documents', {
   file_url: DataTypes.STRING(500),
   file_size: DataTypes.INTEGER,
   file_type: DataTypes.STRING(50),
+  // How many pages/sheets the document has: the number of files, or (photos only) as entered.
   pages: DataTypes.INTEGER,
   submitted_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
   completed_at: DataTypes.DATE,
@@ -268,6 +269,21 @@ export const AuditLog = define(
   createdOnly,
 )
 
+/** Every file attached to a document, in order (documents.file_url is the first one). One QR covers them all. */
+export const DocumentFile = define(
+  'document_files',
+  {
+    id: uuidPk,
+    document_id: { type: DataTypes.CHAR(36), allowNull: false },
+    file_url: { type: DataTypes.STRING(500), allowNull: false },
+    file_name: { type: DataTypes.STRING(255), allowNull: false },
+    file_type: DataTypes.STRING(100),
+    file_size: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+    sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  },
+  createdOnly,
+)
+
 /** Organization Settings: the document types offered when uploading (and given to the AI). */
 export const DocumentType = define('document_types', {
   id: uuidPk,
@@ -322,6 +338,7 @@ Document.belongsTo(Office, { foreignKey: 'current_office_id', as: 'currentOffice
 Document.belongsTo(User, { foreignKey: 'submitted_by', as: 'submitter' })
 Document.hasMany(DocumentTracking, { foreignKey: 'document_id', as: 'visits' })
 Document.hasOne(QrCode, { foreignKey: 'document_id', as: 'qr' })
+Document.hasMany(DocumentFile, { foreignKey: 'document_id', as: 'files' })
 
 DocumentTracking.belongsTo(Document, { foreignKey: 'document_id', as: 'document' })
 DocumentTracking.belongsTo(Office, { foreignKey: 'office_id', as: 'office' })

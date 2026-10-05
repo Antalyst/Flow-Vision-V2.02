@@ -1,5 +1,5 @@
 import { Op, QueryTypes, Transaction } from 'sequelize'
-import { sequelize, Approval, Document, DocumentTracking, Liaison, Office, Organization, QrCode, User, type Row } from './models.ts'
+import { sequelize, Approval, Document, DocumentFile, DocumentTracking, Liaison, Office, Organization, QrCode, User, type Row } from './models.ts'
 import { badRequest, conflict, forbidden, notFound } from './errors.ts'
 import type { Actor, RequestMeta } from './auth.ts'
 import { getLiveRoute, getStep, routeForNewDocument, routeHoursOf } from './routes.ts'
@@ -12,7 +12,7 @@ import { recordOutcome } from './liaisons.ts'
 import { audit } from './audit.ts'
 import { appendLog, readLog } from './tracking-log.ts'
 import { liaisonWorkloadSql } from './document-queries.ts'
-import { AT_OFFICE, CARRYING, referencedUserIds, timelineEvents, trackingNumber, userSummary } from './serializers.ts'
+import { AT_OFFICE, CARRYING, referencedOfficeIds, referencedUserIds, routingVisits, timelineEvents, trackingNumber, userSummary } from './serializers.ts'
 import type { AccountType } from './models.ts'
 import type { StoredFile } from './uploads.ts'
 
@@ -98,6 +98,17 @@ export function holdsDocument(doc: Row, actor: Actor) {
 function assertHoldsDocument(doc: Row, actor: Actor) {
   if (holdsDocument(doc, actor)) return
   throw forbidden(doc.current_step_number === 0 ? 'Only the uploader or the origin office can do this' : 'This document is not currently at your office')
+}
+
+/**
+ * At an office, the person who scanned the document in is the one who releases it: assigns,
+ * reassigns or unassigns its messenger. That keeps one accountable person per office visit.
+ * (At the origin — step 0 — the uploader, the CLIENT administrator or the origin office do it.)
+ */
+async function assertReceiver(doc: Row, visit: Row, actor: Actor, transaction?: Transaction) {
+  if (doc.current_step_number === 0 || visit.handler_id === actor.id) return
+  const receiver = visit.handler_id ? await User.findByPk(visit.handler_id, { attributes: ['first_name', 'last_name', 'full_name', 'email'], transaction }) : null
+  throw forbidden(`Only ${receiver ? nameOf(receiver) : 'the person who received it'}, who received this document, can release it and assign its messenger`)
 }
 
 /** Name of where the document is now: its office, or the organization (origin of a CLIENT upload). */
@@ -278,9 +289,16 @@ export interface DocumentInput {
   /** Which Document Route to follow. Optional only while the organization has a single route. */
   route_id?: string | null
   submit?: boolean
+  /** Pages/sheets of the paper document: entered for photos; otherwise the number of files. */
+  pages?: number | null
 }
 
-export async function createDocument(actor: Actor, input: DocumentInput, file: StoredFile | null, meta: RequestMeta) {
+/**
+ * Create a document with its files — one, or many (a bulk upload) under the same QR code. The
+ * first file is also documents.file_url; every file is listed in document_files, in order.
+ */
+export async function createDocument(actor: Actor, input: DocumentInput, files: StoredFile[], meta: RequestMeta) {
+  const file = files[0] ?? null
   return sequelize.transaction(async (transaction) => {
     // documents.route_id is required, so even drafts are pinned to a route.
     const route = await routeForNewDocument(actor.org_id, input.route_id ?? null, transaction)
@@ -299,9 +317,16 @@ export async function createDocument(actor: Actor, input: DocumentInput, file: S
         current_step_number: 1,
         submitted_by: actor.id,
         ...(file && { file_url: file.fileUrl, file_type: file.fileType, file_size: file.size }),
+        pages: input.pages ?? (files.length || null),
       },
       { transaction },
     )
+    if (files.length) {
+      await DocumentFile.bulkCreate(
+        files.map((f, i) => ({ document_id: doc.id, file_url: f.fileUrl, file_name: f.name, file_type: f.fileType, file_size: f.size, sort_order: i })),
+        { transaction },
+      )
+    }
     // The QR label is printed right after upload and stays with the paper until it is done.
     const origin = await originCode(actor, transaction)
     await QrCode.create({ document_id: doc.id, qr_code_data: await uniqueRoutingCode(origin, transaction), office_code: origin }, { transaction })
@@ -357,6 +382,7 @@ export async function requestPickup(documentId: string, actor: Actor, { liaisonU
     assertHoldsDocument(doc, actor)
     const visit = await requireVisit(doc, transaction)
     if (!visit.handler_id) throw conflict('Scan the document’s QR code to receive it before releasing it')
+    await assertReceiver(doc, visit, actor, transaction)
     const previousId = visit.liaison_id as string | null
     if (previousId === liaisonUserId) throw conflict('That messenger is already assigned to this document')
 
@@ -423,6 +449,7 @@ export async function cancelPickup(documentId: string, actor: Actor) {
     assertHoldsDocument(doc, actor)
     const visit = AT_OFFICE.includes(doc.status) ? await requireVisit(doc, transaction) : null
     if (!visit?.liaison_id) throw conflict('This document has not been released to a messenger')
+    await assertReceiver(doc, visit, actor, transaction)
     const liaisonId = visit.liaison_id
     visit.liaison_id = null
     appendLog(visit, { type: 'NOTE', by: actor.id, status: doc.status, remarks: 'Release cancelled — messenger unassigned' })
@@ -834,20 +861,34 @@ export async function addNote(documentId: string, actor: Actor, remarks: string)
 
 /** The full timeline: every visit's event log plus the draft's creation. */
 export async function documentTimeline(doc: Row) {
+  return (await documentHistory(doc)).tracking
+}
+
+/** The flat timeline plus the office-by-office routing breakdown, from one read of the visits. */
+export async function documentHistory(doc: Row) {
   const visits = await DocumentTracking.findAll({
     where: { document_id: doc.id },
     include: [{ model: Office, as: 'office', attributes: ['id', 'code', 'name'] }],
     order: [['created_at', 'ASC']],
   })
-  const users = await User.findAll({
-    where: { id: { [Op.in]: referencedUserIds(doc, visits) } },
-    attributes: ['id', 'first_name', 'last_name', 'full_name', 'email', 'account_type'],
-  })
-  return timelineEvents(doc, visits, new Map(users.map((u) => [u.id, u])))
+  const [users, offices] = await Promise.all([
+    User.findAll({
+      where: { id: { [Op.in]: referencedUserIds(doc, visits) } },
+      attributes: ['id', 'first_name', 'last_name', 'full_name', 'email', 'account_type'],
+    }),
+    Office.findAll({ where: { id: { [Op.in]: referencedOfficeIds(visits) } }, attributes: ['id', 'code', 'name'] }),
+  ])
+  const userMap = new Map(users.map((u) => [u.id, u]))
+  return {
+    tracking: timelineEvents(doc, visits, userMap),
+    routing: routingVisits(visits, userMap, new Map(offices.map((o) => [o.id, o]))),
+  }
 }
 
 export interface ActionContext {
   received: boolean
+  /** Who scanned it in at the current visit (at an office, the only one who may release it). */
+  handlerId: string | null
   visitLiaisonId: string | null
   isFinalStep: boolean
   /** Office of the step after the current one (where a carried document is heading). */
@@ -863,6 +904,8 @@ export function availableActions(doc: Row, actor: Actor, ctx: ActionContext) {
   const atOrigin = doc.current_step_number === 0
   // Office staff where it is, or (at the origin) the uploader / CLIENT administrator too.
   const holds = holdsDocument(doc, actor)
+  // At an office only the receiver releases; at the origin, whoever holds it there.
+  const releases = holds && (atOrigin || ctx.handlerId === actor.id)
   const isLiaison = actor.account_type === 'LIAISON'
   const carrying = moving && ctx.visitLiaisonId === actor.id
   const nextOfficeStaff = officeStaff && actor.office_id === ctx.nextOfficeId
@@ -877,10 +920,10 @@ export function availableActions(doc: Row, actor: Actor, ctx: ActionContext) {
       (holds && !atOrigin && atOffice && !ctx.received) ||
       (nextOfficeStaff && moving) ||
       (nextOfficeStaff && atOrigin && atOffice && !ctx.visitLiaisonId),
-    canRequestPickup: holds && atOffice && ctx.received && !ctx.visitLiaisonId && !ctx.isFinalStep && Boolean(ctx.nextOfficeId),
+    canRequestPickup: releases && atOffice && ctx.received && !ctx.visitLiaisonId && !ctx.isFinalStep && Boolean(ctx.nextOfficeId),
     // Until the messenger has picked it up, another one can take over.
-    canReassign: holds && atOffice && Boolean(ctx.visitLiaisonId),
-    canCancelPickup: holds && atOffice && Boolean(ctx.visitLiaisonId),
+    canReassign: releases && atOffice && Boolean(ctx.visitLiaisonId),
+    canCancelPickup: releases && atOffice && Boolean(ctx.visitLiaisonId),
     canPickup: isLiaison && atOffice && ctx.visitLiaisonId === actor.id,
     canStartTransit: isLiaison && carrying && doc.status === 'PICKED_UP',
     canReportFailure: isLiaison && carrying,

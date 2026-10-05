@@ -176,3 +176,12 @@ export function whereabouts(doc: FlowDocument) {
       return ''
   }
 }
+
+/**
+ * Whether `userId` releases this document (assigns its messenger): at an office only the person
+ * who received it; at its origin (step 0), anyone of the origin office. The server checks the same.
+ */
+export function releasesDocument(doc: FlowDocument, userId: string | null | undefined) {
+  if (!userId) return false
+  return doc.current_step_number === 0 || doc.received_by?.id === userId
+}

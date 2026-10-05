@@ -1,4 +1,4 @@
-import type { FlowDocument, Office, QrInfo, UserSummary } from '~/types'
+import type { DocumentFileInfo, FlowDocument, Office, QrInfo, UserSummary } from '~/types'
 
 export type ScanAction = 'PICKUP' | 'RECEIVE'
 
@@ -63,7 +63,6 @@ function printHtml(title: string, css: string, body: string) {
   })
 }
 
-const extOf = (doc: PrintableDoc) => (doc.file_name?.split('.').pop() ?? '').toLowerCase()
 
 /** Render a PDF's pages to images in the browser, so they print in the same job as the QR. */
 async function renderPdfPages(url: string) {
@@ -90,13 +89,18 @@ export function useQR() {
   }
 
   /**
-   * Print the uploaded document, untouched, followed by one extra last page carrying its QR code,
-   * in one print job. PDFs, images and Word (.docx) files can be printed this way; other
-   * attachments (and documents without one) print the QR page alone.
+   * Print the uploaded document — every file of it, in order (a bulk upload has several) — untouched,
+   * followed by one extra last page carrying its QR code, in one print job. PDFs, images and Word
+   * (.docx) files print this way; other files are skipped (and named), and a document without any
+   * prints the QR page alone.
    */
-  async function printWithDocument(qr: QrInfo, doc: PrintableDoc) {
-    const ext = extOf(doc)
-    const fileUrl = `/api/documents/${doc.id}/file`
+  async function printWithDocument(qr: QrInfo, doc: PrintableDoc, files: DocumentFileInfo[] = []) {
+    // Older callers pass no list: the document's one file.
+    const list: DocumentFileInfo[] = files.length
+      ? files
+      : doc.file_name
+        ? [{ id: 'main', name: doc.file_name, type: null, size: 0, url: `/api/documents/${doc.id}/file` }]
+        : []
     // The QR never goes on the document's own pages: it gets a page of its own, after them.
     const qrPage = `<section class="qr-page">
       <div class="qr-sheet">
@@ -115,42 +119,53 @@ export function useQR() {
       .qr-code { font: 700 5mm ui-monospace, monospace; letter-spacing: 0.03em; margin: 5mm 0 2mm; }
       .qr-title { font-size: 4mm; margin: 0 0 6mm; }
       .qr-note { font-size: 3mm; color: #5F5B54; line-height: 1.5; margin: 0; }`
-    const pageCss = `
+    // One job for everything: picture pages fill the sheet, Word files get page margins.
+    const css = `
       @page { size: auto; margin: 0; }
       body { margin: 0; font-family: system-ui, sans-serif; }
       .page { height: 100vh; display: flex; align-items: flex-start; justify-content: center; break-after: page; overflow: hidden; }
       .page img { max-width: 100%; max-height: 100%; object-fit: contain; }
-      .qr-page { break-before: auto; }
-      ${qrPageCss}`
+      .docx { padding: 16mm; break-after: page; font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.4; color: #111; }
+      .docx img { max-width: 100%; } .docx table { border-collapse: collapse; } .docx td, .docx th { border: 1px solid #999; padding: 2pt 4pt; }
+      ${qrPageCss}
+      .qr-page { break-before: auto; }`
 
-    const printQrPageOnly = () => printHtml(qr.payload, `@page { size: auto; margin: 0; } body { margin: 0; } ${qrPageCss} .qr-page { break-before: auto; }`, qrPage)
-
-    if (!doc.file_name || !['pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx'].includes(ext)) {
-      if (doc.file_name) ui.info('Printing the QR page only', `${doc.file_name} can't be printed from the browser. Open it in its own app to print it.`)
-      return printQrPageOnly()
+    const PRINTABLE = new Set(['pdf', 'png', 'jpg', 'jpeg', 'webp', 'docx'])
+    const sections: string[] = []
+    const skipped: string[] = []
+    let truncated = false
+    for (const f of list) {
+      const ext = (f.name.split('.').pop() ?? '').toLowerCase()
+      if (!PRINTABLE.has(ext)) {
+        skipped.push(f.name)
+        continue
+      }
+      try {
+        if (ext === 'docx') {
+          const { html } = await api.get<{ html: string }>(`/documents/${doc.id}/printable`, f.id === 'main' ? undefined : { file: f.id })
+          sections.push(`<article class="docx">${html}</article>`)
+        } else if (ext === 'pdf') {
+          const rendered = await renderPdfPages(f.url)
+          truncated ||= rendered.truncated
+          sections.push(rendered.pages.map((src) => `<div class="page"><img src="${src}" alt=""></div>`).join(''))
+        } else {
+          sections.push(`<div class="page"><img src="${f.url}" alt=""></div>`)
+        }
+      } catch (err) {
+        console.warn('[print] could not prepare', f.name, err)
+        skipped.push(f.name)
+      }
     }
 
-    try {
-      if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
-        return await printHtml(qr.payload, pageCss, `<div class="page"><img src="${fileUrl}" alt=""></div>${qrPage}`)
-      }
-      if (ext === 'docx') {
-        const { html } = await api.get<{ html: string }>(`/documents/${doc.id}/printable`)
-        const docxCss = `
-          @page { size: auto; margin: 16mm; }
-          body { margin: 0; font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.4; color: #111; }
-          img { max-width: 100%; } table { border-collapse: collapse; } td, th { border: 1px solid #999; padding: 2pt 4pt; }
-          ${qrPageCss}
-          .qr-page { height: auto; padding-top: 14mm; }`
-        return await printHtml(qr.payload, docxCss, `<article>${html}</article>${qrPage}`)
-      }
-      const { pages, truncated } = await renderPdfPages(fileUrl)
-      if (truncated) ui.info('Long PDF', `Only the first ${MAX_PDF_PAGES} pages are printed, then the QR page.`)
-      return await printHtml(qr.payload, pageCss, pages.map((src) => `<div class="page"><img src="${src}" alt=""></div>`).join('') + qrPage)
-    } catch (err) {
-      ui.error('Could not print the document', `${apiErrorMessage(err)} The QR page will print on its own.`)
-      return printQrPageOnly()
+    if (skipped.length) {
+      ui.info(
+        sections.length ? `${skipped.length} file${skipped.length === 1 ? '' : 's'} not printed` : 'Printing the QR page only',
+        `${skipped.join(', ')} can't be printed from the browser. Open ${skipped.length === 1 ? 'it' : 'them'} in its own app to print.`,
+      )
     }
+    if (truncated) ui.info('Long PDF', `Only the first ${MAX_PDF_PAGES} pages of each PDF are printed.`)
+    // The QR never goes on the document's own pages: it gets a page of its own, after them.
+    return printHtml(qr.payload, css, sections.join('') + qrPage)
   }
 
   return {

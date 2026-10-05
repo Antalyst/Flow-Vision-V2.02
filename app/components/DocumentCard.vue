@@ -20,6 +20,7 @@ const deadline = computed(() => deadlineState(props.doc))
           <span class="mono text-ink-2">{{ doc.qr_code ?? doc.tracking_number }}</span>
           <PriorityBadge :priority="doc.priority" />
           <ToneBadge v-if="deadline" :tone="deadline.tone" icon="clock">{{ deadline.label }}</ToneBadge>
+          <ToneBadge v-if="(doc.file_count ?? 0) > 1" tone="neutral" icon="layers">{{ doc.file_count }} files</ToneBadge>
         </div>
         <NuxtLink
           :to="`/documents/${doc.id}`"

@@ -173,7 +173,8 @@ const isMe = (r: ActivityRow) => r.actor?.id === auth.user?.id
       </select>
     </div>
 
-    <div v-if="!rows.length" class="card">
+    <PageSkeleton v-if="!rows.length && status === 'pending'" variant="list" :rows="7" :messages="['Loading activity…', 'Reading the audit trail…']" />
+    <div v-else-if="!rows.length" class="card">
       <EmptyState
         icon="list"
         :title="status === 'pending' ? 'Loading…' : 'No activity'"

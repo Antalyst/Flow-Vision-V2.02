@@ -31,7 +31,7 @@ function onDecided(id: string) {
       </button>
     </div>
 
-    <p v-if="status === 'pending' && !data" class="py-16 text-center text-sm text-ink-2">Loading…</p>
+    <PageSkeleton v-if="status === 'pending' && !data" variant="cards" :rows="3" :messages="['Loading approvals…', 'Checking the final checkpoint…']" />
     <div v-else-if="!data?.data.length" class="card">
       <EmptyState
         :icon="tab === 'PENDING' ? 'check-square' : 'archive'"

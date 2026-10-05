@@ -27,69 +27,168 @@ watchEffect(() => {
 })
 const selectedRoute = computed(() => routes.value.find((r) => r.id === form.route_id) ?? null)
 
-const file = ref<File | null>(null)
 const dragging = ref(false)
 const submitting = ref<'draft' | 'submit' | null>(null)
 const ui = useUiStore()
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx'
 const MAX_MB = 20
+// A bulk upload: up to this many files under one document and one QR code (the server allows 50).
+const MAX_FILES = 50
 
 /**
  * PDF, Word, Excel and image files are all accepted. Only PDF and Word (.docx) carry text the AI
  * can read; for images, spreadsheets and old .doc files the title and description are typed in.
  */
-type FileKind = 'ai' | 'image' | 'excel' | 'old-word'
+type FileKind = 'ai' | 'image' | 'excel' | 'old-word' | 'scan'
 const KINDS: Record<string, FileKind> = { pdf: 'ai', docx: 'ai', doc: 'old-word', xls: 'excel', xlsx: 'excel', png: 'image', jpg: 'image', jpeg: 'image', webp: 'image' }
 const MANUAL_REASON: Record<Exclude<FileKind, 'ai'>, string> = {
   image: 'This is an image, so the AI can’t read it. Type the title and description yourself.',
   excel: 'This is an Excel spreadsheet, so the AI can’t read it. Type the title and description yourself.',
   'old-word': 'Older Word files (.doc) can’t be read by the AI. Type the details yourself, or save it as .docx to use auto-fill.',
+  scan: 'Photos of paper can’t be read by the AI. Type the title and description yourself.',
 }
 const manualReason = ref('')
-const preview = ref<string | null>(null)
 
-function pickFile(f?: File | null) {
-  if (!f) return
-  const kind = KINDS[f.name.split('.').pop()?.toLowerCase() ?? '']
+/**
+ * Single: one file. Bulk: many files or pictures under ONE document and ONE QR code. The page
+ * count is the number of files — except when they are all pictures, where the uploader says how
+ * many pages the paper has (photos don't always match sheets).
+ */
+const mode = ref<'single' | 'bulk'>('single')
+// Where the attachments come from: files, or pictures of the paper taken with the camera.
+const source = ref<'file' | 'camera'>('file')
+const cameraOpen = ref(false)
+
+interface Attachment {
+  key: number
+  file: File
+  kind: FileKind
+  /** Thumbnail for pictures. */
+  preview: string | null
+  /** Pages photographed into this file (camera), else 0. */
+  scannedPages: number
+}
+const attachments = ref<Attachment[]>([])
+let nextKey = 1
+const pagesManual = ref<number | null>(null)
+
+/** Every attachment is a picture (image file or camera photo), so the page count is typed in. */
+const picturesOnly = computed(() => attachments.value.length > 0 && attachments.value.every((a) => a.kind === 'image' || a.kind === 'scan'))
+/**
+ * The page count is typed in for pictures: always in bulk + camera mode (even before the first
+ * picture — the paper's page count is known up front), and whenever every attachment is a picture.
+ */
+const askCount = computed(() => (mode.value === 'bulk' && source.value === 'camera') || picturesOnly.value)
+const pageCount = computed(() => (askCount.value ? pagesManual.value : attachments.value.length))
+const totalBytes = computed(() => attachments.value.reduce((n, a) => n + a.file.size, 0))
+
+function toAttachment(f: File, scanned = 0): Attachment | null {
+  const kind: FileKind | undefined = scanned ? 'scan' : KINDS[f.name.split('.').pop()?.toLowerCase() ?? '']
   // Dropped files skip the picker's filter, so check the type here too.
   if (!kind) {
-    ui.error('Unsupported file', 'Attach a PDF, Word, Excel or image file (PNG, JPG, WebP).')
-    return
+    ui.error('Unsupported file', `${f.name}: attach PDF, Word, Excel or image files (PNG, JPG, WebP).`)
+    return null
   }
   if (f.size > MAX_MB * 1024 * 1024) {
-    ui.error('File too large', `Attachments can be up to ${MAX_MB} MB.`)
-    return
+    ui.error('File too large', `${f.name}: each file can be up to ${MAX_MB} MB.`)
+    return null
   }
-  file.value = f
-  if (preview.value) URL.revokeObjectURL(preview.value)
-  preview.value = kind === 'image' ? URL.createObjectURL(f) : null
+  const isPicture = kind === 'image' || (kind === 'scan' && f.type.startsWith('image/'))
+  return { key: nextKey++, file: f, kind, preview: isPicture ? URL.createObjectURL(f) : null, scannedPages: scanned }
+}
 
-  if (kind === 'ai') {
+/** Add files: single mode replaces the attachment, bulk mode adds to the set. */
+function addFiles(list: Iterable<File> | null | undefined, { scannedPages = 0 } = {}) {
+  const incoming = [...(list ?? [])]
+  if (!incoming.length) return
+  if (mode.value === 'single') {
+    const a = toAttachment(incoming[0]!, scannedPages)
+    if (!a) return
+    clearAttachments()
+    attachments.value = [a]
+  } else {
+    for (const f of incoming) {
+      if (attachments.value.length >= MAX_FILES) {
+        ui.error('Too many files', `One document can hold up to ${MAX_FILES} files.`)
+        break
+      }
+      const a = toAttachment(f, f.type.startsWith('image/') && scannedPages ? 1 : 0)
+      if (a) attachments.value.push(a)
+    }
+  }
+  attachmentsChanged()
+}
+
+function onScanned(files: File[], pages: number) {
+  addFiles(files, { scannedPages: mode.value === 'single' ? pages : 1 })
+}
+
+function removeAttachment(key: number) {
+  const a = attachments.value.find((x) => x.key === key)
+  if (a?.preview) URL.revokeObjectURL(a.preview)
+  attachments.value = attachments.value.filter((x) => x.key !== key)
+  attachmentsChanged()
+}
+function clearAttachments() {
+  attachments.value.forEach((a) => a.preview && URL.revokeObjectURL(a.preview))
+  attachments.value = []
+}
+function clearAll() {
+  clearAttachments()
+  attachmentsChanged()
+}
+onBeforeUnmount(clearAttachments)
+
+// Switching between single and bulk starts the attachments over.
+watch(mode, () => clearAll())
+
+/**
+ * After the set changes: the AI reads the first PDF or Word file (if it hasn't already); with
+ * none, the details are typed in. Pictures-only sets get their page count suggested.
+ */
+let analyzedKey: number | null = null
+function attachmentsChanged() {
+  const list = attachments.value
+  if (picturesOnly.value) {
+    const suggested = list.reduce((n, a) => n + (a.scannedPages || 1), 0)
+    if (!pagesManual.value || pagesManual.value < 1) pagesManual.value = suggested
+    else if (mode.value === 'single') pagesManual.value = suggested
+  } else if (!askCount.value) {
+    pagesManual.value = null
+  }
+  if (!list.length) {
+    analyzedKey = null
+    analyzeRun++
+    analyzing.value = false
+    aiFilled.value = false
+    aiNote.value = ''
     manualReason.value = ''
-    analyze(f)
     return
   }
-  // Not readable by the AI: skip it and go straight to typing the details.
+  const readable = list.find((a) => a.kind === 'ai')
+  if (readable) {
+    manualReason.value = ''
+    if (readable.key !== analyzedKey) {
+      analyzedKey = readable.key
+      analyze(readable.file)
+    }
+    return
+  }
+  // Nothing the AI can read: skip it and go straight to typing the details.
+  analyzedKey = null
   analyzeRun++
   analyzing.value = false
   aiFilled.value = false
   aiNote.value = ''
-  manualReason.value = MANUAL_REASON[kind]
-  if (step.value === 0) step.value = 1
+  manualReason.value = list.length === 1 ? MANUAL_REASON[list[0]!.kind as Exclude<FileKind, 'ai'>] : picturesOnly.value
+    ? 'These are pictures, so the AI can’t read them. Type the title and description yourself, and check the number of pages.'
+    : 'None of these files can be read by the AI (only PDF and Word .docx can). Type the title and description yourself.'
+  if (step.value === 0 && mode.value === 'single') step.value = 1
 }
 
-function clearFile() {
-  file.value = null
-  aiFilled.value = false
-  aiNote.value = ''
-  manualReason.value = ''
-  analyzeRun++
-  analyzing.value = false
-  if (preview.value) URL.revokeObjectURL(preview.value)
-  preview.value = null
-}
-onBeforeUnmount(() => preview.value && URL.revokeObjectURL(preview.value))
+// For the Details banner: the first picture, if any.
+const preview = computed(() => attachments.value.find((a) => a.preview)?.preview ?? null)
 
 // AI reads the upload and pre-fills the details; the user can still edit them before saving.
 const analyzing = ref(false)
@@ -120,11 +219,13 @@ async function analyze(f: File) {
 }
 function onDrop(e: DragEvent) {
   dragging.value = false
-  pickFile(e.dataTransfer?.files?.[0])
+  addFiles(e.dataTransfer?.files)
 }
 
 // A step can be reached once every step before it is complete.
-const stepDone = computed(() => [!analyzing.value, form.title.trim().length > 0, Boolean(selectedRoute.value), true])
+// Pictures only: the number of pages must be given.
+const pagesOk = computed(() => !askCount.value || (Number.isInteger(pagesManual.value) && (pagesManual.value ?? 0) >= 1 && (pagesManual.value ?? 0) <= 9999))
+const stepDone = computed(() => [!analyzing.value && pagesOk.value, form.title.trim().length > 0, Boolean(selectedRoute.value), true])
 const reachable = (i: number) => stepDone.value.slice(0, i).every(Boolean)
 const canNext = computed(() => stepDone.value[step.value])
 const canSave = computed(() => stepDone.value[0] && stepDone.value[1] && stepDone.value[2])
@@ -142,7 +243,9 @@ async function send(submit: boolean) {
     const fd = new FormData()
     for (const [k, v] of Object.entries(form)) if (v) fd.append(k, v)
     fd.append('submit', String(submit))
-    if (file.value) fd.append('file', file.value)
+    // One or many files — all under one document and one QR code.
+    for (const a of attachments.value) fd.append('file', a.file)
+    if ((attachments.value.length || askCount.value) && pageCount.value) fd.append('pages', String(pageCount.value))
     const { document } = await docsApi.create(fd)
     ui.success(submit ? 'Document submitted — printing it with its QR' : 'Draft saved — printing it with its QR', `${document.qr_code ?? document.tracking_number} · ${document.title}`)
     // The document page prints the QR label as soon as it opens.
@@ -180,32 +283,121 @@ async function send(submit: boolean) {
     <section class="card card-pad">
       <!-- 1. Upload -->
       <div v-if="step === 0">
+        <!-- One file, or a bulk set under one QR -->
+        <div class="mb-3 flex w-fit max-w-full gap-1 rounded-xl bg-ink/[0.04] p-1" role="radiogroup" aria-label="Single file or bulk">
+          <button
+            v-for="m in [
+              { value: 'single', icon: 'file', label: 'Single file' },
+              { value: 'bulk', icon: 'layers', label: 'Bulk — many files, one QR' },
+            ] as const"
+            :key="m.value"
+            type="button"
+            role="radio"
+            :aria-checked="mode === m.value"
+            class="tab"
+            :class="mode === m.value && 'tab-active'"
+            @click="mode = m.value"
+          >
+            <FIcon :name="m.icon" :size="15" /> {{ m.label }}
+          </button>
+        </div>
+        <p class="mb-4 text-xs text-ink-2">
+          {{ mode === 'single' ? 'One file for this document.' : `Several files or pictures that travel together as one document, with one QR code (up to ${MAX_FILES}).` }}
+        </p>
+
+        <!-- How to attach the document -->
+        <div class="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2" role="radiogroup" aria-label="How to add the document">
+          <button
+            v-for="opt in [
+              { value: 'file', icon: 'upload-cloud', title: 'Upload a file', hint: 'PDF, Word, Excel or image from this device' },
+              { value: 'camera', icon: 'camera', title: 'Take a picture', hint: 'Photograph the paper, page by page' },
+            ] as const"
+            :key="opt.value"
+            type="button"
+            role="radio"
+            :aria-checked="source === opt.value"
+            class="flex items-center gap-3 rounded-2xl border p-4 text-left transition-colors"
+            :class="source === opt.value ? 'border-terracotta bg-terracotta/[0.06]' : 'border-line hover:bg-card'"
+            @click="source = opt.value"
+          >
+            <span class="grid size-10 shrink-0 place-items-center rounded-xl" :class="source === opt.value ? 'bg-terracotta text-white' : 'bg-ink/[0.05] text-ink-2'">
+              <FIcon :name="opt.icon" :size="18" />
+            </span>
+            <span class="min-w-0">
+              <span class="block text-sm font-semibold">{{ opt.title }}</span>
+              <span class="block text-xs text-ink-2">{{ opt.hint }}</span>
+            </span>
+          </button>
+        </div>
+
+        <!-- Camera -->
+        <div v-if="source === 'camera'" class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-line px-6 py-12 text-center">
+          <span class="grid size-12 place-items-center rounded-2xl bg-terracotta/12 text-terracotta-ink"><FIcon name="camera" /></span>
+          <span class="mt-4 text-sm font-semibold">Photograph the paper document</span>
+          <span class="mt-1 max-w-sm text-xs text-ink-2">
+            {{ mode === 'bulk' ? 'Take one picture per page. Each picture is added to this document as its own file.' : 'Take one picture per page. One page is saved as an image; several are joined into a single PDF.' }}
+          </span>
+          <button type="button" class="btn btn-primary mt-5" @click="cameraOpen = true">
+            <FIcon name="camera" :size="16" /> {{ mode === 'bulk' && attachments.length ? 'Take more pictures' : attachments.some((a) => a.scannedPages) ? 'Take the pictures again' : 'Open camera' }}
+          </button>
+        </div>
+
         <label
+          v-else
           class="flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 py-12 text-center transition-colors"
           :class="dragging ? 'border-terracotta bg-terracotta/[0.05]' : 'border-line hover:border-ink-3'"
           @dragover.prevent="dragging = true"
           @dragleave.prevent="dragging = false"
           @drop.prevent="onDrop"
         >
-          <input type="file" class="sr-only" :accept="ACCEPT" @change="pickFile(($event.target as HTMLInputElement).files?.[0])" />
+          <input type="file" class="sr-only" :accept="ACCEPT" :multiple="mode === 'bulk'" @change="addFiles(($event.target as HTMLInputElement).files); ($event.target as HTMLInputElement).value = ''" />
           <span class="grid size-12 place-items-center rounded-2xl bg-terracotta/12 text-terracotta-ink"><FIcon name="upload-cloud" /></span>
-          <span class="mt-4 text-sm font-semibold">Drop a file or click to browse</span>
-          <span class="mt-1 text-xs text-ink-2">PDF, Word, Excel or image (PNG, JPG, WebP) · up to {{ MAX_MB }} MB</span>
+          <span class="mt-4 text-sm font-semibold">{{ mode === 'bulk' ? 'Drop files or click to browse (pick several)' : 'Drop a file or click to browse' }}</span>
+          <span class="mt-1 text-xs text-ink-2">PDF, Word, Excel or image (PNG, JPG, WebP) · up to {{ MAX_MB }} MB each</span>
           <span class="mt-0.5 text-xs text-ink-2">AI fills in the details from PDF and Word (.docx) files; for images and Excel you type them in.</span>
         </label>
-        <div v-if="file" class="mt-4 flex items-center gap-3 rounded-xl bg-ink/[0.04] p-3">
-          <img v-if="preview" :src="preview" alt="" class="size-12 shrink-0 rounded-lg object-cover" />
-          <FIcon v-else name="file" :size="18" class="text-ink-2" />
-          <span class="min-w-0 flex-1">
-            <span class="block truncate text-sm font-medium">{{ file.name }}</span>
-            <span class="text-xs text-ink-2">{{ formatBytes(file.size) }}</span>
-          </span>
-          <FIcon v-if="analyzing" name="loader" :size="16" class="animate-spin text-terracotta" />
-          <button class="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-ink/5" aria-label="Remove file" @click="clearFile"><FIcon name="x" :size="16" /></button>
+
+        <!-- What's attached -->
+        <div v-if="attachments.length" class="mt-4 rounded-xl bg-ink/[0.04] p-2">
+          <div v-if="mode === 'bulk'" class="flex items-center justify-between px-2 pt-1 pb-2 text-xs text-ink-2">
+            <span>{{ attachments.length }} file{{ attachments.length === 1 ? '' : 's' }} · {{ formatBytes(totalBytes) }} · one QR code</span>
+            <button type="button" class="hover:text-ink" @click="clearAll">Remove all</button>
+          </div>
+          <ul class="max-h-72 space-y-1 overflow-y-auto">
+            <li v-for="(a, i) in attachments" :key="a.key" class="flex items-center gap-3 rounded-lg bg-card/70 p-2">
+              <span v-if="mode === 'bulk'" class="w-5 shrink-0 text-center text-xs text-ink-2">{{ i + 1 }}</span>
+              <img v-if="a.preview" :src="a.preview" alt="" class="size-10 shrink-0 rounded-md object-cover" />
+              <span v-else class="grid size-10 shrink-0 place-items-center rounded-md bg-ink/[0.05] text-ink-2"><FIcon name="file" :size="16" /></span>
+              <span class="min-w-0 flex-1">
+                <span class="block truncate text-sm font-medium">{{ a.file.name }}</span>
+                <span class="text-xs text-ink-2">
+                  {{ a.scannedPages ? `Taken with the camera${a.scannedPages > 1 ? ` · ${a.scannedPages} pages` : ''} · ` : '' }}{{ formatBytes(a.file.size) }}
+                  <template v-if="a.kind === 'ai'"> · AI can read it</template>
+                </span>
+              </span>
+              <button type="button" class="grid size-9 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-ink/5" :aria-label="`Remove ${a.file.name}`" @click="removeAttachment(a.key)"><FIcon name="x" :size="16" /></button>
+            </li>
+          </ul>
+          <p v-if="analyzing" class="flex items-center gap-2 px-2 pt-2 pb-1 text-xs text-terracotta-ink"><FIcon name="loader" :size="14" class="animate-spin" /> AI is reading the first PDF/Word file…</p>
         </div>
+
+        <!-- How many pages -->
+        <div v-if="attachments.length || askCount" class="mt-4 flex flex-wrap items-center gap-3 rounded-xl border border-line p-3">
+          <FIcon name="hash" :size="18" class="text-ink-2" />
+          <template v-if="askCount">
+            <label for="pages" class="text-sm font-medium">How many pages (files) does this document have?</label>
+            <input id="pages" v-model.number="pagesManual" type="number" min="1" max="9999" step="1" class="input w-24" required />
+            <span class="w-full text-xs text-ink-2 sm:w-auto">{{ attachments.length ? `${attachments.length} picture${attachments.length === 1 ? '' : 's'} taken — pictures don’t always match sheets, so check the number.` : 'Enter it first, then take one picture per page.' }}</span>
+          </template>
+          <template v-else>
+            <span class="text-sm"><strong>{{ attachments.length }}</strong> page{{ attachments.length === 1 ? '' : 's' }}</span>
+            <span class="text-xs text-ink-2">counted automatically from the files</span>
+          </template>
+        </div>
+
         <p v-if="manualReason" class="mt-3 flex items-start gap-2 text-sm text-info-ink"><FIcon name="edit-3" :size="16" class="mt-0.5 shrink-0" /> {{ manualReason }}</p>
         <p v-else-if="aiNote" class="mt-3 flex items-start gap-2 text-sm text-amber-ink"><FIcon name="info" :size="16" class="mt-0.5 shrink-0" /> {{ aiNote }} You can type the details yourself in the next step.</p>
-        <p v-else-if="!file" class="mt-3 text-xs text-ink-2">No file? Continue and type the details yourself.</p>
+        <p v-else-if="!attachments.length" class="mt-3 text-xs text-ink-2">No file? Continue and type the details yourself.</p>
       </div>
 
       <!-- 2. Details -->
@@ -214,7 +406,7 @@ async function send(submit: boolean) {
           <FIcon name="loader" :size="18" class="animate-spin" /> Reading your document…
         </div>
         <div v-else-if="aiFilled" class="flex items-center gap-3 rounded-2xl bg-terracotta/[0.07] p-4 text-sm text-terracotta-ink">
-          <FIcon name="zap" :size="18" /> <span class="flex-1">Filled in by AI from <strong>{{ file?.name }}</strong>. Check it and edit anything that's off.</span>
+          <FIcon name="zap" :size="18" /> <span class="flex-1">Filled in by AI from <strong>{{ attachments.find((a) => a.kind === 'ai')?.file.name }}</strong>. Check it and edit anything that's off.</span>
         </div>
         <div v-else-if="manualReason" class="flex items-start gap-3 rounded-2xl bg-info/10 p-4 text-sm text-info-ink">
           <img v-if="preview" :src="preview" alt="Preview of the uploaded image" class="h-20 w-20 shrink-0 rounded-lg object-cover" />
@@ -292,7 +484,11 @@ async function send(submit: boolean) {
           </div>
           <div>
             <dt class="eyebrow">Attachment</dt>
-            <dd class="mt-1 truncate text-sm">{{ file?.name ?? 'None' }}</dd>
+            <dd class="mt-1 truncate text-sm">{{ attachments.length === 0 ? 'None' : attachments.length === 1 ? attachments[0]!.file.name : `${attachments.length} files · one QR code` }}</dd>
+          </div>
+          <div v-if="attachments.length || askCount">
+            <dt class="eyebrow">Pages</dt>
+            <dd class="mt-1 text-sm">{{ pageCount ?? '—' }} <span class="text-ink-2">· {{ askCount ? 'entered by you' : 'counted from the files' }}</span></dd>
           </div>
           <div v-if="form.description" class="sm:col-span-2">
             <dt class="eyebrow">Description</dt>
@@ -319,5 +515,7 @@ async function send(submit: boolean) {
         </button>
       </div>
     </section>
+
+    <PhotoCapture :open="cameraOpen" :max-bytes="MAX_MB * 1024 * 1024" :separate="mode === 'bulk'" @close="cameraOpen = false" @done="onScanned" />
   </div>
 </template>

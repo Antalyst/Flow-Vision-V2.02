@@ -14,12 +14,7 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
 
 <template>
   <Teleport to="#teleports">
-    <Transition
-      enter-active-class="transition duration-200 ease-out"
-      enter-from-class="opacity-0"
-      leave-active-class="transition duration-150 ease-in"
-      leave-to-class="opacity-0"
-    >
+    <Transition :css="false" @enter="modalMotion.onEnter" @leave="modalMotion.onLeave">
       <div
         v-if="open"
         class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
@@ -27,8 +22,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         aria-modal="true"
         :aria-label="title"
       >
-        <div class="absolute inset-0 bg-night/40 backdrop-blur-[2px]" @click="emit('close')" />
-        <div class="glass-strong relative flex max-h-[92vh] w-full flex-col rounded-t-3xl sm:rounded-3xl" :class="widths[width]">
+        <div data-backdrop class="absolute inset-0 bg-night/40 backdrop-blur-[2px]" @click="emit('close')" />
+        <div data-panel class="glass-strong relative flex max-h-[92vh] w-full flex-col rounded-t-3xl sm:rounded-3xl" :class="widths[width]">
           <div class="flex items-start justify-between gap-4 border-b border-line/60 px-6 pt-6 pb-4">
             <div>
               <h2 class="text-lg">{{ title }}</h2>

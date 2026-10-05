@@ -7,6 +7,7 @@ onMounted(() => {
 
 <template>
   <NuxtRouteAnnouncer />
+  <NuxtLoadingIndicator color="linear-gradient(90deg, #E5322D, #FF7A45)" :height="2" :throttle="120" />
   <NuxtLayout>
     <NuxtPage />
   </NuxtLayout>

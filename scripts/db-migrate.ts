@@ -102,12 +102,13 @@ try {
   // Organization Settings: document types and AI knowledge files. The DDL comes straight from the
   // schema file, so the two can't drift apart.
   const schemaSql = await fs.readFile(path.resolve(import.meta.dirname, '../database/flowvision-complete-schema.sql'), 'utf8')
-  for (const table of ['document_types', 'knowledge_files']) {
+  for (const table of ['document_types', 'knowledge_files', 'document_files']) {
     if (await hasTable(table)) {
       console.log(`[migrate] ${table} already present`)
       continue
     }
-    const ddl = schemaSql.match(new RegExp(`CREATE TABLE \`${table}\` \\([\\s\\S]*?\\) ENGINE=[^;]*;`))?.[0]
+    // The statement ends at the end of its ENGINE=… line (a comment there may itself contain ";").
+    const ddl = schemaSql.match(new RegExp(`CREATE TABLE \`${table}\` \\([\\s\\S]*?\\) ENGINE=[^\\n]*;`))?.[0]
     if (!ddl) throw new Error(`CREATE TABLE ${table} not found in the schema file`)
     await connection.query(ddl)
     console.log(`[migrate] ${table} created`)

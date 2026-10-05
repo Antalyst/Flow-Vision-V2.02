@@ -95,7 +95,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil((data.value?.meta.total 
       </div>
     </div>
 
-    <p v-if="status === 'pending' && !data" class="py-16 text-center text-sm text-ink-2">Loading…</p>
+    <PageSkeleton v-if="status === 'pending' && !data" variant="list" :rows="6" :messages="['Loading documents…', 'Fetching routes and status…']" />
     <div v-else-if="!data?.data.length" class="card">
       <EmptyState icon="file-text" :title="q ? 'No matches' : 'Nothing here yet'" :description="q ? 'Try a different search.' : 'Documents you submit will show up here.'" />
     </div>

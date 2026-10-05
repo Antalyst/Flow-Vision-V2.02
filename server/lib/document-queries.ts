@@ -28,6 +28,7 @@ export const documentAttributes: any = {
     [sequelize.literal(currentVisit('arrived_at')), 'visit_arrived_at'],
     [sequelize.literal(currentVisit('updated_at')), 'visit_updated_at'],
     [sequelize.literal('(SELECT q.qr_code_data FROM qr_codes q WHERE q.document_id = documents.id)'), 'qr_code'],
+    [sequelize.literal('(SELECT COUNT(*) FROM document_files f WHERE f.document_id = documents.id)'), 'file_count'],
     // Origin = where the uploader belongs: their assigned office, or (CLIENT, no office) the organization.
     [sequelize.literal('(SELECT o.id FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office_id'],
     [sequelize.literal('(SELECT o.name FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office_name'],

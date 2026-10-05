@@ -4,7 +4,9 @@ import { Op } from 'sequelize'
 import { openableWhere } from '~~/server/lib/document-queries.ts'
 import { Document } from '~~/server/lib/models.ts'
 import { badRequest, notFound } from '~~/server/lib/errors.ts'
+import * as v from '~~/server/lib/validate.ts'
 import { uploadPath } from '~~/server/lib/uploads.ts'
+import { documentFileUrl } from '~~/server/lib/document-files.ts'
 
 /**
  * A Word attachment as HTML, so the browser can print it together with the QR label.
@@ -14,7 +16,8 @@ import { uploadPath } from '~~/server/lib/uploads.ts'
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event)
   const doc = await Document.findOne({ where: { id: routeParam(event, 'id'), org_id: user.org_id, [Op.and]: [openableWhere(user)] } })
-  const filePath = uploadPath(doc?.file_url)
+  // ?file=<id> picks one of a bulk upload's files; default: the first.
+  const filePath = doc ? uploadPath(await documentFileUrl(doc, v.q(getQuery(event), 'file', 36))) : null
   if (!doc || !filePath || !fs.existsSync(filePath)) throw notFound('Attachment')
   if (path.extname(filePath).toLowerCase() !== '.docx') throw badRequest('Only Word (.docx) attachments are converted for printing')
 

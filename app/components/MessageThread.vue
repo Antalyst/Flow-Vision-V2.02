@@ -96,7 +96,12 @@ const showHeader = (i: number) => i === 0 || messages.value[i - 1]!.sender_id !=
 <template>
   <div class="flex flex-col">
     <div ref="scroller" class="flex-1 space-y-1 overflow-y-auto pr-1" :class="height">
-      <p v-if="loading" class="py-10 text-center text-sm text-ink-2">Loading…</p>
+      <div v-if="loading" class="space-y-4 py-4" role="status" aria-label="Loading messages">
+        <div v-for="i in 4" :key="i" class="flex items-end gap-2.5" :class="i % 2 === 0 && 'flex-row-reverse'">
+          <div class="skeleton size-8 shrink-0 rounded-full" />
+          <div class="skeleton h-10 rounded-2xl" :style="{ width: `${40 + (i % 3) * 15}%` }" />
+        </div>
+      </div>
       <EmptyState v-else-if="!messages.length" icon="message-circle" title="No messages yet" description="Start the conversation." />
       <div v-for="(m, i) in messages" :key="m.id" class="flex gap-2.5" :class="[isMine(m) ? 'flex-row-reverse' : '', showHeader(i) ? 'pt-3' : '']">
         <UserAvatar v-if="showHeader(i) && !isMine(m)" :user="m.sender" size="sm" />

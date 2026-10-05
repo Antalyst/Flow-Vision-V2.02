@@ -18,9 +18,11 @@ const auth = useAuthStore()
 
 const { data, refresh, status } = await useAsyncData('client-dashboard', () => api.get<ClientDashboard>('/dashboard'))
 const { data: routeData, refresh: refreshRoutes } = await useAsyncData('client-dashboard-routes', () => routesApi.list())
+const forecast = ref<{ refresh: () => unknown }>()
 useLiveRefresh(() => {
   refresh()
   refreshRoutes()
+  forecast.value?.refresh()
 })
 
 const greeting = computed(() => {
@@ -49,7 +51,7 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
       </template>
     </PageHeader>
 
-    <div v-if="status === 'pending' && !data" class="py-20 text-center text-sm text-ink-2">Loading dashboard…</div>
+    <PageSkeleton v-if="status === 'pending' && !data" variant="dashboard" :messages="['Counting documents…', 'Checking every office…', 'Almost there…']" />
 
     <template v-else-if="data">
       <!-- No route yet: the one thing to do first -->
@@ -72,6 +74,8 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
         <StatCard label="Completed" :value="data.totals.completed" icon="check-circle" tone="success" :hint="data.avg_completion_hours != null ? `Avg ${formatDuration(data.avg_completion_hours * 60)} end-to-end` : undefined" />
         <StatCard label="Past target date" :value="data.totals.overdue" icon="alert-triangle" :tone="data.totals.overdue ? 'danger' : 'neutral'" />
       </section>
+
+      <ForecastCarousel ref="forecast" class="mt-6" />
 
       <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <section class="card card-pad">

@@ -70,7 +70,7 @@ useLiveRefresh(() => {
         <div v-if="!selectedId" class="card">
           <EmptyState icon="eye" title="Select a document" description="Pick a document on the left to see its route and full timeline." />
         </div>
-        <p v-else-if="loadingDetail && !detail" class="py-16 text-center text-sm text-ink-2">Loading…</p>
+        <PageSkeleton v-else-if="loadingDetail && !detail" variant="detail" :messages="['Opening document…', 'Loading the timeline…']" />
         <div v-else-if="detail" class="space-y-6">
           <div class="card card-pad">
             <div class="flex flex-wrap items-center gap-2">

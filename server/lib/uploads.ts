@@ -21,6 +21,7 @@ export interface StoredFile {
   fileUrl: string // "<uuid>/<original name>", stored in documents.file_url
   fileType: string // documents.file_type (≤ 50 chars)
   size: number
+  name: string // the original (safe) file name
 }
 
 interface MultipartPart {
@@ -30,19 +31,34 @@ interface MultipartPart {
   data: Buffer
 }
 
-/** Split multipart parts into text fields and (at most) one saved file. */
+/** One document can carry this many files (a bulk upload) under its single QR code. */
+export const MAX_FILES_PER_DOCUMENT = 50
+
+/**
+ * Split multipart parts into text fields and the saved files (every part named `file`, in order).
+ * `file` is the first one, for callers that take a single attachment. If any file is rejected,
+ * the ones already saved are removed again.
+ */
 export async function parseDocumentForm(parts: MultipartPart[] | undefined) {
   const fields: Record<string, string> = {}
-  let filePart: MultipartPart | null = null
+  const fileParts: MultipartPart[] = []
   for (const part of parts ?? []) {
     if (!part.name) continue
     if (part.filename !== undefined) {
-      if (part.name === 'file' && part.data.length) filePart = part
+      if (part.name === 'file' && part.data.length) fileParts.push(part)
     } else {
       fields[part.name] = part.data.toString('utf8')
     }
   }
-  return { fields, file: filePart ? await saveUpload(filePart) : null }
+  if (fileParts.length > MAX_FILES_PER_DOCUMENT) throw badRequest(`A document can have at most ${MAX_FILES_PER_DOCUMENT} files`)
+  const files: StoredFile[] = []
+  try {
+    for (const part of fileParts) files.push(await saveUpload(part))
+  } catch (err) {
+    files.forEach((f) => removeUpload(f.fileUrl))
+    throw err
+  }
+  return { fields, files, file: files[0] ?? null }
 }
 
 /** Keep the original name readable but safe as a single path segment. */
@@ -67,7 +83,7 @@ async function saveUpload(part: MultipartPart): Promise<StoredFile> {
   await fs.writeFile(path.join(env.uploadDir, folder, name), part.data)
   // file_type is VARCHAR(50); long Office MIME types are stored as the extension.
   const fileType = mime.length <= 50 ? mime : path.extname(name).slice(1).toLowerCase()
-  return { fileUrl: `${folder}/${name}`, fileType, size: part.data.length }
+  return { fileUrl: `${folder}/${name}`, fileType, size: part.data.length, name }
 }
 
 const FILE_URL_RE = /^[0-9a-f-]{36}\/[^/\\]+$/

@@ -183,7 +183,7 @@ export function knowledgeDto(k: Row) {
 const STOP = new Set(
   'the and for with that this from are was were will shall have has had not but you your our their they them its into upon such any all may can per sec section para of to in on at by an a or as is be it ng sa ang mga na at para ay si ni kay ito iyon'.split(' '),
 )
-const wordsOf = (s: string) => (s.toLowerCase().match(/[a-z0-9ñ]{3,}/g) ?? []).filter((w) => !STOP.has(w))
+export const wordsOf = (s: string) => (s.toLowerCase().match(/[a-z0-9ñ]{3,}/g) ?? []).filter((w) => !STOP.has(w))
 
 /**
  * The knowledge passages that best match a document: every active file is cut into chunks, each

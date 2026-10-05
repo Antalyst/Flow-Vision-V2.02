@@ -81,6 +81,10 @@ export interface FlowDocument {
   file_name: string | null
   file_mime: string | null
   file_size: number | null
+  /** Files under this document (a bulk upload has several, all under one QR). */
+  file_count?: number
+  /** Pages/sheets of the paper document (entered for photos; otherwise the number of files). */
+  pages?: number | null
   target_date: string | null
   /** When the document should be done: submission time + its route's total processing time. */
   target_at: string | null
@@ -145,6 +149,36 @@ export interface TrackingEvent {
   actor?: UserSummary | null
   office?: Pick<Office, 'id' | 'code' | 'name'> | null
   document?: Pick<FlowDocument, 'id' | 'tracking_number' | 'title' | 'priority' | 'status'>
+}
+
+type OfficeLite = Pick<Office, 'id' | 'code' | 'name'>
+
+/** One office visit: everything that happened inside the office up to the hand-over to the next. */
+export interface RoutingVisit {
+  id: string
+  step_number: number
+  office: OfficeLite | null
+  state: 'AT_OFFICE' | 'IN_TRANSIT' | 'TRANSFERRED' | 'APPROVED' | 'RETURNED' | 'CLOSED'
+  arrived_at: string
+  arrival: {
+    kind: 'ARRIVED' | 'SUBMITTED' | 'RESUBMITTED'
+    from_office: OfficeLite | null
+    messenger: UserSummary | null
+    by_hand: boolean
+    delivery_minutes: number | null
+  } | null
+  received_at: string | null
+  received_by: UserSummary | null
+  released_at: string | null
+  released_by: UserSummary | null
+  messenger: UserSummary | null
+  picked_up_at: string | null
+  decided_at: string | null
+  decided_by: UserSummary | null
+  left_at: string | null
+  to_office: OfficeLite | null
+  durations: { waiting_receipt: number | null; processing: number | null; waiting_pickup: number | null; total: number | null }
+  events: Array<{ id: string; type: string; at: string; actor: UserSummary | null; remarks: string | null; messenger: UserSummary | null }>
 }
 
 export interface Approval {
@@ -255,4 +289,14 @@ export interface KnowledgeFileItem {
   is_active: boolean
   created_at: string
   uploader?: UserSummary | null
+}
+
+/** One file of a document (bulk uploads have several under one QR code). */
+export interface DocumentFileInfo {
+  id: string
+  name: string
+  type: string | null
+  size: number
+  /** Opens the file (the session cookie authorizes it). */
+  url: string
 }
