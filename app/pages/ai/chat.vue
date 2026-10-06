@@ -79,7 +79,13 @@ function newConversation() {
 }
 
 function removeConversation(c: Conversation) {
-  if (window.confirm(`Delete "${c.title}"? This can't be undone.`)) assistant.remove(c.id)
+  useUiStore().confirm({
+    title: 'Delete this conversation?',
+    body: `“${c.title}” will be removed. This can't be undone.`,
+    confirmLabel: 'Delete',
+    busyLabel: 'Deleting…',
+    action: () => assistant.remove(c.id),
+  })
 }
 
 // ---------------------------------------------------------------------------

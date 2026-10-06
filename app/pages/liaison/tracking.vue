@@ -104,7 +104,7 @@ const rangeLabel = computed(() => ({ today: 'Today', '7d': 'Last 7 days', '30d':
       <textarea id="fail" v-model="failRemarks" rows="3" class="input" placeholder="e.g. Receiving office closed" maxlength="2000" />
       <template #footer>
         <button class="btn btn-ghost" @click="failDoc = null">Cancel</button>
-        <button class="btn btn-danger" :disabled="!failRemarks.trim() || busy === 'fail'" @click="reportFailure">Report failure</button>
+        <button class="btn btn-danger" :disabled="!failRemarks.trim() || busy === 'fail'" :aria-busy="busy === 'fail'" @click="reportFailure">Report failure</button>
       </template>
     </AppModal>
   </div>

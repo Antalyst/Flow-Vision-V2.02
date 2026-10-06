@@ -67,7 +67,7 @@ async function changePassword() {
           <input id="p-phone" v-model="profile.phone" class="input" type="tel" placeholder="09XX XXX XXXX" />
         </div>
         <div class="sm:col-span-2 flex justify-end">
-          <button class="btn btn-primary" :disabled="busy === 'profile'">Save details</button>
+          <button class="btn btn-primary" :disabled="busy === 'profile'" :aria-busy="busy === 'profile'">Save details</button>
         </div>
       </form>
     </section>
@@ -92,7 +92,7 @@ async function changePassword() {
         </div>
         <p v-if="pwError" class="text-sm text-danger-ink" role="alert">{{ pwError }}</p>
         <div class="flex justify-end">
-          <button class="btn btn-primary" :disabled="busy === 'password'">Change password</button>
+          <button class="btn btn-primary" :disabled="busy === 'password'" :aria-busy="busy === 'password'">Change password</button>
         </div>
       </form>
     </section>

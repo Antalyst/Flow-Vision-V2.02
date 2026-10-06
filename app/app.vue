@@ -12,4 +12,5 @@ onMounted(() => {
     <NuxtPage />
   </NuxtLayout>
   <ToastHost />
+  <ConfirmHost />
 </template>

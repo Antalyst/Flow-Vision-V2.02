@@ -27,9 +27,17 @@ async function copy() {
 }
 
 async function reissue() {
-  if (!confirm('Replace this QR label? The current label will stop working, so print and attach the new one.')) return
-  const res = await run('regen', () => regenerate(props.doc.id), 'New QR issued — the old label no longer works')
-  if (res) emit('regenerated', res.qr)
+  await ui.confirm({
+    title: 'Replace this QR label?',
+    body: 'The current label will stop working, so print and attach the new one.',
+    confirmLabel: 'Replace label',
+    busyLabel: 'Issuing…',
+    icon: 'refresh-cw',
+    action: async () => {
+      const res = await run('regen', () => regenerate(props.doc.id), 'New QR issued — the old label no longer works')
+      if (res) emit('regenerated', res.qr)
+    },
+  })
 }
 </script>
 
@@ -47,7 +55,7 @@ async function reissue() {
     <div class="mt-4 flex w-full flex-col gap-2">
       <button v-if="files.length || doc.file_name" class="btn btn-primary w-full justify-center" @click="printWithDocument(qr, doc, files)"><FIcon name="printer" :size="16" /> {{ files.length > 1 ? `Print all ${files.length} files + QR` : 'Print document + QR' }}</button>
       <button class="btn w-full justify-center" :class="files.length || doc.file_name ? 'btn-ghost' : 'btn-primary'" @click="printLabel(qr, doc)"><FIcon name="tag" :size="16" /> Print label only</button>
-      <button v-if="canRegenerate" class="btn btn-ghost w-full justify-center" :disabled="busy === 'regen'" @click="reissue">
+      <button v-if="canRegenerate" class="btn btn-ghost w-full justify-center" :disabled="busy === 'regen'" :aria-busy="busy === 'regen'" @click="reissue">
         <FIcon name="refresh-cw" :size="16" /> Replace label
       </button>
     </div>

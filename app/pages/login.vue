@@ -89,7 +89,7 @@ function useDemo(addr: string) {
       <p v-if="error" class="flex items-center gap-2 rounded-xl bg-danger/10 px-3.5 py-2.5 text-sm text-danger-ink" role="alert">
         <FIcon name="alert-circle" :size="16" /> {{ error }}
       </p>
-      <button class="btn btn-primary w-full min-h-12 text-[15px]" :disabled="submitting">
+      <button class="btn btn-primary w-full min-h-12 text-[15px]" :disabled="submitting" :aria-busy="submitting">
         {{ submitting ? 'Signing in…' : 'Sign in' }}
       </button>
     </form>

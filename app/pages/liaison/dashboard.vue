@@ -74,7 +74,7 @@ async function startTransit(id: string) {
         <DocumentCard v-for="d in carrying.data" :key="d.id" :doc="d">
           <template #actions>
             <ToneBadge tone="info" icon="map-pin">Bring to {{ d.next_office_name }} — staff there scan to receive</ToneBadge>
-            <button v-if="d.status === 'PICKED_UP'" class="btn btn-sm btn-secondary" :disabled="busy === `transit-${d.id}`" @click="startTransit(d.id)">
+            <button v-if="d.status === 'PICKED_UP'" class="btn btn-sm btn-secondary" :disabled="busy === `transit-${d.id}`" :aria-busy="busy === `transit-${d.id}`" @click="startTransit(d.id)">
               <FIcon name="navigation" :size="14" /> Start transit
             </button>
           </template>

@@ -92,9 +92,16 @@ async function moveType(t: DocumentTypeItem, dir: -1 | 1) {
 }
 async function removeType(t: DocumentTypeItem) {
   const note = t.usage ? ` The ${t.usage} document${t.usage === 1 ? '' : 's'} filed under it keep the name.` : ''
-  if (!confirm(`Delete the document type “${t.name}”?${note}`)) return
-  const ok = await run(`del-${t.id}`, () => api.del(`/org/document-types/${t.id}`), `“${t.name}” deleted`)
-  if (ok) refresh()
+  await ui.confirm({
+    title: `Delete “${t.name}”?`,
+    body: `It will no longer be offered when uploading.${note}`,
+    confirmLabel: 'Delete type',
+    busyLabel: 'Deleting…',
+    action: async () => {
+      const ok = await run(`del-${t.id}`, () => api.del(`/org/document-types/${t.id}`), `“${t.name}” deleted`)
+      if (ok) await refresh()
+    },
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -164,9 +171,16 @@ async function toggleFile(f: KnowledgeFileItem) {
   if (ok) refresh()
 }
 async function removeFile(f: KnowledgeFileItem) {
-  if (!confirm(`Delete “${f.title}”? The AI stops using it and the file is removed.`)) return
-  const ok = await run(`kfdel-${f.id}`, () => api.del(`/org/knowledge/${f.id}`), 'Knowledge file deleted')
-  if (ok) refresh()
+  await ui.confirm({
+    title: `Delete “${f.title}”?`,
+    body: 'The AI stops using it and the file is removed.',
+    confirmLabel: 'Delete file',
+    busyLabel: 'Deleting…',
+    action: async () => {
+      const ok = await run(`kfdel-${f.id}`, () => api.del(`/org/knowledge/${f.id}`), 'Knowledge file deleted')
+      if (ok) await refresh()
+    },
+  })
 }
 
 const usableChars = computed(() => files.value.filter((f) => f.is_active && f.status === 'READY').reduce((n, f) => n + f.char_count, 0))
@@ -207,7 +221,7 @@ const STATUS = {
           <input id="org-web" v-model="profile.website" class="input" type="url" maxlength="500" placeholder="https://" />
         </div>
         <div class="flex justify-end">
-          <button class="btn btn-primary" :disabled="busy === 'profile' || !profile.name.trim()">{{ busy === 'profile' ? 'Saving…' : 'Save' }}</button>
+          <button class="btn btn-primary" :disabled="busy === 'profile' || !profile.name.trim()" :aria-busy="busy === 'profile'">{{ busy === 'profile' ? 'Saving…' : 'Save' }}</button>
         </div>
       </form>
     </section>
@@ -238,7 +252,7 @@ const STATUS = {
               </p>
               <p v-if="t.usage && editForm.name.trim() !== t.name" class="text-xs text-amber-ink">Renaming also renames it on the {{ t.usage }} document{{ t.usage === 1 ? '' : 's' }} filed under it.</p>
               <div class="flex gap-2">
-                <button class="btn btn-sm btn-primary" :disabled="busy === `edit-${t.id}` || !editForm.name.trim()">Save</button>
+                <button class="btn btn-sm btn-primary" :disabled="busy === `edit-${t.id}` || !editForm.name.trim()" :aria-busy="busy === `edit-${t.id}`">Save</button>
                 <button type="button" class="btn btn-sm btn-ghost" @click="editing = null">Cancel</button>
               </div>
             </form>
@@ -258,11 +272,11 @@ const STATUS = {
                 </p>
               </div>
               <div class="flex shrink-0 items-start gap-1">
-                <button class="btn btn-sm btn-ghost" :title="t.is_active ? 'Hide from uploads' : 'Offer again'" :disabled="busy === `toggle-${t.id}`" @click="toggleType(t)">
+                <button class="btn btn-sm btn-ghost" :title="t.is_active ? 'Hide from uploads' : 'Offer again'" :disabled="busy === `toggle-${t.id}`" :aria-busy="busy === `toggle-${t.id}`" @click="toggleType(t)">
                   <FIcon :name="t.is_active ? 'eye-off' : 'eye'" :size="14" />
                 </button>
                 <button class="btn btn-sm btn-ghost" title="Edit" @click="startEdit(t)"><FIcon name="edit-2" :size="14" /></button>
-                <button class="btn btn-sm btn-ghost text-danger-ink" title="Delete" :disabled="busy === `del-${t.id}`" @click="removeType(t)"><FIcon name="trash-2" :size="14" /></button>
+                <button class="btn btn-sm btn-ghost text-danger-ink" title="Delete" :disabled="busy === `del-${t.id}`" :aria-busy="busy === `del-${t.id}`" @click="removeType(t)"><FIcon name="trash-2" :size="14" /></button>
               </div>
             </template>
           </li>
@@ -281,7 +295,7 @@ const STATUS = {
             <textarea id="type-desc" v-model="newType.description" class="input" rows="3" maxlength="500" placeholder="What documents belong here — helps the AI choose" />
           </div>
           <ProcessingTimeInput id="new-type-time" v-model:days="newType.processing_days" v-model:hours="newType.processing_hours" />
-          <button class="btn btn-primary w-full justify-center" :disabled="busy === 'add-type' || !newType.name.trim()"><FIcon name="plus" :size="16" /> Add type</button>
+          <button class="btn btn-primary w-full justify-center" :disabled="busy === 'add-type' || !newType.name.trim()" :aria-busy="busy === 'add-type'"><FIcon name="plus" :size="16" /> Add type</button>
         </form>
       </aside>
     </div>
@@ -357,11 +371,11 @@ const STATUS = {
               <p v-if="f.error" class="mt-1 text-xs text-danger-ink">{{ f.error }}</p>
             </div>
             <div class="flex shrink-0 gap-1">
-              <button v-if="f.status === 'READY'" class="btn btn-sm btn-ghost" :disabled="busy === `kf-${f.id}`" @click="toggleFile(f)">
+              <button v-if="f.status === 'READY'" class="btn btn-sm btn-ghost" :disabled="busy === `kf-${f.id}`" :aria-busy="busy === `kf-${f.id}`" @click="toggleFile(f)">
                 <FIcon :name="f.is_active ? 'pause' : 'play'" :size="14" /> {{ f.is_active ? 'Stop using' : 'Use' }}
               </button>
               <a :href="`/api/org/knowledge/${f.id}/file`" class="btn btn-sm btn-ghost" title="Download"><FIcon name="download" :size="14" /></a>
-              <button class="btn btn-sm btn-ghost text-danger-ink" title="Delete" :disabled="busy === `kfdel-${f.id}`" @click="removeFile(f)"><FIcon name="trash-2" :size="14" /></button>
+              <button class="btn btn-sm btn-ghost text-danger-ink" title="Delete" :disabled="busy === `kfdel-${f.id}`" :aria-busy="busy === `kfdel-${f.id}`" @click="removeFile(f)"><FIcon name="trash-2" :size="14" /></button>
             </div>
           </li>
         </ul>

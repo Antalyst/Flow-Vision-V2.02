@@ -282,7 +282,7 @@ const trendTone = (pct: number) => (pct > 10 ? 'text-danger-ink' : pct < -10 ? '
     <p v-if="error" class="mt-6 rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger-ink">{{ apiErrorMessage(error, 'Could not load forecasts') }}</p>
 
     <div v-else class="relative mt-4 overflow-hidden" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
-      <div v-if="status === 'pending'" class="absolute inset-0 z-10 grid place-items-center bg-white/40 text-sm text-ink-2 backdrop-blur-[1px]">Crunching forecast…</div>
+      <div v-if="status === 'pending'" class="absolute inset-0 z-10 grid place-items-center bg-white/40 text-sm text-ink-2 backdrop-blur-[1px]"><span class="flex items-center gap-2"><span class="spinner" /> Crunching forecast…</span></div>
 
       <div class="flex transition-transform duration-500 ease-out" :style="{ transform: `translateX(-${slide * 100}%)` }">
         <!-- 1. Documents coming in -->

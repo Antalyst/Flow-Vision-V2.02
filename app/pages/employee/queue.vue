@@ -85,7 +85,7 @@ async function cancelPickup(d: FlowDocument) {
           </template>
           <template v-else-if="tab === 'pickup'">
             <ToneBadge tone="warning" icon="user">Waiting for {{ fullName(d.liaison) }}</ToneBadge>
-            <button v-if="releasesDocument(d, auth.user?.id)" class="btn btn-sm btn-ghost" :disabled="busy === `cancel-${d.id}`" @click="cancelPickup(d)">Cancel release</button>
+            <button v-if="releasesDocument(d, auth.user?.id)" class="btn btn-sm btn-ghost" :disabled="busy === `cancel-${d.id}`" :aria-busy="busy === `cancel-${d.id}`" @click="cancelPickup(d)">Cancel release</button>
           </template>
           <template v-else-if="tab === 'incoming'">
             <ToneBadge tone="info" icon="truck">{{ fullName(d.liaison) }} · from {{ d.currentOffice?.name ?? d.origin?.name }}</ToneBadge>

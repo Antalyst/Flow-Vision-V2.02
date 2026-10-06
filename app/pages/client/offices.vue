@@ -82,7 +82,7 @@ async function toggleActive(o: Office) {
             <span class="text-xs text-ink-2">{{ o.member_count ?? 0 }} member{{ Number(o.member_count) === 1 ? '' : 's' }}</span>
             <span class="flex gap-1">
               <button class="btn btn-sm btn-ghost border-0" @click="openForm(o)"><FIcon name="edit-2" :size="14" /> Edit</button>
-              <button class="btn btn-sm btn-ghost border-0" :disabled="busy === `toggle-${o.id}`" @click="toggleActive(o)">
+              <button class="btn btn-sm btn-ghost border-0" :disabled="busy === `toggle-${o.id}`" :aria-busy="busy === `toggle-${o.id}`" @click="toggleActive(o)">
                 {{ o.is_active ? 'Deactivate' : 'Reactivate' }}
               </button>
             </span>
@@ -123,7 +123,7 @@ async function toggleActive(o: Office) {
       </form>
       <template #footer>
         <button class="btn btn-ghost" @click="modalOpen = false">Cancel</button>
-        <button class="btn btn-primary" form="office-form" :disabled="busy === 'save'">Save office</button>
+        <button class="btn btn-primary" form="office-form" :disabled="busy === 'save'" :aria-busy="busy === 'save'">Save office</button>
       </template>
     </AppModal>
   </div>

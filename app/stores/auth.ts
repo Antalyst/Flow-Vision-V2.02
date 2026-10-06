@@ -52,11 +52,20 @@ export const useAuthStore = defineStore('auth', () => {
     ready.value = true
   }
 
+  const signingOut = ref(false)
+
   async function signOut({ redirect = true } = {}) {
-    await useApi().post('/auth/logout').catch(() => {})
-    clear()
-    if (redirect) await navigateTo('/login')
+    if (signingOut.value) return
+    signingOut.value = true
+    try {
+      // A short floor so the "Signing out…" state reads as feedback rather than a flicker.
+      await Promise.all([useApi().post('/auth/logout').catch(() => {}), new Promise((r) => setTimeout(r, 450))])
+      clear()
+      if (redirect) await navigateTo('/login')
+    } finally {
+      signingOut.value = false
+    }
   }
 
-  return { user, ready, isAuthenticated, role, homePath, clear, login, register, fetchMe, init, signOut }
+  return { user, ready, signingOut, isAuthenticated, role, homePath, clear, login, register, fetchMe, init, signOut }
 })

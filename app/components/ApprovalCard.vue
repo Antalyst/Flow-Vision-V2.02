@@ -65,11 +65,11 @@ async function decide(decision: 'APPROVED' | 'RETURNED') {
     <p v-if="remarksError" class="mt-1.5 text-xs text-danger-ink">{{ remarksError }}</p>
 
     <div class="mt-4 flex flex-wrap justify-end gap-2">
-      <button class="btn btn-danger" :disabled="Boolean(busy)" @click="decide('RETURNED')">
-        <FIcon name="corner-up-left" :size="16" /> Return
+      <button class="btn btn-danger" :disabled="Boolean(busy)" :aria-busy="busy === 'RETURNED'" @click="decide('RETURNED')">
+        <FIcon name="corner-up-left" :size="16" /> {{ busy === 'RETURNED' ? 'Returning…' : 'Return' }}
       </button>
-      <button class="btn btn-success" :disabled="Boolean(busy)" @click="decide('APPROVED')">
-        <FIcon name="check" :size="16" /> Approve & complete
+      <button class="btn btn-success" :disabled="Boolean(busy)" :aria-busy="busy === 'APPROVED'" @click="decide('APPROVED')">
+        <FIcon name="check" :size="16" /> {{ busy === 'APPROVED' ? 'Approving…' : 'Approve & complete' }}
       </button>
     </div>
   </article>

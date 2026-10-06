@@ -129,7 +129,7 @@ const showHeader = (i: number) => i === 0 || messages.value[i - 1]!.sender_id !=
         :placeholder="placeholder"
         @keydown.enter="onEnter"
       />
-      <button class="btn btn-primary size-12 shrink-0 px-0" :disabled="!draft.trim() || sending" aria-label="Send">
+      <button class="btn btn-primary size-12 shrink-0 px-0" :disabled="!draft.trim() || sending" :aria-busy="sending" aria-label="Send">
         <FIcon name="send" :size="18" />
       </button>
     </form>

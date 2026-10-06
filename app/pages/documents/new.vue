@@ -504,13 +504,13 @@ async function send(submit: boolean) {
       <div class="mt-8 flex flex-col-reverse gap-2 border-t border-line/60 pt-5 sm:flex-row sm:items-center">
         <button v-if="step > 0" class="btn btn-ghost" @click="step--"><FIcon name="arrow-left" :size="16" /> Back</button>
         <div class="flex-1" />
-        <button class="btn btn-ghost" :disabled="!canSave || Boolean(submitting)" @click="send(false)">
+        <button class="btn btn-ghost" :disabled="!canSave || Boolean(submitting)" :aria-busy="submitting === 'draft'" @click="send(false)">
           {{ submitting === 'draft' ? 'Saving…' : 'Save draft' }}
         </button>
         <button v-if="step < STEPS.length - 1" class="btn btn-primary" :disabled="!canNext" @click="step++">
           Continue <FIcon name="arrow-right" :size="16" />
         </button>
-        <button v-else class="btn btn-primary" :disabled="!canSave || Boolean(submitting)" @click="send(true)">
+        <button v-else class="btn btn-primary" :disabled="!canSave || Boolean(submitting)" :aria-busy="submitting === 'submit'" @click="send(true)">
           <FIcon name="send" :size="16" /> {{ submitting === 'submit' ? 'Submitting…' : 'Submit to route' }}
         </button>
       </div>

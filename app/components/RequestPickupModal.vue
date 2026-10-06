@@ -148,7 +148,7 @@ const availabilityLabel = { AVAILABLE: 'free', BUSY: 'busy', OFF_DUTY: 'off duty
 
     <template #footer>
       <button class="btn btn-ghost" @click="emit('close')">Cancel</button>
-      <button class="btn btn-primary" :disabled="!selected || busy === 'request'" @click="confirm">
+      <button class="btn btn-primary" :disabled="!selected || busy === 'request'" :aria-busy="busy === 'request'" @click="confirm">
         <FIcon name="truck" :size="16" /> {{ busy === 'request' ? 'Saving…' : reassigning ? 'Reassign & notify' : 'Assign & notify' }}
       </button>
     </template>

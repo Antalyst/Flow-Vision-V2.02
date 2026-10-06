@@ -219,19 +219,19 @@ onBeforeUnmount(() => {
           <div class="flex max-w-sm flex-col items-center gap-4">
             <FIcon name="camera-off" :size="28" />
             <p>{{ cameraError }}</p>
-            <button class="btn btn-sm btn-secondary" :disabled="startingCamera" @click="startCamera">
+            <button class="btn btn-sm btn-secondary" :disabled="startingCamera" :aria-busy="startingCamera" @click="startCamera">
               <FIcon name="refresh-cw" :size="14" /> {{ startingCamera ? 'Starting…' : 'Try again' }}
             </button>
           </div>
         </div>
-        <div v-else-if="startingCamera" class="absolute inset-0 grid place-items-center text-sm text-night-text-2">Starting camera…</div>
-        <div v-if="phase === 'verifying'" class="absolute inset-0 grid place-items-center bg-night/60 text-sm text-white">Checking code…</div>
+        <div v-else-if="startingCamera" class="absolute inset-0 grid place-items-center text-sm text-night-text-2"><span class="flex items-center gap-2"><span class="spinner" /> Starting camera…</span></div>
+        <div v-if="phase === 'verifying'" class="absolute inset-0 grid place-items-center bg-night/60 text-sm text-white"><span class="flex items-center gap-2"><span class="spinner" /> Checking code…</span></div>
       </div>
     </section>
 
     <div v-if="phase === 'scanning'" class="mt-4">
       <input ref="photoInput" type="file" accept="image/*" capture="environment" class="sr-only" @change="scanPhoto(($event.target as HTMLInputElement).files?.[0])" />
-      <button class="btn btn-ghost w-full" :disabled="readingPhoto" @click="photoInput?.click()">
+      <button class="btn btn-ghost w-full" :disabled="readingPhoto" :aria-busy="readingPhoto" @click="photoInput?.click()">
         <FIcon name="camera" :size="16" /> {{ readingPhoto ? 'Reading photo…' : 'Scan from photo' }}
       </button>
     </div>
@@ -280,7 +280,7 @@ onBeforeUnmount(() => {
       <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
         <button class="btn btn-ghost" @click="resume">Scan another</button>
         <NuxtLink v-if="!preview.action && !isLiaison" :to="`/documents/${preview.document.id}`" class="btn btn-secondary">Open document</NuxtLink>
-        <button v-if="preview.action" class="btn btn-primary min-h-12" :disabled="confirming" @click="confirm">
+        <button v-if="preview.action" class="btn btn-primary min-h-12" :disabled="confirming" :aria-busy="confirming" @click="confirm">
           <FIcon :name="preview.action === 'PICKUP' ? 'package' : 'inbox'" :size="16" />
           {{ confirming ? 'Confirming…' : confirmLabel }}
         </button>

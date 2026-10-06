@@ -267,9 +267,13 @@ onMounted(() => connectRealtime())
           :class="rail ? 'justify-center' : 'px-3'"
           :title="rail ? 'Sign out' : undefined"
           :aria-label="rail ? 'Sign out' : undefined"
+          :disabled="auth.signingOut"
+          :aria-busy="auth.signingOut"
           @click="auth.signOut()"
         >
-          <FIcon name="log-out" :size="16" /> <span v-if="!rail">Sign out</span>
+          <span v-if="auth.signingOut" class="spinner size-3.5" />
+          <FIcon v-else name="log-out" :size="16" />
+          <span v-if="!rail">{{ auth.signingOut ? 'Signing out…' : 'Sign out' }}</span>
         </button>
       </div>
     </aside>
@@ -290,5 +294,14 @@ onMounted(() => connectRealtime())
         </div>
       </div>
     </main>
+
+    <!-- Covers the page while signing out, so the cleared session never shows half-rendered -->
+    <Transition enter-active-class="transition-opacity duration-200" enter-from-class="opacity-0" leave-active-class="transition-opacity duration-200" leave-to-class="opacity-0">
+      <div v-if="auth.signingOut" class="fixed inset-0 z-[70] grid place-items-center bg-white/55 backdrop-blur-sm" role="status" aria-live="polite">
+        <div class="glass-strong flex items-center gap-3 rounded-2xl px-5 py-4 text-sm font-medium text-ink">
+          <span class="spinner text-terracotta" /> Signing you out…
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>

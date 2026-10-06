@@ -133,8 +133,17 @@ function clearPages() {
   pages.value = []
 }
 
-function close() {
-  if (pages.value.length && !confirm(`Discard the ${pages.value.length} page${pages.value.length === 1 ? '' : 's'} you took?`)) return
+async function close() {
+  if (pages.value.length) {
+    const n = pages.value.length
+    const discard = await useUiStore().confirm({
+      title: `Discard ${n === 1 ? 'this page' : `these ${n} pages`}?`,
+      body: `The ${n === 1 ? 'page' : `${n} pages`} you took will be lost.`,
+      confirmLabel: 'Discard',
+      icon: 'camera-off',
+    })
+    if (!discard) return
+  }
   clearPages()
   emit('close')
 }

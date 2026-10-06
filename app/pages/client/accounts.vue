@@ -85,9 +85,17 @@ async function save() {
 }
 
 async function resetPassword(m: TeamMember) {
-  if (!confirm(`Reset the password for ${m.first_name} ${m.last_name}? They will be signed out everywhere.`)) return
-  const res = await run(`reset-${m.id}`, () => api.post<{ temporary_password: string }>(`/users/${m.id}/reset-password`))
-  if (res) credentials.value = { email: m.email, password: res.temporary_password }
+  await useUiStore().confirm({
+    title: `Reset ${m.first_name}'s password?`,
+    body: `${m.first_name} ${m.last_name} will be signed out everywhere and given a temporary password.`,
+    confirmLabel: 'Reset password',
+    busyLabel: 'Resetting…',
+    icon: 'key',
+    action: async () => {
+      const res = await run(`reset-${m.id}`, () => api.post<{ temporary_password: string }>(`/users/${m.id}/reset-password`))
+      if (res) credentials.value = { email: m.email, password: res.temporary_password }
+    },
+  })
 }
 
 async function copyCredentials() {
@@ -150,7 +158,7 @@ async function copyCredentials() {
           </div>
           <div class="flex gap-1">
             <button class="btn btn-sm btn-ghost border-0" @click="openForm(m)"><FIcon name="edit-2" :size="14" /> Edit</button>
-            <button v-if="m.id !== auth.user?.id" class="btn btn-sm btn-ghost border-0" :disabled="busy === `reset-${m.id}`" @click="resetPassword(m)">
+            <button v-if="m.id !== auth.user?.id" class="btn btn-sm btn-ghost border-0" :disabled="busy === `reset-${m.id}`" :aria-busy="busy === `reset-${m.id}`" @click="resetPassword(m)">
               <FIcon name="key" :size="14" /> Reset
             </button>
           </div>
@@ -208,7 +216,7 @@ async function copyCredentials() {
       </form>
       <template #footer>
         <button class="btn btn-ghost" @click="formOpen = false">Cancel</button>
-        <button class="btn btn-primary" form="member-form" :disabled="busy === 'save'">{{ editing ? 'Save changes' : 'Send invite' }}</button>
+        <button class="btn btn-primary" form="member-form" :disabled="busy === 'save'" :aria-busy="busy === 'save'">{{ editing ? 'Save changes' : 'Send invite' }}</button>
       </template>
     </AppModal>
 

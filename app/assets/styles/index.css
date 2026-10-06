@@ -109,6 +109,33 @@
     box-shadow: 0 8px 20px -6px rgba(16, 185, 129, 0.5);
   }
 
+  /* Working: aria-busy="true" swaps the leading icon for a spinner and keeps the button
+     readable (a busy button is not an unavailable one, so it skips the disabled fade). */
+  .btn[aria-busy='true'] {
+    cursor: progress;
+  }
+  .btn[aria-busy='true']:disabled {
+    opacity: 0.85;
+  }
+  .btn[aria-busy='true']::before {
+    content: '';
+    width: 1em;
+    height: 1em;
+    flex-shrink: 0;
+    border-radius: 9999px;
+    border: 2px solid currentColor;
+    border-right-color: transparent;
+    animation: fv-spin 0.7s linear infinite;
+  }
+  .btn[aria-busy='true'] > span:has(> svg) {
+    display: none;
+  }
+  /* The spinner on its own when a button is only text */
+  .spinner {
+    @apply inline-block size-4 shrink-0 rounded-full border-2 border-current border-r-transparent;
+    animation: fv-spin 0.7s linear infinite;
+  }
+
   /* Forms */
   .field-label {
     @apply mb-1.5 block text-[13px] font-medium text-ink-body;
@@ -268,8 +295,16 @@
 @keyframes fv-shimmer {
   to { transform: translateX(100%); }
 }
+@keyframes fv-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes fv-pulse {
+  50% { opacity: 0.35; }
+}
 @media (prefers-reduced-motion: reduce) {
   .fv-thinking, .skeleton::after { animation: none; }
+  /* Still show that something is happening, without the rotation */
+  .btn[aria-busy='true']::before, .spinner { animation: fv-pulse 1.4s ease-in-out infinite; }
 }
 
 /* Ember: "photographic" surfaces built from light (crimson glows on ink, film grain). Used by the public pages. */

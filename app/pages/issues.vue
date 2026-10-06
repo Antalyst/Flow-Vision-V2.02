@@ -100,11 +100,11 @@ async function setStatus(i: Issue, next: Issue['status'], extra: Record<string, 
         <p v-if="i.description" class="mt-3 text-sm whitespace-pre-wrap text-ink-body">{{ i.description }}</p>
         <p v-if="i.resolution" class="mt-3 rounded-xl bg-sage/10 px-3 py-2 text-sm text-sage-ink"><strong>Resolution:</strong> {{ i.resolution }}</p>
         <div v-if="canManage(i) && !['RESOLVED', 'CLOSED'].includes(i.status)" class="mt-4 flex flex-wrap gap-2 border-t border-line/60 pt-4">
-          <button v-if="i.status === 'OPEN'" class="btn btn-sm btn-ghost" :disabled="!!busy" @click="setStatus(i, 'IN_PROGRESS')">Start working on it</button>
+          <button v-if="i.status === 'OPEN'" class="btn btn-sm btn-ghost" :disabled="!!busy" :aria-busy="busy === `status-${i.id}`" @click="setStatus(i, 'IN_PROGRESS')">Start working on it</button>
           <button class="btn btn-sm btn-secondary" @click="resolving = i"><FIcon name="check" :size="14" /> Resolve</button>
         </div>
         <div v-else-if="canManage(i) && i.status === 'RESOLVED'" class="mt-4 border-t border-line/60 pt-4">
-          <button class="btn btn-sm btn-ghost" :disabled="!!busy" @click="setStatus(i, 'CLOSED')">Close</button>
+          <button class="btn btn-sm btn-ghost" :disabled="!!busy" :aria-busy="busy === `status-${i.id}`" @click="setStatus(i, 'CLOSED')">Close</button>
         </div>
       </article>
     </div>
@@ -143,7 +143,7 @@ async function setStatus(i: Issue, next: Issue['status'], extra: Record<string, 
       </form>
       <template #footer>
         <button class="btn btn-ghost" @click="formOpen = false">Cancel</button>
-        <button class="btn btn-primary" form="issue-form" :disabled="busy === 'report'">Report issue</button>
+        <button class="btn btn-primary" form="issue-form" :disabled="busy === 'report'" :aria-busy="busy === 'report'">Report issue</button>
       </template>
     </AppModal>
 
@@ -152,7 +152,7 @@ async function setStatus(i: Issue, next: Issue['status'], extra: Record<string, 
       <textarea id="resolution" v-model="resolution" class="input" rows="3" maxlength="5000" />
       <template #footer>
         <button class="btn btn-ghost" @click="resolving = null">Cancel</button>
-        <button class="btn btn-primary" :disabled="!!busy" @click="setStatus(resolving!, 'RESOLVED', { resolution: resolution || undefined })">Mark resolved</button>
+        <button class="btn btn-primary" :disabled="!!busy" :aria-busy="busy === `status-${resolving?.id}`" @click="setStatus(resolving!, 'RESOLVED', { resolution: resolution || undefined })">Mark resolved</button>
       </template>
     </AppModal>
   </div>

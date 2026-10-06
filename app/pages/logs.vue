@@ -211,7 +211,7 @@ const isMe = (r: ActivityRow) => r.actor?.id === auth.user?.id
       </section>
 
       <div v-if="nextBefore" class="flex justify-center">
-        <button class="btn btn-ghost" :disabled="loadingMore" @click="loadMore">{{ loadingMore ? 'Loading…' : 'Load older activity' }}</button>
+        <button class="btn btn-ghost" :disabled="loadingMore" :aria-busy="loadingMore" @click="loadMore">{{ loadingMore ? 'Loading…' : 'Load older activity' }}</button>
       </div>
     </div>
   </div>

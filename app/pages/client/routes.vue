@@ -252,7 +252,7 @@ async function confirmRemove() {
 
         <div class="flex justify-end gap-2">
           <button class="btn btn-ghost" @click="closeBuilder">Cancel</button>
-          <button class="btn btn-primary" :disabled="problems.length > 0 || busy === 'save'" @click="save">
+          <button class="btn btn-primary" :disabled="problems.length > 0 || busy === 'save'" :aria-busy="busy === 'save'" @click="save">
             <FIcon name="check" :size="16" /> {{ editing ? 'Save changes' : 'Create route' }}
           </button>
         </div>
@@ -273,7 +273,7 @@ async function confirmRemove() {
       </ul>
       <template #footer>
         <button class="btn btn-ghost" @click="removing = null">Cancel</button>
-        <button class="btn btn-danger" :disabled="busy === 'remove'" @click="confirmRemove"><FIcon name="trash-2" :size="16" /> Remove route</button>
+        <button class="btn btn-danger" :disabled="busy === 'remove'" :aria-busy="busy === 'remove'" @click="confirmRemove"><FIcon name="trash-2" :size="16" /> Remove route</button>
       </template>
     </AppModal>
   </div>

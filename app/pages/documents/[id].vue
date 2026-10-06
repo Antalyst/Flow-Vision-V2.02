@@ -68,9 +68,16 @@ async function act(key: string, fn: () => Promise<unknown>, message: string) {
 }
 
 async function removeDraft() {
-  if (!confirm('Delete this draft? This cannot be undone.')) return
-  const ok = await run('delete', () => docsApi.remove(id.value), 'Draft deleted')
-  if (ok) router.push('/documents')
+  await useUiStore().confirm({
+    title: 'Delete this draft?',
+    body: 'The draft and its files are removed. This cannot be undone.',
+    confirmLabel: 'Delete draft',
+    busyLabel: 'Deleting…',
+    action: async () => {
+      const ok = await run('delete', () => docsApi.remove(id.value), 'Draft deleted')
+      if (ok) await router.push('/documents')
+    },
+  })
 }
 
 async function failDelivery() {
@@ -152,6 +159,7 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
           v-if="perms!.canSubmit"
           class="btn btn-primary"
           :disabled="!!busy || !submitRouteId"
+          :aria-busy="busy === 'submit'"
           @click="act('submit', () => docsApi.submit(id, submitRouteId), 'Submitted to route')"
         >
           <FIcon name="send" :size="16" /> Submit to route
@@ -160,6 +168,7 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
           v-if="perms!.canResubmit"
           class="btn btn-primary"
           :disabled="!!busy || !submitRouteId"
+          :aria-busy="busy === 'submit'"
           @click="act('submit', () => docsApi.submit(id, submitRouteId), 'Resubmitted — back at step 1')"
         >
           <FIcon name="rotate-ccw" :size="16" /> Resubmit
@@ -174,7 +183,7 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
         <template v-if="perms!.canReassign || perms!.canCancelPickup">
           <ToneBadge tone="warning" icon="user">Waiting for {{ fullName(doc.liaison) }} to pick it up</ToneBadge>
           <button v-if="perms!.canReassign" class="btn btn-secondary" @click="pickupOpen = true"><FIcon name="repeat" :size="16" /> Reassign messenger</button>
-          <button v-if="perms!.canCancelPickup" class="btn btn-ghost" :disabled="!!busy" @click="act('cancel', () => docsApi.cancelPickup(id), 'Messenger unassigned — they were told')">
+          <button v-if="perms!.canCancelPickup" class="btn btn-ghost" :disabled="!!busy" :aria-busy="busy === 'cancel'" @click="act('cancel', () => docsApi.cancelPickup(id), 'Messenger unassigned — they were told')">
             Unassign
           </button>
         </template>
@@ -182,14 +191,14 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
           <FIcon name="maximize" :size="16" /> Scan to pick up
         </NuxtLink>
         <ToneBadge v-if="perms!.canReportFailure" tone="info" icon="map-pin">Bring it to {{ doc.next_office_name ?? 'the next office' }} — their staff scan it to receive</ToneBadge>
-        <button v-if="perms!.canStartTransit" class="btn btn-secondary" :disabled="!!busy" @click="act('transit', () => docsApi.startTransit(id), 'Marked in transit')">
+        <button v-if="perms!.canStartTransit" class="btn btn-secondary" :disabled="!!busy" :aria-busy="busy === 'transit'" @click="act('transit', () => docsApi.startTransit(id), 'Marked in transit')">
           <FIcon name="navigation" :size="16" /> Start transit
         </button>
         <button v-if="perms!.canReportFailure" class="btn btn-danger" @click="failOpen = true"><FIcon name="alert-triangle" :size="16" /> Report failed delivery</button>
         <a v-if="perms!.canApprove" href="#approval" class="btn btn-success"><FIcon name="check-square" :size="16" /> Review for approval</a>
         <template v-if="perms!.canEdit">
           <div class="flex-1" />
-          <button class="btn btn-danger btn-sm" :disabled="!!busy" @click="removeDraft"><FIcon name="trash-2" :size="14" /> Delete draft</button>
+          <button class="btn btn-danger btn-sm" :disabled="!!busy" :aria-busy="busy === 'delete'" @click="removeDraft"><FIcon name="trash-2" :size="14" /> Delete draft</button>
         </template>
       </div>
 
@@ -232,7 +241,7 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
             <form class="mt-6 flex gap-2 border-t border-line/60 pt-5" @submit.prevent="addNote">
               <label class="sr-only" for="note">Add a note</label>
               <input id="note" v-model="note" class="input" placeholder="Add a note to the timeline" maxlength="2000" />
-              <button class="btn btn-ghost shrink-0" :disabled="!note.trim() || busy === 'note'">Add note</button>
+              <button class="btn btn-ghost shrink-0" :disabled="!note.trim() || busy === 'note'" :aria-busy="busy === 'note'">Add note</button>
             </form>
           </section>
 
@@ -315,7 +324,7 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
         <textarea id="fail-remarks" v-model="failRemarks" class="input" rows="3" placeholder="e.g. Receiving office closed for the day" maxlength="2000" />
         <template #footer>
           <button class="btn btn-ghost" @click="failOpen = false">Cancel</button>
-          <button class="btn btn-danger" :disabled="!failRemarks.trim() || busy === 'fail'" @click="failDelivery">Report failure</button>
+          <button class="btn btn-danger" :disabled="!failRemarks.trim() || busy === 'fail'" :aria-busy="busy === 'fail'" @click="failDelivery">Report failure</button>
         </template>
       </AppModal>
     </template>

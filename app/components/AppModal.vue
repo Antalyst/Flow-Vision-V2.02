@@ -1,15 +1,26 @@
 <script setup lang="ts">
-const props = withDefaults(defineProps<{ open: boolean; title: string; description?: string; width?: 'sm' | 'md' | 'lg' }>(), {
-  width: 'md',
-})
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    description?: string
+    width?: 'sm' | 'md' | 'lg'
+    /** Sits above any other open modal and takes Escape for itself (confirm dialogs). */
+    top?: boolean
+  }>(),
+  { width: 'md', top: false },
+)
 const emit = defineEmits<{ close: [] }>()
 const widths = { sm: 'sm:max-w-md', md: 'sm:max-w-xl', lg: 'sm:max-w-3xl' }
 
 function onKey(e: KeyboardEvent) {
-  if (e.key === 'Escape' && props.open) emit('close')
+  if (e.key !== 'Escape' || !props.open) return
+  // Capture-phase listener: stop the modal underneath from closing too.
+  if (props.top) e.stopImmediatePropagation()
+  emit('close')
 }
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
+onMounted(() => window.addEventListener('keydown', onKey, { capture: props.top }))
+onBeforeUnmount(() => window.removeEventListener('keydown', onKey, { capture: props.top }))
 </script>
 
 <template>
@@ -17,7 +28,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
     <Transition :css="false" @enter="modalMotion.onEnter" @leave="modalMotion.onLeave">
       <div
         v-if="open"
-        class="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6"
+        class="fixed inset-0 flex items-end justify-center sm:items-center sm:p-6"
+        :class="top ? 'z-[55]' : 'z-50'"
         role="dialog"
         aria-modal="true"
         :aria-label="title"
