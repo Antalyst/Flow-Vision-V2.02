@@ -112,10 +112,10 @@ async function finish() {
     const files =
       props.separate || !several
         ? pages.value.map((p, i) => new File([p.blob], `scan-${stamp}${several ? `-${i + 1}` : ''}.jpg`, { type: 'image/jpeg' }))
-        : [new File([await pagesToPdf(pages.value)], `scan-${stamp}.pdf`, { type: 'application/pdf' })]
+        : [new File([await pagesToPdfWithin(pages.value, props.maxBytes)], `scan-${stamp}.pdf`, { type: 'application/pdf' })]
     const big = files.find((f) => f.size > props.maxBytes)
     if (big) {
-      ui.error('Too large', `${big.name} is ${formatBytes(big.size)}; the limit is ${formatBytes(props.maxBytes)}. Remove some pages.`)
+      ui.error('Too many pages', `Even with the photos made smaller, ${big.name} is ${formatBytes(big.size)}; one upload can be up to ${formatBytes(props.maxBytes)}. Remove some pages.`)
       return
     }
     emit('done', files, pages.value.length)

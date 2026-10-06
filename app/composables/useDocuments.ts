@@ -12,6 +12,12 @@ export interface DocumentDetail {
   permissions: DocumentPermissions
 }
 
+/**
+ * The live server (Vercel) takes at most 4.5 MB per request, so a file bigger than this goes ahead
+ * in parts of this size (see `stage`); the form then refers to it by key.
+ */
+export const UPLOAD_PART_BYTES = 3 * 1024 * 1024
+
 export type DocumentScope = 'all' | 'mine' | 'team' | 'visited' | 'office' | 'incoming' | 'carrying' | 'pickups'
 
 export function useDocuments() {
@@ -25,6 +31,28 @@ export function useDocuments() {
     analyze: (form: FormData) =>
       api.post<{ suggestion: { title: string; description: string; document_type: string } }>('/documents/analyze', form),
     create: (form: FormData) => api.post<{ document: FlowDocument }>('/documents', form),
+    /**
+     * Send a large file ahead in parts of UPLOAD_PART_BYTES. Resolves to its key: append it to the
+     * create / analyze form as `upload` instead of the file. `onProgress` gets the bytes sent so far.
+     */
+    async stage(file: File, onProgress?: (sent: number) => void) {
+      let key = ''
+      for (let index = 0; index * UPLOAD_PART_BYTES < file.size; index++) {
+        const chunk = file.slice(index * UPLOAD_PART_BYTES, (index + 1) * UPLOAD_PART_BYTES)
+        const fd = new FormData()
+        fd.append('file', new File([chunk], file.name, { type: file.type }))
+        if (index === 0) {
+          fd.append('size', String(file.size))
+          key = (await api.post<{ key: string }>('/uploads', fd)).key
+        } else {
+          fd.append('key', key)
+          fd.append('index', String(index))
+          await api.post('/uploads/part', fd)
+        }
+        onProgress?.(Math.min(file.size, (index + 1) * UPLOAD_PART_BYTES))
+      }
+      return key
+    },
     update: (id: string, form: FormData) => api.patch<{ document: FlowDocument }>(`/documents/${id}`, form),
     remove: (id: string) => api.del(`/documents/${id}`),
     /** `routeId` switches the document to another Document Route as it is (re)submitted. */

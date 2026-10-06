@@ -1,4 +1,3 @@
-import fs from 'node:fs/promises'
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { Op, type Transaction } from 'sequelize'
@@ -7,6 +6,7 @@ import { env } from './env.ts'
 import { badRequest, httpError } from './errors.ts'
 import { extractText } from './ai.ts'
 import { userSummary } from './serializers.ts'
+import { deleteFile, getFile, putFile } from './file-store.ts'
 
 /**
  * Organization Settings:
@@ -105,7 +105,7 @@ const safeName = (original: string | undefined) => {
   return (base || 'knowledge').slice(-120)
 }
 
-/** Save the file under UPLOAD_DIR/knowledge/<uuid>/ and extract its text for the AI. */
+/** Save the file as knowledge/<uuid>/<name> (see file-store.ts) and extract its text for the AI. */
 export async function saveKnowledgeFile(part: UploadPart, input: { orgId: string; userId: string; title: string | null; description: string | null }) {
   if (part.data.length > env.maxKnowledgeBytes) throw httpError(413, `Knowledge files can be up to ${Math.round(env.maxKnowledgeBytes / 1024 / 1024)} MB`, 'PAYLOAD_TOO_LARGE')
   const name = safeName(part.filename)
@@ -126,8 +126,7 @@ export async function saveKnowledgeFile(part: UploadPart, input: { orgId: string
 
   const folder = crypto.randomUUID()
   const fileUrl = `knowledge/${folder}/${name}`
-  await fs.mkdir(path.join(env.uploadDir, 'knowledge', folder), { recursive: true })
-  await fs.writeFile(path.join(env.uploadDir, 'knowledge', folder, name), part.data)
+  await putFile(fileUrl, part.data)
   try {
     return await KnowledgeFile.create({
       org_id: input.orgId,
@@ -151,15 +150,17 @@ export async function saveKnowledgeFile(part: UploadPart, input: { orgId: string
 
 const KNOWLEDGE_URL_RE = /^knowledge\/[0-9a-f-]{36}\/[^/\\]+$/
 
-export function knowledgePath(fileUrl: string | null | undefined) {
-  if (!fileUrl || !KNOWLEDGE_URL_RE.test(fileUrl)) return null
-  const [, folder, name] = fileUrl.split('/') as [string, string, string]
-  return path.join(env.uploadDir, 'knowledge', folder, path.basename(name))
+const knowledgeKey = (fileUrl: string | null | undefined) => (fileUrl && KNOWLEDGE_URL_RE.test(fileUrl) ? fileUrl : null)
+
+/** A knowledge file's bytes, or null if it's missing. */
+export async function readKnowledgeFile(fileUrl: string | null | undefined) {
+  const key = knowledgeKey(fileUrl)
+  return key ? getFile(key) : null
 }
 
 export async function removeKnowledgeFile(fileUrl: string | null | undefined) {
-  const filePath = knowledgePath(fileUrl)
-  if (filePath) await fs.rm(path.dirname(filePath), { recursive: true, force: true }).catch(() => {})
+  const key = knowledgeKey(fileUrl)
+  if (key) await deleteFile(key)
 }
 
 export function knowledgeDto(k: Row) {

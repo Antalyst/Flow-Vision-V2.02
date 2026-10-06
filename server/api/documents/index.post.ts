@@ -6,13 +6,14 @@ import * as v from '~~/server/lib/validate.ts'
 
 /**
  * multipart/form-data: title, description, document_type, route_id, submit, file (once, or
- * repeated for a bulk upload — all files go under one document and one QR code), pages.
+ * repeated for a bulk upload — all files go under one document and one QR code), upload (the key
+ * of a large file sent ahead in parts via POST /uploads; mixed with `file` parts, order kept), pages.
  * `pages`: how many pages/sheets the paper has — required in spirit for photos only; otherwise it
  * defaults to the number of files. Priority and the target completion time are set automatically.
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, ...SUBMITTER_TYPES)
-  const { fields, files } = await parseDocumentForm(await readMultipartFormData(event))
+  const { fields, files } = await parseDocumentForm(await readMultipartFormData(event), user.id)
   try {
     let pages: number | null = null
     if (fields.pages) {

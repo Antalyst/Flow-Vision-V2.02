@@ -4,16 +4,21 @@ import { extractText, suggestDocumentDetails } from '~~/server/lib/ai.ts'
 import { activeDocumentTypes, knowledgeContext } from '~~/server/lib/knowledge.ts'
 import { badRequest, httpError } from '~~/server/lib/errors.ts'
 import { env } from '~~/server/lib/env.ts'
+import { readStagedUpload } from '~~/server/lib/uploads.ts'
 
 /**
- * multipart/form-data: file. Reads the file with AI and suggests a title, description and type.
+ * multipart/form-data: file, or upload (the key of a large file sent ahead via POST /uploads). Reads the file with AI and suggests a title, description and type.
  * The AI classifies into the organization's own document types and is given the passages of its
  * knowledge files that match the document (Organization Settings). Nothing is saved; the
  * suggestion pre-fills the upload form and is stored when the document is created.
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, ...SUBMITTER_TYPES)
-  const part = (await readMultipartFormData(event))?.find((p) => p.name === 'file' && p.data.length)
+  const parts = await readMultipartFormData(event)
+  // A large file comes as the key of an upload sent ahead in parts (POST /uploads).
+  const uploadKey = parts?.find((p) => p.name === 'upload' && p.filename === undefined)?.data.toString('utf8')
+  const staged = uploadKey ? await readStagedUpload(uploadKey, user.id) : null
+  const part = staged ? { data: staged.data, filename: staged.name, type: undefined } : parts?.find((p) => p.name === 'file' && p.data.length)
   if (!part) throw badRequest('Attach a file to analyze')
   if (part.data.length > env.maxUploadBytes) throw httpError(413, 'File is too large', 'PAYLOAD_TOO_LARGE')
 

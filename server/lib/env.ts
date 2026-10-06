@@ -8,9 +8,13 @@ const isProduction = process.env.NODE_ENV === 'production'
 export const env = {
   isProduction,
   uploadDir: path.resolve(process.cwd(), process.env.UPLOAD_DIR || 'uploads'),
-  maxUploadBytes: Number(process.env.MAX_UPLOAD_MB || 20) * 1024 * 1024,
-  // AI knowledge files (Organization Settings) can be much larger than document attachments.
-  maxKnowledgeBytes: Number(process.env.KNOWLEDGE_MAX_MB || 200) * 1024 * 1024,
+  // Where uploaded files are kept: `disk` (UPLOAD_DIR) or `db` (the file_blobs table). Vercel's
+  // disk is read-only, so it defaults to `db` there. See server/lib/file-store.ts.
+  fileStorage: (process.env.FILE_STORAGE === 'db' || process.env.FILE_STORAGE === 'disk' ? process.env.FILE_STORAGE : process.env.VERCEL ? 'db' : 'disk') as 'db' | 'disk',
+  maxUploadBytes: Number(process.env.MAX_UPLOAD_MB || 24) * 1024 * 1024,
+  // AI knowledge files (Organization Settings) can be much larger than document attachments —
+  // except on Vercel, which refuses any request over 4.5 MB before it reaches the app.
+  maxKnowledgeBytes: Number(process.env.KNOWLEDGE_MAX_MB || (process.env.VERCEL ? 4 : 200)) * 1024 * 1024,
   sessionDays: Number(process.env.SESSION_DAYS || 14),
   db: {
     host: process.env.DB_HOST || 'localhost',

@@ -16,7 +16,7 @@ export default defineApiHandler(async (event) => {
   if (!canManageDocument(doc, user)) throw forbidden('Only the person who uploaded this draft can edit it')
   if (doc.status !== 'CREATED') throw conflict('Only drafts can be edited')
 
-  const { fields, files } = await parseDocumentForm(await readMultipartFormData(event))
+  const { fields, files } = await parseDocumentForm(await readMultipartFormData(event), user.id)
   try {
     const before = doc.toJSON()
     const updates: Record<string, unknown> = {}

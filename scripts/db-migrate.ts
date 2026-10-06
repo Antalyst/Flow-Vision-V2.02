@@ -102,8 +102,17 @@ try {
   // Organization Settings: document types and AI knowledge files. The DDL comes straight from the
   // schema file, so the two can't drift apart.
   const schemaSql = await fs.readFile(path.resolve(import.meta.dirname, '../database/flowvision-complete-schema.sql'), 'utf8')
-  // …plus AI Assistant chat history (conversations before their messages, for the foreign key).
-  for (const table of ['document_types', 'knowledge_files', 'document_files', 'ai_conversations', 'ai_messages']) {
+  // file_blobs first came out as one row per file; it holds files in parts now. Only an empty one is replaced.
+  if ((await hasTable('file_blobs')) && !(await hasColumn('file_blobs', 'part'))) {
+    const [[{ n }]] = (await connection.query('SELECT COUNT(*) AS n FROM file_blobs')) as unknown as [[{ n: number }]]
+    if (Number(n) === 0) {
+      await connection.query('DROP TABLE `file_blobs`')
+      console.log('[migrate] empty file_blobs dropped, to be created in parts')
+    }
+  }
+  // …plus AI Assistant chat history (conversations before their messages, for the foreign key),
+  // and file_blobs, where uploads are kept on hosts with a read-only disk (Vercel).
+  for (const table of ['document_types', 'knowledge_files', 'document_files', 'ai_conversations', 'ai_messages', 'file_blobs']) {
     if (await hasTable(table)) {
       console.log(`[migrate] ${table} already present`)
       continue

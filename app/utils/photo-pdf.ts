@@ -66,8 +66,24 @@ export async function pagesToPdf(pages: CapturedPage[]): Promise<Blob> {
   return new Blob(parts as BlobPart[], { type: 'application/pdf' })
 }
 
+/**
+ * The live server takes at most 4.5 MB per request (Vercel), so photos are shrunk, step by step,
+ * until an upload fits. The first step is the size pictures are taken at.
+ */
+export const SHRINK_STEPS = [
+  { maxSide: 2000, quality: 0.85 },
+  { maxSide: 1600, quality: 0.75 },
+  { maxSide: 1280, quality: 0.68 },
+  { maxSide: 1024, quality: 0.6 },
+]
+
 /** Draw an image source (video frame or picked photo) to a JPEG, at most `maxSide` pixels long. */
-export async function toJpegPage(source: CanvasImageSource, srcWidth: number, srcHeight: number, maxSide = 2000): Promise<CapturedPage> {
+export async function toJpegPage(source: CanvasImageSource, srcWidth: number, srcHeight: number, maxSide = 2000, quality = 0.85): Promise<CapturedPage> {
+  const page = await encodeJpeg(source, srcWidth, srcHeight, maxSide, quality)
+  return { ...page, url: URL.createObjectURL(page.blob) }
+}
+
+async function encodeJpeg(source: CanvasImageSource, srcWidth: number, srcHeight: number, maxSide: number, quality: number) {
   const scale = Math.min(1, maxSide / Math.max(srcWidth, srcHeight))
   const width = Math.round(srcWidth * scale)
   const height = Math.round(srcHeight * scale)
@@ -79,8 +95,49 @@ export async function toJpegPage(source: CanvasImageSource, srcWidth: number, sr
   ctx.fillStyle = '#fff'
   ctx.fillRect(0, 0, width, height)
   ctx.drawImage(source, 0, 0, width, height)
-  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode the photo'))), 'image/jpeg', 0.85))
-  return { blob, width, height, url: URL.createObjectURL(blob) }
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode the photo'))), 'image/jpeg', quality))
+  return { blob, width, height }
+}
+
+/** A JPEG version of an image (file or taken page), at most `maxSide` pixels long. */
+async function reencode(image: Blob, maxSide: number, quality: number) {
+  const bitmap = await createImageBitmap(image, { imageOrientation: 'from-image' })
+  try {
+    return await encodeJpeg(bitmap, bitmap.width, bitmap.height, maxSide, quality)
+  } finally {
+    bitmap.close()
+  }
+}
+
+/** Taken pages joined into one PDF, with the photos made smaller until it is at most `maxBytes`. */
+export async function pagesToPdfWithin(pages: CapturedPage[], maxBytes: number): Promise<Blob> {
+  let pdf = await pagesToPdf(pages)
+  for (const { maxSide, quality } of SHRINK_STEPS.slice(1)) {
+    if (pdf.size <= maxBytes) break
+    const smaller = await Promise.all(pages.map((p) => reencode(p.blob, maxSide, quality)))
+    pdf = await pagesToPdf(smaller.map((p) => ({ ...p, url: '' })))
+  }
+  return pdf
+}
+
+/** An image file as a JPEG, at most `maxSide` pixels long (named .jpg). */
+export async function shrinkImageFile(file: File, maxSide: number, quality: number): Promise<File> {
+  const { blob } = await reencode(file, maxSide, quality)
+  return new File([blob], `${file.name.replace(/\.[^.]+$/, '')}.jpg`, { type: 'image/jpeg' })
+}
+
+/**
+ * Files that together fit in `maxBytes`: the images among them are made smaller, step by step,
+ * from the originals each time. Null when they don't fit even at the smallest step.
+ */
+export async function fitFiles(files: File[], maxBytes: number): Promise<File[] | null> {
+  const total = (list: File[]) => list.reduce((n, f) => n + f.size, 0)
+  if (total(files) <= maxBytes) return files
+  for (const { maxSide, quality } of SHRINK_STEPS.slice(1)) {
+    const smaller = await Promise.all(files.map((f) => (f.type.startsWith('image/') ? shrinkImageFile(f, maxSide, quality) : f)))
+    if (total(smaller) <= maxBytes) return smaller
+  }
+  return null
 }
 
 /** A photo file picked from the phone's camera app or gallery, as a page. */

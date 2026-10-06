@@ -32,7 +32,28 @@ const submitting = ref<'draft' | 'submit' | null>(null)
 const ui = useUiStore()
 
 const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.doc,.docx,.xls,.xlsx'
-const MAX_MB = 20
+// One document's files together can be up to 24 MB. The live server (Vercel) takes at most 4.5 MB
+// per request, so bigger files go ahead in parts (docsApi.stage). Photos past the limit are made
+// smaller to fit (see fitFiles); PDF, Word and Excel files can't be.
+const MAX_UPLOAD_BYTES = 24 * 1024 * 1024
+// Small files ride along in the form itself, up to this much in all; the rest are sent ahead.
+const INLINE_BYTES = UPLOAD_PART_BYTES
+
+/** Large files already sent ahead (by the AI read, or a save that failed later), so they go up once. */
+const staged = new WeakMap<File, Promise<string>>()
+const uploadProgress = ref<{ sent: number; total: number } | null>(null)
+function stage(f: File, onProgress?: (sent: number) => void) {
+  let key = staged.get(f)
+  if (!key) {
+    key = docsApi.stage(f, onProgress)
+    // A failed upload is tried again next time.
+    key.catch(() => staged.delete(f))
+    staged.set(f, key)
+  }
+  return key
+}
+// Pictures bigger than this are re-encoded as soon as they're added (phone photos are often 3–8 MB).
+const SHRINK_OVER_BYTES = 1.5 * 1024 * 1024
 // A bulk upload: up to this many files under one document and one QR code (the server allows 50).
 const MAX_FILES = 50
 
@@ -83,15 +104,19 @@ const askCount = computed(() => (mode.value === 'bulk' && source.value === 'came
 const pageCount = computed(() => (askCount.value ? pagesManual.value : attachments.value.length))
 const totalBytes = computed(() => attachments.value.reduce((n, a) => n + a.file.size, 0))
 
-function toAttachment(f: File, scanned = 0): Attachment | null {
+async function toAttachment(f: File, scanned = 0): Promise<Attachment | null> {
   const kind: FileKind | undefined = scanned ? 'scan' : KINDS[f.name.split('.').pop()?.toLowerCase() ?? '']
   // Dropped files skip the picker's filter, so check the type here too.
   if (!kind) {
     ui.error('Unsupported file', `${f.name}: attach PDF, Word, Excel or image files (PNG, JPG, WebP).`)
     return null
   }
-  if (f.size > MAX_MB * 1024 * 1024) {
-    ui.error('File too large', `${f.name}: each file can be up to ${MAX_MB} MB.`)
+  if (kind === 'image' && f.size > SHRINK_OVER_BYTES) {
+    const { maxSide, quality } = SHRINK_STEPS[0]!
+    f = await shrinkImageFile(f, maxSide, quality).catch(() => f)
+  }
+  if (f.size > MAX_UPLOAD_BYTES) {
+    ui.error('File too large', `${f.name} is ${formatBytes(f.size)}; one upload can be up to ${formatBytes(MAX_UPLOAD_BYTES)}. Compress it or split it into smaller files.`)
     return null
   }
   const isPicture = kind === 'image' || (kind === 'scan' && f.type.startsWith('image/'))
@@ -99,11 +124,11 @@ function toAttachment(f: File, scanned = 0): Attachment | null {
 }
 
 /** Add files: single mode replaces the attachment, bulk mode adds to the set. */
-function addFiles(list: Iterable<File> | null | undefined, { scannedPages = 0 } = {}) {
+async function addFiles(list: Iterable<File> | null | undefined, { scannedPages = 0 } = {}) {
   const incoming = [...(list ?? [])]
   if (!incoming.length) return
   if (mode.value === 'single') {
-    const a = toAttachment(incoming[0]!, scannedPages)
+    const a = await toAttachment(incoming[0]!, scannedPages)
     if (!a) return
     clearAttachments()
     attachments.value = [a]
@@ -113,7 +138,7 @@ function addFiles(list: Iterable<File> | null | undefined, { scannedPages = 0 } 
         ui.error('Too many files', `One document can hold up to ${MAX_FILES} files.`)
         break
       }
-      const a = toAttachment(f, f.type.startsWith('image/') && scannedPages ? 1 : 0)
+      const a = await toAttachment(f, f.type.startsWith('image/') && scannedPages ? 1 : 0)
       if (a) attachments.value.push(a)
     }
   }
@@ -201,7 +226,10 @@ async function analyze(f: File) {
   aiNote.value = ''
   try {
     const fd = new FormData()
-    fd.append('file', f)
+    // A large file is sent ahead in parts; the AI reads it from there (and saving reuses it).
+    if (f.size > INLINE_BYTES) fd.append('upload', await stage(f))
+    else fd.append('file', f)
+    if (run !== analyzeRun) return
     const { suggestion } = await docsApi.analyze(fd)
     if (run !== analyzeRun) return
     if (suggestion.title) form.title = suggestion.title
@@ -247,23 +275,52 @@ const deadlineText = computed(() =>
 
 async function send(submit: boolean) {
   submitting.value = submit ? 'submit' : 'draft'
+  let files: File[] | null = null
   try {
     const fd = new FormData()
     for (const [k, v] of Object.entries(form)) if (v) fd.append(k, v)
     fd.append('submit', String(submit))
-    // One or many files — all under one document and one QR code.
-    for (const a of attachments.value) fd.append('file', a.file)
+    // One or many files — all under one document and one QR code — within MAX_UPLOAD_BYTES.
+    files = await fitFiles(
+      attachments.value.map((a) => a.file),
+      MAX_UPLOAD_BYTES,
+    )
+    if (!files) {
+      ui.error('Files too large', `Together the files are ${formatBytes(totalBytes.value)}; one upload can be up to ${formatBytes(MAX_UPLOAD_BYTES)}. Remove some files, or upload them as separate documents.`)
+      return
+    }
+    // Small files go in the form; large ones (or once the form would pass ~3 MB) are sent ahead in parts.
+    const total = files.reduce((n, f) => n + f.size, 0)
+    let inline = 0
+    let sentAhead = 0
+    uploadProgress.value = { sent: 0, total }
+    for (const f of files) {
+      if (inline + f.size <= INLINE_BYTES) {
+        fd.append('file', f)
+        inline += f.size
+      } else {
+        const before = sentAhead
+        fd.append('upload', await stage(f, (sent) => (uploadProgress.value = { sent: inline + before + sent, total })))
+        sentAhead += f.size
+      }
+      uploadProgress.value = { sent: inline + sentAhead, total }
+    }
     if ((attachments.value.length || askCount.value) && pageCount.value) fd.append('pages', String(pageCount.value))
     const { document } = await docsApi.create(fd)
     ui.success(submit ? 'Document submitted — printing it with its QR' : 'Draft saved — printing it with its QR', `${document.qr_code ?? document.tracking_number} · ${document.title}`)
     // The document page prints the QR label as soon as it opens.
     await navigateTo({ path: `/documents/${document.id}`, query: { print: '1' } })
   } catch (err) {
+    // The server drops the files of a save that failed, so large ones go up again next time.
+    files?.forEach((f) => staged.delete(f))
     ui.error(submit ? 'Could not submit' : 'Could not save draft', apiErrorMessage(err))
   } finally {
     submitting.value = null
+    uploadProgress.value = null
   }
 }
+// "Uploading 45%…" on the save buttons while large files go up.
+const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value.sent < uploadProgress.value.total ? `Uploading ${Math.round((100 * uploadProgress.value.sent) / uploadProgress.value.total)}%…` : null))
 </script>
 
 <template>
@@ -361,7 +418,7 @@ async function send(submit: boolean) {
           <input type="file" class="sr-only" :accept="ACCEPT" :multiple="mode === 'bulk'" @change="addFiles(($event.target as HTMLInputElement).files); ($event.target as HTMLInputElement).value = ''" />
           <span class="grid size-12 place-items-center rounded-2xl bg-terracotta/12 text-terracotta-ink"><FIcon name="upload-cloud" /></span>
           <span class="mt-4 text-sm font-semibold">{{ mode === 'bulk' ? 'Drop files or click to browse (pick several)' : 'Drop a file or click to browse' }}</span>
-          <span class="mt-1 text-xs text-ink-2">PDF, Word, Excel or image (PNG, JPG, WebP) · up to {{ MAX_MB }} MB each</span>
+          <span class="mt-1 text-xs text-ink-2">PDF, Word, Excel or image (PNG, JPG, WebP) · up to {{ formatBytes(MAX_UPLOAD_BYTES) }} in total · photos are made smaller to fit</span>
           <span class="mt-0.5 text-xs text-ink-2">AI fills in the details from PDF and Word (.docx) files; for images and Excel you type them in.</span>
         </label>
 
@@ -517,17 +574,17 @@ async function send(submit: boolean) {
         <button v-if="step > 0" class="btn btn-ghost" @click="step--"><FIcon name="arrow-left" :size="16" /> Back</button>
         <div class="flex-1" />
         <button class="btn btn-ghost" :disabled="!canSave || Boolean(submitting)" :aria-busy="submitting === 'draft'" @click="send(false)">
-          {{ submitting === 'draft' ? 'Saving…' : 'Save draft' }}
+          {{ submitting === 'draft' ? (savingLabel ?? 'Saving…') : 'Save draft' }}
         </button>
         <button v-if="step < STEPS.length - 1" class="btn btn-primary" :disabled="!canNext" @click="step++">
           Continue <FIcon name="arrow-right" :size="16" />
         </button>
         <button v-else class="btn btn-primary" :disabled="!canSave || Boolean(submitting)" :aria-busy="submitting === 'submit'" @click="send(true)">
-          <FIcon name="send" :size="16" /> {{ submitting === 'submit' ? 'Submitting…' : 'Submit to route' }}
+          <FIcon name="send" :size="16" /> {{ submitting === 'submit' ? (savingLabel ?? 'Submitting…') : 'Submit to route' }}
         </button>
       </div>
     </section>
 
-    <PhotoCapture :open="cameraOpen" :max-bytes="MAX_MB * 1024 * 1024" :separate="mode === 'bulk'" @close="cameraOpen = false" @done="onScanned" />
+    <PhotoCapture :open="cameraOpen" :max-bytes="MAX_UPLOAD_BYTES" :separate="mode === 'bulk'" @close="cameraOpen = false" @done="onScanned" />
   </div>
 </template>

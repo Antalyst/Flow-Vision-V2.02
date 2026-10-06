@@ -713,6 +713,24 @@ CREATE TABLE `document_files` (
 -- --------------------------------------------------------
 
 --
+-- Table structure for table `file_blobs` (uploaded file bytes when FILE_STORAGE=db, e.g. on Vercel)
+--
+
+CREATE TABLE `file_blobs` (
+  `file_url` varchar(255) NOT NULL COMMENT 'Same key as documents / document_files / knowledge_files .file_url',
+  `part` int(11) NOT NULL DEFAULT 0 COMMENT 'Files are kept in parts of a few MB, read and written one at a time',
+  `data` mediumblob NOT NULL COMMENT 'This part of the file',
+  `size` int(11) NOT NULL DEFAULT 0 COMMENT 'Bytes in this part',
+  `uploaded_by` char(36) DEFAULT NULL COMMENT 'Who is uploading it (for a large upload sent in parts)',
+  `complete` tinyint(1) NOT NULL DEFAULT 1 COMMENT '0 = a large upload still arriving in parts, not attached to anything yet',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`file_url`,`part`),
+  KEY `idx_file_blobs_staged` (`complete`,`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Uploaded files, stored in the database where the server disk is read-only';
+
+-- --------------------------------------------------------
+
+--
 -- Table structure for table `knowledge_files` (Organization Settings)
 --
 
