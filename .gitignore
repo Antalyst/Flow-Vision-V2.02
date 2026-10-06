@@ -9,8 +9,8 @@ node_modules
 .cache
 dist
 
-# Uploaded attachments
-uploads/
+# Uploaded attachments (only the top-level folder — server/api/uploads/ is code)
+/uploads/
 
 # Environment files (copy .env.example → .env)
 .env
