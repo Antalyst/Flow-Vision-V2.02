@@ -60,6 +60,8 @@ const pickupOpen = ref(false)
 const failOpen = ref(false)
 const failRemarks = ref('')
 const note = ref('')
+// The routing details run long on a multi-office route, so they start folded.
+const routingOpen = ref(false)
 
 async function act(key: string, fn: () => Promise<unknown>, message: string) {
   const ok = await run(key, fn, message)
@@ -228,21 +230,19 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
           </section>
 
           <section v-if="data.routing?.length" class="card card-pad">
-            <div class="mb-5">
-              <h2 class="text-lg">Routing details</h2>
-              <p class="mt-1 text-sm text-ink-body">Inside each office — arrival, receipt, processing and release to a messenger — up to its transfer to the next office.</p>
+            <h2 class="text-lg">
+              <button type="button" class="flex w-full items-center gap-3 text-left" :aria-expanded="routingOpen" aria-controls="routing-details" @click="routingOpen = !routingOpen">
+                <span class="flex-1">Routing details</span>
+                <span class="text-xs font-normal text-ink-2">{{ data.routing.length }} office visit{{ data.routing.length === 1 ? '' : 's' }}</span>
+                <span class="grid size-9 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-ink/5">
+                  <FIcon name="chevron-down" :size="18" class="transition-transform duration-200" :class="routingOpen && 'rotate-180'" />
+                </span>
+              </button>
+            </h2>
+            <p class="mt-1 pr-12 text-sm text-ink-body">Inside each office — arrival, receipt, processing and release to a messenger — up to its transfer to the next office.</p>
+            <div v-show="routingOpen" id="routing-details" class="mt-5">
+              <OfficeRouting :visits="data.routing" :origin-name="doc.origin?.name" />
             </div>
-            <OfficeRouting :visits="data.routing" :origin-name="doc.origin?.name" />
-          </section>
-
-          <section class="card card-pad">
-            <h2 class="mb-5 text-lg">Timeline</h2>
-            <DocumentTimeline :events="data.tracking" />
-            <form class="mt-6 flex gap-2 border-t border-line/60 pt-5" @submit.prevent="addNote">
-              <label class="sr-only" for="note">Add a note</label>
-              <input id="note" v-model="note" class="input" placeholder="Add a note to the timeline" maxlength="2000" />
-              <button class="btn btn-ghost shrink-0" :disabled="!note.trim() || busy === 'note'" :aria-busy="busy === 'note'">Add note</button>
-            </form>
           </section>
 
           <section class="card card-pad">

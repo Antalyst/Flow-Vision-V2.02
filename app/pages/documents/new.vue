@@ -217,15 +217,23 @@ async function analyze(f: File) {
     if (run === analyzeRun) analyzing.value = false
   }
 }
+/** Stop waiting for the AI (it can take up to a minute) and type the details by hand. */
+function skipAi() {
+  analyzeRun++
+  analyzing.value = false
+  aiFilled.value = false
+  aiNote.value = ''
+}
 function onDrop(e: DragEvent) {
   dragging.value = false
   addFiles(e.dataTransfer?.files)
 }
 
 // A step can be reached once every step before it is complete.
-// Pictures only: the number of pages must be given.
+// Pictures only: the number of pages must be given. The AI read doesn't hold up the upload step:
+// the Details step waits for it (or lets it be skipped).
 const pagesOk = computed(() => !askCount.value || (Number.isInteger(pagesManual.value) && (pagesManual.value ?? 0) >= 1 && (pagesManual.value ?? 0) <= 9999))
-const stepDone = computed(() => [!analyzing.value && pagesOk.value, form.title.trim().length > 0, Boolean(selectedRoute.value), true])
+const stepDone = computed(() => [pagesOk.value, !analyzing.value && form.title.trim().length > 0, Boolean(selectedRoute.value), true])
 const reachable = (i: number) => stepDone.value.slice(0, i).every(Boolean)
 const canNext = computed(() => stepDone.value[step.value])
 const canSave = computed(() => stepDone.value[0] && stepDone.value[1] && stepDone.value[2])
@@ -378,7 +386,10 @@ async function send(submit: boolean) {
               <button type="button" class="grid size-9 shrink-0 place-items-center rounded-lg text-ink-2 hover:bg-ink/5" :aria-label="`Remove ${a.file.name}`" @click="removeAttachment(a.key)"><FIcon name="x" :size="16" /></button>
             </li>
           </ul>
-          <p v-if="analyzing" class="flex items-center gap-2 px-2 pt-2 pb-1 text-xs text-terracotta-ink"><FIcon name="loader" :size="14" class="animate-spin" /> AI is reading the first PDF/Word file…</p>
+          <p v-if="analyzing" class="flex flex-wrap items-center gap-2 px-2 pt-2 pb-1 text-xs text-terracotta-ink">
+            <FIcon name="loader" :size="14" class="animate-spin" /> AI is reading the first PDF/Word file…
+            <button type="button" class="ml-auto font-semibold underline hover:text-ink" @click="skipAi">Skip — I’ll type the details</button>
+          </p>
         </div>
 
         <!-- How many pages -->
@@ -403,7 +414,8 @@ async function send(submit: boolean) {
       <!-- 2. Details -->
       <div v-else-if="step === 1" class="space-y-4">
         <div v-if="analyzing" class="flex items-center gap-3 rounded-2xl bg-terracotta/[0.07] p-4 text-sm text-terracotta-ink">
-          <FIcon name="loader" :size="18" class="animate-spin" /> Reading your document…
+          <FIcon name="loader" :size="18" class="animate-spin" /> <span class="flex-1">Reading your document… this can take up to a minute.</span>
+          <button type="button" class="btn btn-ghost btn-sm shrink-0" @click="skipAi">Skip — type it myself</button>
         </div>
         <div v-else-if="aiFilled" class="flex items-center gap-3 rounded-2xl bg-terracotta/[0.07] p-4 text-sm text-terracotta-ink">
           <FIcon name="zap" :size="18" /> <span class="flex-1">Filled in by AI from <strong>{{ attachments.find((a) => a.kind === 'ai')?.file.name }}</strong>. Check it and edit anything that's off.</span>
