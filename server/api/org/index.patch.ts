@@ -2,10 +2,12 @@ import { Organization } from '~~/server/lib/models.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { badRequest } from '~~/server/lib/errors.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { requirePage } from '~~/server/lib/team.ts'
 
 /** Organization profile (CLIENT only): name, description, website. */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'CLIENT')
+  requirePage(user, '/client/settings')
   const body = await readJson(event)
   const org = (await Organization.findByPk(user.org_id))!
   const before = { name: org.name, description: org.description, website: org.website }

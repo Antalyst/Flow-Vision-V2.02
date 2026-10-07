@@ -20,6 +20,8 @@ interface ActivityRow {
   messenger: string | null
   previous_messenger: string | null
   received_by: string | null
+  /** RECEIVED from the previous desk of the same office. */
+  from_staff: string | null
   next_office: string | null
   document: { id: string; title: string; status: DocumentStatus; tracking_number: string; qr_code: string | null } | null
 }
@@ -138,9 +140,11 @@ const styleOf = (r: ActivityRow) =>
 function detail(r: ActivityRow) {
   const bits: string[] = []
   if (r.event_type === 'MESSENGER_REASSIGNED' && r.previous_messenger && r.messenger) bits.push(`${r.previous_messenger} → ${r.messenger}`)
-  else if (r.messenger && ['PICKUP_REQUESTED'].includes(r.event_type)) bits.push(`to ${r.messenger}`)
-  if (r.next_office && ['PICKUP_REQUESTED', 'MESSENGER_REASSIGNED', 'PICKED_UP'].includes(r.event_type)) bits.push(`for ${r.next_office}`)
+  else if (r.messenger && ['PICKUP_REQUESTED', 'SENT_BACK'].includes(r.event_type)) bits.push(`to ${r.messenger}`)
+  if (r.next_office && r.event_type === 'SENT_BACK') bits.push(`back to ${r.next_office}`)
+  else if (r.next_office && ['PICKUP_REQUESTED', 'MESSENGER_REASSIGNED', 'PICKED_UP'].includes(r.event_type)) bits.push(`for ${r.next_office}`)
   if (r.received_by && r.event_type === 'ARRIVED') bits.push(`received by ${r.received_by}`)
+  if (r.from_staff && r.event_type === 'RECEIVED') bits.push(`from ${r.from_staff}'s desk`)
   if (r.office) bits.push(r.office.name === 'Origin' ? 'at the origin' : `at ${r.office.name}`)
   if (r.summary) bits.push(r.summary)
   return bits.join(' · ')

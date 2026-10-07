@@ -1,5 +1,5 @@
 import { Op } from 'sequelize'
-import { sequelize, Liaison, Office, User } from '~~/server/lib/models.ts'
+import { sequelize, Document, Liaison, Office, User } from '~~/server/lib/models.ts'
 import { liaisonWorkloadSql } from '~~/server/lib/document-queries.ts'
 import { liaisonDto } from '~~/server/lib/serializers.ts'
 import * as v from '~~/server/lib/validate.ts'
@@ -10,6 +10,9 @@ const workloadAttr: any = [sequelize.literal(liaisonWorkloadSql('liaisons.user_i
 /**
  * Search messengers (B3). `?free=true` keeps only the ones that can take a document now:
  * on duty with nothing to pick up or deliver. Same-department, free messengers are listed first.
+ * Each office has its own messengers: `?office_id=` lists one office's, and `?document_id=` the
+ * ones that can carry that document from where it is now (its office's; any at the organization
+ * origin of a CLIENT upload).
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'CLIENT', 'EMPLOYEE', 'STAFF')
@@ -21,6 +24,13 @@ export default defineApiHandler(async (event) => {
 
   const search = v.q(query, 'q')
   const userWhere: Record<string | symbol, unknown> = { status: { [Op.ne]: 'inactive' } }
+  const documentId = v.q(query, 'document_id', 36)
+  if (documentId) {
+    const doc = await Document.findOne({ where: { id: documentId, org_id: user.org_id }, attributes: ['current_office_id'] })
+    if (doc?.current_office_id) userWhere.office_id = doc.current_office_id
+  }
+  const officeId = v.q(query, 'office_id', 36)
+  if (officeId) userWhere.office_id = officeId
   if (search) userWhere[Op.or] = ['first_name', 'last_name', 'full_name'].map((c) => ({ [c]: { [Op.like]: `%${search}%` } }))
 
   const liaisons = await Liaison.findAll({

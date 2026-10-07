@@ -19,7 +19,7 @@ FlowVision runs on the project's own schema: **20 tables + 3 views**, MariaDB 11
 | `document_tracking` | **One row per office visit** — see below. |
 | `approvals` | One row per (document, STAFF, office) at the final checkpoint. Every STAFF there gets a `PENDING` row when the document is received. The one who decides gets `APPROVED`/`RETURNED` + `approved_at`, and the other `PENDING` rows are removed. |
 | `liaisons` | `available` = on/off duty. "Busy" is derived: a document is released to them (current visit `liaison_id`) or in their hands. Only free messengers can be given a document. Each delivery updates `total_deliveries`, `success_rate`, `average_delivery_time` (minutes), `deliveries_today` (resets per Manila day) and `last_delivery`. A failed delivery counts as a total without a success. |
-| `qr_codes` | **One row per document, for its whole life.** `qr_code_data` = `{office code}-{8 random digits}` (e.g. `BAG-ADM-RECORDS-48213907`), unique. It is created on upload, printed as the QR label, and scanned at every hand-off. `office_code` is the origin: the uploader's assigned office code, or the organization's code for CLIENT accounts (the first segment its office codes share, else its name's initials). Replacing a lost label changes the digits, so the old label stops working. |
+| `qr_codes` | **One row per document, for its whole life.** `qr_code_data` = `{office code}{MMDDYY upload date}{6 random digits}` (e.g. `BCC100726123456`), unique; older rows keep `{office code}-{8 digits}`. It is created on upload, printed as the QR label, and scanned at every hand-off. `office_code` is the origin: the uploader's assigned office code, or the organization's code for CLIENT accounts (the first segment its office codes share, else its name's initials). Replacing a lost label keeps the office and date and changes the random digits, so the old label stops working. |
 | `issues` | Always about a document (`document_id` is required). `issue_type` = category, `priority` = severity, `resolution_notes`. |
 | `messages` | `conversation_type`: `DIRECT` (recipient_id), `GROUP` (a document's thread, document_id), `OFFICE` (everyone in the sender's office). `content`, `is_read`. |
 | `notifications` | `title`, `message`, `action_url` (where clicking goes), `is_read`. |
@@ -82,7 +82,8 @@ Each visit's `notes` holds what happened there, oldest first:
 ]
 ```
 
-- **Event types:** `SUBMITTED`, `RESUBMITTED`, `ARRIVED`, `RECEIVED`, `APPROVAL_REQUESTED`, `PICKUP_REQUESTED`, `PICKED_UP`, `IN_TRANSIT`, `DELIVERY_FAILED`, `APPROVED`, `RETURNED`, `COMPLETED`, `NOTE`.
+- **Event types:** `SUBMITTED`, `RESUBMITTED`, `ARRIVED`, `RECEIVED`, `PASSED_TO_STAFF`, `PASS_CANCELLED`, `APPROVAL_REQUESTED`, `PICKUP_REQUESTED`, `PICKED_UP`, `IN_TRANSIT`, `DELIVERY_FAILED`, `APPROVED`, `RETURNED`, `COMPLETED`, `NOTE`.
+- **Desk to desk:** inside an office the receiver can pass the document to the next staff (`PASSED_TO_STAFF`, `handler_id` cleared). Another staff member of the office scans it in (`RECEIVED` with `meta.from_staff_id`); until then nobody can release it to a messenger. The passer can take it back first (`PASS_CANCELLED`, `handler_id` = the passer again).
 - **Timeline:** the document page merges every visit's log into one timeline with millisecond timestamps.
 - **Foreign notes:** plain-text notes written by another tool are shown as a single note instead of being lost.
 

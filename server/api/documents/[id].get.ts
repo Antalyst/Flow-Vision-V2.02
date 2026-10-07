@@ -6,6 +6,7 @@ import { getRouteWithSteps } from '~~/server/lib/routes.ts'
 import { approvalDto, documentDtoOne, routeDto } from '~~/server/lib/serializers.ts'
 import { notFound } from '~~/server/lib/errors.ts'
 import { documentFileList } from '~~/server/lib/document-files.ts'
+import { pendingPass, sendBackTarget } from '~~/server/lib/tracking-log.ts'
 
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event)
@@ -43,7 +44,9 @@ export default defineApiHandler(async (event) => {
     handlerId: visit?.handler_id ?? null,
     visitLiaisonId: visit?.liaison_id ?? null,
     isFinalStep,
-    nextOfficeId: nextStep?.office_id ?? null,
+    // A send-back is carried to the previous office instead of the next one.
+    nextOfficeId: sendBackTarget(visit)?.officeId ?? nextStep?.office_id ?? null,
+    passedBy: (pendingPass(visit)?.by as string | null | undefined) ?? null,
     pendingApproval: pending,
   })
 

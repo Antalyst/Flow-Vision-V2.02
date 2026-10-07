@@ -4,6 +4,7 @@ import { documentTypeDto, readProcessingTime } from '~~/server/lib/knowledge.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { conflict, notFound } from '~~/server/lib/errors.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { requirePage } from '~~/server/lib/team.ts'
 
 /**
  * Edit a document type (CLIENT only): `name`, `description`, `processing_days` / `processing_hours`
@@ -12,6 +13,7 @@ import * as v from '~~/server/lib/validate.ts'
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'CLIENT')
+  requirePage(user, '/client/settings')
   const body = await readJson(event)
   const type = await DocumentType.findOne({ where: { id: routeParam(event, 'id'), org_id: user.org_id } })
   if (!type) throw notFound('Document type')

@@ -58,12 +58,14 @@ export interface CurrentUser {
   office: Office | null
   has_approval_authority: boolean
   liaison: LiaisonProfile | null
+  /** Pages this account may open; null = every page of its role. */
+  page_access: string[] | null
 }
 
 export interface FlowDocument {
   id: string
   tracking_number: string
-  /** Routing code printed on the document's QR label, e.g. BAG-ADM-RECORDS-48213907. */
+  /** Routing code printed on the document's QR label, {OFFICE}{MMDDYY}{6 digits}, e.g. BCC100726123456. */
   qr_code: string | null
   title: string
   description: string | null
@@ -94,6 +96,10 @@ export interface FlowDocument {
   updated_at: string
   total_steps?: number
   next_office_name?: string | null
+  /** Flagged with an issue and released to a messenger to go back to the previous office (or being carried there). */
+  sent_back?: { office_id: string; office_name: string | null } | null
+  /** Issues still open or in progress on this document. */
+  open_issues?: number
   step_sla_hours?: number | null
   step_entered_at?: string | null
   currentOffice?: Office | null
@@ -177,8 +183,23 @@ export interface RoutingVisit {
   decided_by: UserSummary | null
   left_at: string | null
   to_office: OfficeLite | null
+  /** It left this office flagged with an issue, back to the previous office. */
+  sent_back?: boolean
+  /** Desk by desk inside the office: who received it, and when they passed it to the next staff. */
+  desks: Array<{ staff: UserSummary | null; received_at: string; passed_at: string | null; remarks: string | null; minutes: number | null; current: boolean }>
+  /** Passed to the next staff and not received at the next desk yet — no messenger until it is. */
+  pending_pass: { by: UserSummary | null; at: string; remarks: string | null } | null
   durations: { waiting_receipt: number | null; processing: number | null; waiting_pickup: number | null; total: number | null }
-  events: Array<{ id: string; type: string; at: string; actor: UserSummary | null; remarks: string | null; messenger: UserSummary | null }>
+  events: Array<{
+    id: string
+    type: string
+    at: string
+    actor: UserSummary | null
+    remarks: string | null
+    messenger: UserSummary | null
+    /** RECEIVED from the previous desk of the same office. */
+    from_staff: UserSummary | null
+  }>
 }
 
 export interface Approval {
@@ -210,6 +231,10 @@ export interface DocumentPermissions {
   /** Receiving takes a scan of the QR label on the scanner page. */
   canScanReceive: boolean
   canRequestPickup: boolean
+  /** Pass it desk to desk to the next staff of the office; another staff member then scans it in. */
+  canPassToStaff: boolean
+  /** Undo your pass before anyone at the next desk scans it in. */
+  canTakeBackPass: boolean
   /** Swap the assigned messenger for another free one, until it is picked up. */
   canReassign: boolean
   canCancelPickup: boolean
@@ -217,6 +242,8 @@ export interface DocumentPermissions {
   canStartTransit: boolean
   canReportFailure: boolean
   canApprove: boolean
+  /** Flag an issue and send it back to the previous office with one of this office's messengers. */
+  canSendBack: boolean
 }
 
 export interface Message {

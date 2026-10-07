@@ -81,7 +81,7 @@ Today is ${nowFmt.format(new Date())} (Philippine time).
 - Office: ${office}${actor.position ? `\n- Position: ${actor.position}` : ''}
 
 # How FlowVision works
-A document is uploaded, gets a QR tracking code (e.g. BAG-ADM-RECORDS-48213907) and follows its Document Route office by office. Messengers (liaisons) carry the paper between offices; each office scans the QR code to receive it. At the route's final checkpoint, staff approve it (Completed) or return it with remarks (Returned). Statuses: Draft, At origin, Picked up by messenger, In transit, Dropped off at office, Completed, Returned. A document type's processing time sets the document's deadline; past it, an active document is overdue.
+A document is uploaded, gets a QR tracking code: origin office code + upload date (MMDDYY) + 6 random digits, e.g. BCC100726123456 (uploaded Oct 7, 2026; older codes look like BCL-54967520) and follows its Document Route office by office. Messengers (liaisons) carry the paper between offices; each office scans the QR code to receive it. At the route's final checkpoint, staff approve it (Completed) or return it with remarks (Returned). Statuses: Draft, At origin, Picked up by messenger, In transit, Dropped off at office, Completed, Returned. A document type's processing time sets the document's deadline; past it, an active document is overdue.
 
 # Organization right now
 ${await organizationContext(actor)}

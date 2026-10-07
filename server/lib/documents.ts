@@ -1,5 +1,5 @@
 import { Op, QueryTypes, Transaction } from 'sequelize'
-import { sequelize, Approval, Document, DocumentFile, DocumentTracking, Liaison, Office, Organization, QrCode, User, type Row } from './models.ts'
+import { sequelize, Approval, Document, DocumentFile, DocumentTracking, Issue, Liaison, Office, Organization, QrCode, User, type Row } from './models.ts'
 import { badRequest, conflict, forbidden, notFound } from './errors.ts'
 import type { Actor, RequestMeta } from './auth.ts'
 import { getLiveRoute, getStep, routeForNewDocument, routeHoursOf } from './routes.ts'
@@ -10,7 +10,7 @@ import { notify, officeMemberIds } from './notifications.ts'
 import { emitAfterCommit } from './realtime.ts'
 import { recordOutcome } from './liaisons.ts'
 import { audit } from './audit.ts'
-import { appendLog, readLog } from './tracking-log.ts'
+import { appendLog, pendingPass, readLog, sendBackTarget } from './tracking-log.ts'
 import { liaisonWorkloadSql } from './document-queries.ts'
 import { AT_OFFICE, CARRYING, referencedOfficeIds, referencedUserIds, routingVisits, timelineEvents, trackingNumber, userSummary } from './serializers.ts'
 import type { AccountType } from './models.ts'
@@ -29,6 +29,10 @@ import type { StoredFile } from './uploads.ts'
  * The relay, per office on the route:
  *   office staff scan the QR → received (handler_id) → released to a free messenger (liaison_id)
  *   → messenger scans the QR → picked up → staff at the next office scan the QR → received there …
+ *
+ * Inside an office the document may go desk to desk first: the receiver passes it to the next
+ * staff (PASSED_TO_STAFF, handler_id cleared), and another staff member of the office scans it in
+ * (RECEIVED) — only then can it be passed again or released to a messenger.
  */
 
 const docLink = (id: string) => `/documents/${id}`
@@ -105,16 +109,33 @@ function assertHoldsDocument(doc: Row, actor: Actor) {
  * reassigns or unassigns its messenger. That keeps one accountable person per office visit.
  * (At the origin — step 0 — the uploader, the CLIENT administrator or the origin office do it.)
  */
-async function assertReceiver(doc: Row, visit: Row, actor: Actor, transaction?: Transaction) {
+async function assertReceiver(doc: Row, visit: Row, actor: Actor, transaction?: Transaction, what = 'release it and assign its messenger') {
   if (doc.current_step_number === 0 || visit.handler_id === actor.id) return
   const receiver = visit.handler_id ? await User.findByPk(visit.handler_id, { attributes: ['first_name', 'last_name', 'full_name', 'email'], transaction }) : null
-  throw forbidden(`Only ${receiver ? nameOf(receiver) : 'the person who received it'}, who received this document, can release it and assign its messenger`)
+  throw forbidden(`Only ${receiver ? nameOf(receiver) : 'the person who received it'}, who received this document, can ${what}`)
 }
 
 /** Name of where the document is now: its office, or the organization (origin of a CLIENT upload). */
 async function locationName(doc: Row, transaction?: Transaction) {
   if (doc.current_office_id) return ((await Office.findByPk(doc.current_office_id, { transaction }))?.name as string) ?? 'the office'
   return ((await Organization.findByPk(doc.org_id, { transaction }))?.name as string) ?? 'the organization'
+}
+
+/**
+ * The place at `stepNumber` on the document's route, shaped like a route step: the step itself, or
+ * — step 0 — the origin office (a document sent back from the first office returns to its origin).
+ */
+async function stepAt(doc: Row, stepNumber: number, officeId: string | null, transaction?: Transaction): Promise<Row | null> {
+  if (stepNumber >= 1) return getStep(doc.route_id, stepNumber, transaction)
+  const office = officeId ? await Office.findByPk(officeId, { transaction }) : null
+  return office ? ({ step_number: 0, office_id: office.id, office, is_final_checkpoint: false } as unknown as Row) : null
+}
+
+/** Where a messenger takes the document from here: back to the previous office for a send-back, else the next step. */
+async function destinationOf(doc: Row, visit: Row | null, transaction?: Transaction) {
+  const back = sendBackTarget(visit)
+  if (back) return stepAt(doc, back.step, back.officeId, transaction)
+  return getStep(doc.route_id, doc.current_step_number + 1, transaction)
 }
 
 async function openVisit(doc: Row, step: Row, status: string, transaction: Transaction) {
@@ -137,10 +158,10 @@ async function ensurePendingApprovals(doc: Row, officeId: string, stepNumber: nu
   }
 }
 
-/** A routing code no other document uses. 10^8 codes per office prefix, so a retry is rare. */
-async function uniqueRoutingCode(officeCode: string, transaction: Transaction) {
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const code = buildRoutingCode(officeCode)
+/** A routing code no other document uses. 10^6 codes per office prefix per day, so a retry is rare. */
+async function uniqueRoutingCode(officeCode: string, uploadedAt: Date, transaction: Transaction) {
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const code = buildRoutingCode(officeCode, uploadedAt)
     if (!(await QrCode.count({ where: { qr_code_data: code }, transaction }))) return code
   }
   throw conflict('Could not generate a unique QR code. Try again.')
@@ -157,15 +178,18 @@ async function originCode(actor: Actor, transaction: Transaction) {
 }
 
 /**
- * Record who took the physical document in at its current office. At the last office on its
- * route this also asks that office (its employees and staff) for the final decision. Saves the visit.
+ * Record who took the physical document in at its current office — on arrival, or from the
+ * previous desk of the same office. At the last office on its route the first receipt also asks
+ * that office (its employees and staff) for the final decision. Saves the visit.
  */
 async function markReceived(doc: Row, visit: Row, actor: Actor, transaction: Transaction, { remarks = null as string | null } = {}) {
+  const pass = pendingPass(visit)
+  const approvalAsked = readLog(visit).some((e) => e.type === 'APPROVAL_REQUESTED')
   visit.handler_id = actor.id
-  appendLog(visit, { type: 'RECEIVED', by: actor.id, status: doc.status, remarks })
+  appendLog(visit, { type: 'RECEIVED', by: actor.id, status: doc.status, remarks, ...(pass && { meta: { from_staff_id: pass.by } }) })
 
   const step = await getStep(doc.route_id, doc.current_step_number, transaction)
-  if (step && (await atLastStep(doc, transaction))) {
+  if (step && !approvalAsked && (await atLastStep(doc, transaction))) {
     appendLog(visit, { type: 'APPROVAL_REQUESTED', by: null, status: doc.status })
     const deciders = await officeMemberIds(step.office_id, OFFICE_STAFF_TYPES, transaction)
     await ensurePendingApprovals(doc, step.office_id, step.step_number, deciders, transaction)
@@ -189,12 +213,21 @@ async function markReceived(doc: Row, visit: Row, actor: Actor, transaction: Tra
     {
       type: 'DOCUMENT_RECEIVED',
       title: `Received at ${step?.office?.name ?? 'office'}`,
-      body: `${trackingNumber(doc.id)} was received by ${nameOf(actor)} (step ${doc.current_step_number}).`,
+      body: pass
+        ? `${trackingNumber(doc.id)} moved to the next staff at ${step?.office?.name ?? 'the office'}: ${nameOf(actor)} received it (step ${doc.current_step_number}).`
+        : `${trackingNumber(doc.id)} was received by ${nameOf(actor)} (step ${doc.current_step_number}).`,
       documentId: doc.id,
       link: docLink(doc.id),
     },
     { transaction, excludeUserId: actor.id },
   )
+  if (pass?.by) {
+    await notify(
+      [pass.by],
+      { type: 'DOCUMENT_RECEIVED', title: `Received from you: ${doc.title}`, body: `${nameOf(actor)} received ${trackingNumber(doc.id)} at the next desk.`, documentId: doc.id, link: docLink(doc.id) },
+      { transaction, excludeUserId: actor.id },
+    )
+  }
   return step
 }
 
@@ -329,7 +362,7 @@ export async function createDocument(actor: Actor, input: DocumentInput, files: 
     }
     // The QR label is printed right after upload and stays with the paper until it is done.
     const origin = await originCode(actor, transaction)
-    await QrCode.create({ document_id: doc.id, qr_code_data: await uniqueRoutingCode(origin, transaction), office_code: origin }, { transaction })
+    await QrCode.create({ document_id: doc.id, qr_code_data: await uniqueRoutingCode(origin, new Date(doc.created_at), transaction), office_code: origin }, { transaction })
 
     if (input.submit) await enterRoute(doc, actor, 'SUBMITTED', transaction)
     await audit(meta, { action: 'DOCUMENT_CREATE', entityType: 'document', entityId: doc.id, after: doc.toJSON() }, transaction)
@@ -354,12 +387,19 @@ export async function submitDocument(documentId: string, actor: Actor, meta: Req
 
 /**
  * A messenger can be given a document only while on duty and free: nothing waiting for them
- * to pick up and nothing in hand. Locks the messenger's profile so two offices can't assign the
- * same messenger at once (the caller's transaction must be READ COMMITTED to see the other's commit).
+ * to pick up and nothing in hand. Each office has its own messengers: a document released from an
+ * office goes with one of that office's messengers (`officeId`; null = the organization itself, the
+ * origin of a CLIENT upload, where any messenger can be used). Locks the messenger's profile so two
+ * offices can't assign the same messenger at once (the caller's transaction must be READ COMMITTED
+ * to see the other's commit).
  */
-async function claimFreeMessenger(userId: string, orgId: string, transaction: Transaction) {
+async function claimFreeMessenger(userId: string, orgId: string, officeId: string | null, transaction: Transaction) {
   const user = await User.findOne({ where: { id: userId, org_id: orgId, account_type: 'LIAISON', status: { [Op.ne]: 'inactive' } }, transaction })
   if (!user) throw badRequest('Selected messenger was not found')
+  if (officeId && user.office_id !== officeId) {
+    const office = await Office.findByPk(officeId, { attributes: ['name'], transaction })
+    throw conflict(`${nameOf(user)} is not a messenger of ${office?.name ?? 'this office'}. Pick one of its own messengers.`, 'MESSENGER_OTHER_OFFICE')
+  }
   const profile = await Liaison.findOne({ where: { user_id: user.id }, transaction, lock: transaction.LOCK.UPDATE })
   if (!profile) throw badRequest(`${nameOf(user)} has no messenger profile yet`)
   if (!profile.available) throw conflict(`${nameOf(user)} is off duty. Pick another messenger.`, 'MESSENGER_UNAVAILABLE')
@@ -381,6 +421,7 @@ export async function requestPickup(documentId: string, actor: Actor, { liaisonU
     if (!AT_OFFICE.includes(doc.status)) throw conflict('The messenger can only be changed before the document is picked up')
     assertHoldsDocument(doc, actor)
     const visit = await requireVisit(doc, transaction)
+    if (pendingPass(visit)) throw conflict('This document was passed to the next staff. A messenger can be assigned once another staff member of the office scans it in.')
     if (!visit.handler_id) throw conflict('Scan the document’s QR code to receive it before releasing it')
     await assertReceiver(doc, visit, actor, transaction)
     const previousId = visit.liaison_id as string | null
@@ -389,11 +430,13 @@ export async function requestPickup(documentId: string, actor: Actor, { liaisonU
     const atOrigin = doc.current_step_number === 0
     const step = atOrigin ? null : await getStep(doc.route_id, doc.current_step_number, transaction)
     if (!atOrigin && !step) throw conflict('Document route is missing this step')
-    if (step?.is_final_checkpoint) throw conflict('This is the final checkpoint — it is completed by approval, not released')
-    const nextStep = await getStep(doc.route_id, doc.current_step_number + 1, transaction)
+    // Reassigning the messenger of a send-back keeps it going back to the previous office.
+    const back = previousId ? sendBackTarget(visit) : null
+    if (!back && step?.is_final_checkpoint) throw conflict('This is the final checkpoint — it is completed by approval, not released')
+    const nextStep = back ? await stepAt(doc, back.step, back.officeId, transaction) : await getStep(doc.route_id, doc.current_step_number + 1, transaction)
     if (!nextStep) throw conflict('This is the last office on the route')
 
-    const liaison = await claimFreeMessenger(liaisonUserId, actor.org_id, transaction)
+    const liaison = await claimFreeMessenger(liaisonUserId, actor.org_id, doc.current_office_id ?? null, transaction)
     const previous = previousId ? await User.findByPk(previousId, { transaction }) : null
 
     visit.liaison_id = liaison.id
@@ -402,7 +445,13 @@ export async function requestPickup(documentId: string, actor: Actor, { liaisonU
       by: actor.id,
       status: doc.status,
       remarks: previous ? `${nameOf(previous)} → ${nameOf(liaison)}${remarks ? ` · ${remarks}` : ''}` : remarks,
-      meta: { liaison_id: liaison.id, previous_liaison_id: previousId, next_office_id: nextStep.office_id },
+      meta: {
+        liaison_id: liaison.id,
+        previous_liaison_id: previousId,
+        next_office_id: nextStep.office_id,
+        send_back_to: back?.officeId ?? null,
+        ...(back && { target_step: back.step, issue_id: back.issueId }),
+      },
     })
     await visit.save({ transaction })
     await touch(doc, transaction)
@@ -452,7 +501,7 @@ export async function cancelPickup(documentId: string, actor: Actor) {
     await assertReceiver(doc, visit, actor, transaction)
     const liaisonId = visit.liaison_id
     visit.liaison_id = null
-    appendLog(visit, { type: 'NOTE', by: actor.id, status: doc.status, remarks: 'Release cancelled — messenger unassigned' })
+    appendLog(visit, { type: 'NOTE', by: actor.id, status: doc.status, remarks: 'Release cancelled — messenger unassigned', meta: { send_back_to: null } })
     await visit.save({ transaction })
     await touch(doc, transaction)
     await notify(
@@ -471,6 +520,162 @@ export async function cancelPickup(documentId: string, actor: Actor) {
   })
 }
 
+/**
+ * Flag and send back: the person who received the document at this office found a problem (the
+ * issue is flagged first, see /issues), and assigns one of this office's free messengers to carry
+ * it back to the previous office on its route — or, from the first office, back to its origin
+ * office. The issue moves to IN_PROGRESS. The messenger scans to pick it up and the previous office
+ * scans to receive it as usual; from there it is routed forward again.
+ */
+export async function sendBack(
+  documentId: string,
+  actor: Actor,
+  { liaisonUserId, issueId, remarks = null }: { liaisonUserId: string; issueId: string; remarks?: string | null },
+) {
+  if (!liaisonUserId) throw badRequest('Choose the messenger who will take it back', { field: 'liaison_user_id' })
+  if (!issueId) throw badRequest('Flag the issue first, then send the document back', { field: 'issue_id' })
+  return sequelize.transaction({ isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED }, async (transaction) => {
+    const doc = await lockDocument(documentId, actor, transaction)
+    if (!AT_OFFICE.includes(doc.status) || doc.current_step_number === 0) throw conflict('Only a document received at your office can be sent back')
+    assertHoldsDocument(doc, actor)
+    const visit = await requireVisit(doc, transaction)
+    if (pendingPass(visit)) throw conflict('This document was passed to the next staff. It can be sent back once another staff member of the office scans it in.')
+    if (!visit.handler_id) throw conflict('Scan the document’s QR code to receive it before sending it back')
+    await assertReceiver(doc, visit, actor, transaction, 'send it back')
+    if (visit.liaison_id) throw conflict('A messenger is already assigned to this document. Unassign them before sending it back.')
+
+    const issue = await Issue.findOne({ where: { id: issueId, document_id: doc.id }, transaction, lock: transaction.LOCK.UPDATE })
+    if (!issue) throw badRequest('That issue was not flagged on this document', { field: 'issue_id' })
+    if (['RESOLVED', 'CLOSED'].includes(issue.status)) throw conflict('That issue is already resolved. Flag a new one to send the document back.')
+
+    // Back one office: the previous step, or from the first office its origin (the uploader's office).
+    const targetStep = doc.current_step_number - 1
+    let originOfficeId: string | null = null
+    if (targetStep === 0) {
+      originOfficeId = ((await User.findByPk(doc.submitted_by, { attributes: ['office_id'], transaction }))?.office_id as string | null) ?? null
+      if (!originOfficeId) {
+        throw conflict('This document came from the organization itself (a CLIENT upload), so there is no office before this one to send it back to.', 'NO_PREVIOUS_OFFICE')
+      }
+    }
+    const target = await stepAt(doc, targetStep, originOfficeId, transaction)
+    if (!target) throw conflict('Document route is missing the previous step')
+
+    const liaison = await claimFreeMessenger(liaisonUserId, actor.org_id, doc.current_office_id, transaction)
+    visit.liaison_id = liaison.id
+    appendLog(visit, {
+      type: 'SENT_BACK',
+      by: actor.id,
+      status: doc.status,
+      remarks: remarks || issue.title,
+      meta: { liaison_id: liaison.id, next_office_id: target.office_id, send_back_to: target.office_id, target_step: targetStep, issue_id: issue.id },
+    })
+    await visit.save({ transaction })
+    await touch(doc, transaction)
+    if (issue.status === 'OPEN') await issue.update({ status: 'IN_PROGRESS' }, { transaction })
+
+    const here = await locationName(doc, transaction)
+    const to = target.office?.name ?? 'the previous office'
+    await notify(
+      [liaison.id],
+      {
+        type: 'PICKUP_REQUESTED',
+        title: `Pickup at ${here} — take it back`,
+        body: `${trackingNumber(doc.id)} · ${doc.title} → return to ${to}. Issue: ${issue.title}`,
+        documentId: doc.id,
+        link: '/liaison/dashboard',
+      },
+      { transaction, excludeUserId: actor.id },
+    )
+    await notify(
+      await officeMemberIds(target.office_id, OFFICE_STAFF_TYPES, transaction),
+      {
+        type: 'DOCUMENT_SENT_BACK',
+        title: `Sent back to your office: ${doc.title}`,
+        body: `${here} flagged an issue and is sending ${trackingNumber(doc.id)} back with ${nameOf(liaison)}: ${issue.title}. Scan its QR code when it arrives.`,
+        documentId: doc.id,
+        link: docLink(doc.id),
+      },
+      { transaction, excludeUserId: actor.id },
+    )
+    await notify(
+      [doc.submitted_by],
+      {
+        type: 'DOCUMENT_SENT_BACK',
+        title: `Flagged and sent back: ${doc.title}`,
+        body: `${here} sent ${trackingNumber(doc.id)} back to ${to}: ${issue.title}`,
+        documentId: doc.id,
+        link: docLink(doc.id),
+      },
+      { transaction, excludeUserId: actor.id },
+    )
+    broadcast(doc, transaction)
+    return { doc, issue }
+  })
+}
+
+/**
+ * Desk to desk inside an office: the staff member who received the document passes it on to the
+ * next staff of the same office. It is no longer received (handler_id cleared), so nobody can
+ * release it to a messenger — or pass it again — until another staff member scans it in.
+ */
+export async function passToNextStaff(documentId: string, actor: Actor, { remarks = null }: { remarks?: string | null } = {}) {
+  return sequelize.transaction(async (transaction) => {
+    const doc = await lockDocument(documentId, actor, transaction)
+    if (!AT_OFFICE.includes(doc.status) || doc.current_step_number === 0) throw conflict('Only a document received at your office can be passed to the next staff')
+    assertHoldsDocument(doc, actor)
+    const visit = await requireVisit(doc, transaction)
+    if (!visit.handler_id) throw conflict('Scan the document’s QR code to receive it before passing it on')
+    await assertReceiver(doc, visit, actor, transaction, 'pass it to the next staff')
+    if (visit.liaison_id) throw conflict('A messenger is assigned to this document. Unassign them before passing it to the next staff.')
+    const colleagues = (await officeMemberIds(doc.current_office_id, OFFICE_STAFF_TYPES, transaction)).filter((id) => id !== actor.id)
+    if (!colleagues.length) throw conflict('Nobody else at your office can receive it')
+
+    visit.handler_id = null
+    appendLog(visit, { type: 'PASSED_TO_STAFF', by: actor.id, status: doc.status, remarks })
+    await visit.save({ transaction })
+    await touch(doc, transaction)
+
+    const here = await locationName(doc, transaction)
+    await notify(
+      colleagues,
+      {
+        type: 'DOCUMENT_PASSED',
+        title: `Passed to the next staff: ${doc.title}`,
+        body: `${nameOf(actor)} passed ${trackingNumber(doc.id)} on at ${here}. Scan its QR code to receive it at your desk.${remarks ? ` Note: ${remarks}` : ''}`,
+        documentId: doc.id,
+        link: docLink(doc.id),
+      },
+      { transaction, excludeUserId: actor.id },
+    )
+    broadcast(doc, transaction)
+    return doc
+  })
+}
+
+/** Undo a pass before anyone at the next desk scans the document in: it is received by the passer again. */
+export async function takeBackPass(documentId: string, actor: Actor) {
+  return sequelize.transaction(async (transaction) => {
+    const doc = await lockDocument(documentId, actor, transaction)
+    assertHoldsDocument(doc, actor)
+    const visit = AT_OFFICE.includes(doc.status) ? await requireVisit(doc, transaction) : null
+    const pass = pendingPass(visit)
+    if (!visit || !pass) throw conflict('This document is not waiting to be received by the next staff')
+    if (pass.by !== actor.id) throw forbidden('Only the person who passed it on can take it back')
+
+    visit.handler_id = actor.id
+    appendLog(visit, { type: 'PASS_CANCELLED', by: actor.id, status: doc.status, remarks: 'Taken back before the next staff received it' })
+    await visit.save({ transaction })
+    await touch(doc, transaction)
+    await notify(
+      (await officeMemberIds(doc.current_office_id, OFFICE_STAFF_TYPES, transaction)).filter((id) => id !== actor.id),
+      { type: 'DOCUMENT_PASSED', title: `Taken back: ${doc.title}`, body: `${nameOf(actor)} took ${trackingNumber(doc.id)} back. You don't need to receive it.`, documentId: doc.id, link: docLink(doc.id) },
+      { transaction, excludeUserId: actor.id },
+    )
+    broadcast(doc, transaction)
+    return doc
+  })
+}
+
 /** Replace a lost or damaged QR label: a new code with the same office prefix. The old label stops working. */
 export async function regenerateQr(documentId: string, actor: Actor) {
   return sequelize.transaction(async (transaction) => {
@@ -480,7 +685,8 @@ export async function regenerateQr(documentId: string, actor: Actor) {
     const visit = await requireVisit(doc, transaction)
     const qr = await QrCode.findOne({ where: { document_id: doc.id }, transaction, lock: transaction.LOCK.UPDATE })
     const officeCode = (qr?.office_code as string | undefined) || (await originCode(actor, transaction))
-    const code = await uniqueRoutingCode(officeCode, transaction)
+    // Same office and upload date as before; only the random digits change.
+    const code = await uniqueRoutingCode(officeCode, new Date(doc.created_at), transaction)
     if (qr) await qr.update({ qr_code_data: code, office_code: officeCode }, { transaction })
     else await QrCode.create({ document_id: doc.id, qr_code_data: code, office_code: officeCode }, { transaction })
     appendLog(visit, { type: 'NOTE', by: actor.id, status: doc.status, remarks: 'QR label replaced — the previous label no longer works' })
@@ -497,7 +703,7 @@ async function loadQrContext(codeRaw: string, actor: Actor, transaction?: Transa
   if (!doc) throw notFound('Document with this QR code')
   const visit = doc.status === 'CREATED' ? null : await getCurrentVisit(doc, transaction)
   const current = doc.current_office_id ? await Office.findByPk(doc.current_office_id, { transaction }) : null
-  const next = await getStep(doc.route_id, doc.current_step_number + 1, transaction)
+  const next = await destinationOf(doc, visit, transaction)
   // Where it is now, by name: its office, or the organization at the origin of a CLIENT upload.
   const here = (current?.name as string | undefined) ?? (await locationName(doc, transaction))
   return { qr, doc, visit, current, next, here }
@@ -516,7 +722,8 @@ const inform = (reason: string): ScanDecision => ({ action: null, reason, tone: 
 /**
  * What scanning this document's QR lets the user do right now:
  *   messenger      PICKUP  — the document was released to them and is still where it was
- *   office staff   RECEIVE — it waits unreceived at their office, it is being carried to their
+ *   office staff   RECEIVE — it waits unreceived at their office (also when a co-worker passed it to
+ *                            the next staff — anyone there but that co-worker), it is being carried to their
  *                            office (the next one on the route), or — at the origin, with no
  *                            messenger assigned — it was brought to the first office by hand.
  *                            Nobody else can receive it.
@@ -553,7 +760,11 @@ function resolveScanAction(doc: Row, visit: Row | null, actor: Actor, at: string
 
   if (atOffice) {
     if (doc.current_office_id !== actor.office_id) return deny(`This document is at ${at}. Only ${at} staff can receive it.`)
-    if (!visit.handler_id) return { action: 'RECEIVE' }
+    if (!visit.handler_id) {
+      // Passed desk to desk: anyone else at the office takes it in.
+      if (pendingPass(visit)?.by === actor.id) return inform(`You passed this document to the next staff. Another staff member of ${at} scans it to receive it — or take it back on the document page.`)
+      return { action: 'RECEIVE' }
+    }
     if (visit.liaison_id) return inform(`Already received here and released to a messenger for ${to}.`)
     return inform(next ? `Already received at your office. Release it to a messenger for ${to} when your office is done.` : 'Already received at your office.')
   }
@@ -565,9 +776,10 @@ function resolveScanAction(doc: Row, visit: Row | null, actor: Actor, at: string
 export async function verifyScan(code: string, actor: Actor) {
   const { qr, doc, visit, current, next, here } = await loadQrContext(code, actor)
   const decision = resolveScanAction(doc, visit, actor, here, next)
+  const pass = AT_OFFICE.includes(doc.status) ? pendingPass(visit) : null
   const lite = (o: Row | null | undefined) => (o ? { id: o.id, code: o.code, name: o.name, department_name: o.department ?? '' } : null)
   const people = await User.findAll({
-    where: { id: { [Op.in]: [visit?.liaison_id, visit?.handler_id].filter(Boolean) as string[] } },
+    where: { id: { [Op.in]: [visit?.liaison_id, visit?.handler_id, pass?.by].filter(Boolean) as string[] } },
     attributes: ['id', 'first_name', 'last_name', 'full_name', 'email', 'account_type'],
   })
   const person = (id?: string | null) => (id ? userSummary(people.find((u) => u.id === id)) : null)
@@ -590,6 +802,8 @@ export async function verifyScan(code: string, actor: Actor) {
     to_office: lite(next?.office),
     messenger: AT_OFFICE.includes(doc.status) || carrying ? person(visit?.liaison_id) : null,
     received_by: AT_OFFICE.includes(doc.status) ? person(visit?.handler_id) : null,
+    // Passed to the next staff of the office, not received at the next desk yet.
+    passed_by: person(pass?.by),
   }
 }
 
@@ -646,6 +860,7 @@ export async function performScan(code: string, expectedAction: ScanAction | nul
     // visit and open one here, received by the scanner.
     if (!next) throw conflict('Document has no next office on its route')
     const liaisonId = CARRYING.includes(doc.status) ? (visit.liaison_id as string | null) : null
+    const sentBack = sendBackTarget(visit)
     const minutes = liaisonId && visit.completed_at ? (Date.now() - new Date(visit.completed_at).getTime()) / 60000 : null
     if (liaisonId) await recordOutcome(liaisonId, { success: true, minutes }, transaction)
 
@@ -658,7 +873,13 @@ export async function performScan(code: string, expectedAction: ScanAction | nul
       type: 'ARRIVED',
       by: liaisonId,
       status: 'ARRIVED_AT_OFFICE',
-      meta: { from_office_id: visit.office_id, received_by: actor.id, by_hand: !liaisonId, delivery_minutes: minutes == null ? null : Math.round(minutes * 10) / 10 },
+      meta: {
+        from_office_id: visit.office_id,
+        received_by: actor.id,
+        by_hand: !liaisonId,
+        delivery_minutes: minutes == null ? null : Math.round(minutes * 10) / 10,
+        ...(sentBack && { sent_back: true, issue_id: sentBack.issueId }),
+      },
     })
     await markReceived(doc, arrival, actor, transaction)
 
@@ -710,7 +931,7 @@ export async function failDelivery(documentId: string, actor: Actor, { remarks }
     // An office must scan it in again before releasing it to another messenger; at the origin it
     // simply goes back to the uploader.
     Object.assign(visit, { status: back, handler_id: atOrigin ? doc.submitted_by : null, liaison_id: null, completed_at: null })
-    appendLog(visit, { type: 'DELIVERY_FAILED', by: actor.id, status: back, remarks })
+    appendLog(visit, { type: 'DELIVERY_FAILED', by: actor.id, status: back, remarks, meta: { send_back_to: null } })
     await visit.save({ transaction })
 
     await notify(
@@ -893,6 +1114,8 @@ export interface ActionContext {
   isFinalStep: boolean
   /** Office of the step after the current one (where a carried document is heading). */
   nextOfficeId: string | null
+  /** Who passed it to the next staff of the office, while nobody has received it at the next desk. */
+  passedBy: string | null
   pendingApproval: Row | null
 }
 
@@ -917,10 +1140,15 @@ export function availableActions(doc: Row, actor: Actor, ctx: ActionContext) {
     // Receiving always takes a scan of the QR label (scanner page). At the origin with no
     // messenger assigned, the first office can also receive it when it is brought by hand.
     canScanReceive:
-      (holds && !atOrigin && atOffice && !ctx.received) ||
+      (holds && !atOrigin && atOffice && !ctx.received && ctx.passedBy !== actor.id) ||
       (nextOfficeStaff && moving) ||
       (nextOfficeStaff && atOrigin && atOffice && !ctx.visitLiaisonId),
     canRequestPickup: releases && atOffice && ctx.received && !ctx.visitLiaisonId && !ctx.isFinalStep && Boolean(ctx.nextOfficeId),
+    // Desk to desk inside the office, before it is released (or decided, at the last office).
+    canPassToStaff: releases && !atOrigin && atOffice && ctx.received && !ctx.visitLiaisonId,
+    // Flag an issue and send it back to the previous office, with one of this office's messengers.
+    canSendBack: releases && !atOrigin && atOffice && ctx.received && !ctx.visitLiaisonId,
+    canTakeBackPass: atOffice && Boolean(ctx.passedBy) && ctx.passedBy === actor.id,
     // Until the messenger has picked it up, another one can take over.
     canReassign: releases && atOffice && Boolean(ctx.visitLiaisonId),
     canCancelPickup: releases && atOffice && Boolean(ctx.visitLiaisonId),

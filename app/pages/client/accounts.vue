@@ -16,6 +16,7 @@ interface TeamMember {
   last_login_at: string | null
   must_change_password: boolean
   liaisonProfile: LiaisonProfile | null
+  page_access: string[] | null
 }
 
 const api = useApi()
@@ -44,10 +45,13 @@ const counts = computed(() => {
   return c
 })
 
+// A client whose own pages are limited can't manage a client with every page (the owner).
+const canManage = (m: TeamMember) => !(auth.user?.page_access && m.account_type === 'CLIENT' && !m.page_access && m.id !== auth.user.id)
+
 // Invite / edit
 const formOpen = ref(false)
 const editing = ref<TeamMember | null>(null)
-const form = reactive({ account_type: 'EMPLOYEE' as AccountType, first_name: '', last_name: '', email: '', phone: '', office_id: '', status: 'ACTIVE' })
+const form = reactive({ account_type: 'EMPLOYEE' as AccountType, first_name: '', last_name: '', email: '', phone: '', office_id: '', status: 'ACTIVE', page_access: null as string[] | null })
 const needsOffice = computed(() => form.account_type !== 'CLIENT')
 
 function openForm(member?: TeamMember) {
@@ -60,6 +64,7 @@ function openForm(member?: TeamMember) {
     phone: member?.phone ?? '',
     office_id: member?.office_id ?? '',
     status: member?.status ?? 'ACTIVE',
+    page_access: member?.page_access ? [...member.page_access] : null,
   })
   formOpen.value = true
 }
@@ -67,7 +72,9 @@ function openForm(member?: TeamMember) {
 const credentials = ref<{ email: string; password: string } | null>(null)
 
 async function save() {
-  const body = { ...form, office_id: needsOffice.value ? form.office_id || null : null }
+  const body: Record<string, unknown> = { ...form, office_id: needsOffice.value ? form.office_id || null : null }
+  // Nobody sets their own pages.
+  if (editing.value?.id === auth.user?.id) delete body.page_access
   if (editing.value) {
     const ok = await run('save', () => api.patch(`/users/${editing.value!.id}`, body), 'Account updated')
     if (ok) {
@@ -146,6 +153,7 @@ async function copyCredentials() {
                 <span v-if="m.id === auth.user?.id" class="text-xs font-normal text-ink-2">(you)</span>
                 <ToneBadge v-if="m.status === 'SUSPENDED'" tone="danger">Suspended</ToneBadge>
                 <ToneBadge v-else-if="m.must_change_password" tone="warning">Temp password</ToneBadge>
+                <ToneBadge v-if="m.page_access" tone="neutral" icon="lock">{{ m.page_access.length }} pages</ToneBadge>
               </p>
               <p class="truncate text-xs text-ink-2">{{ m.email }}</p>
             </div>
@@ -156,7 +164,7 @@ async function copyCredentials() {
             <ToneBadge v-if="m.account_type === 'STAFF' && m.office?.is_final_checkpoint" tone="success" icon="shield">Approver</ToneBadge>
             <span v-if="m.liaisonProfile" class="text-xs text-ink-2">{{ m.liaisonProfile.success_rate }}% success</span>
           </div>
-          <div class="flex gap-1">
+          <div v-if="canManage(m)" class="flex gap-1">
             <button class="btn btn-sm btn-ghost border-0" @click="openForm(m)"><FIcon name="edit-2" :size="14" /> Edit</button>
             <button v-if="m.id !== auth.user?.id" class="btn btn-sm btn-ghost border-0" :disabled="busy === `reset-${m.id}`" :aria-busy="busy === `reset-${m.id}`" @click="resetPassword(m)">
               <FIcon name="key" :size="14" /> Reset
@@ -177,7 +185,7 @@ async function copyCredentials() {
               class="flex cursor-pointer flex-col rounded-xl border p-3 transition-colors"
               :class="form.account_type === role ? 'border-terracotta bg-terracotta/[0.06]' : 'border-line hover:bg-card'"
             >
-              <input v-model="form.account_type" type="radio" :value="role" class="sr-only" :disabled="editing?.id === auth.user?.id" />
+              <input v-model="form.account_type" type="radio" :value="role" class="sr-only" :disabled="editing?.id === auth.user?.id" @change="form.page_access = null" />
               <span class="flex items-center gap-2 text-sm font-semibold"><span class="size-2 rounded-full" :class="TONE_DOT[meta.tone]" />{{ meta.label }}</span>
               <span class="mt-1 text-xs text-ink-body">{{ meta.description }}</span>
             </label>
@@ -213,6 +221,7 @@ async function copyCredentials() {
             <option value="SUSPENDED">Suspended — cannot sign in</option>
           </select>
         </div>
+        <PageAccessPicker v-if="editing?.id !== auth.user?.id" v-model="form.page_access" :role="form.account_type" />
       </form>
       <template #footer>
         <button class="btn btn-ghost" @click="formOpen = false">Cancel</button>

@@ -87,7 +87,7 @@ The AI automatically has access to:
 
 5. **Help & Guidance**
    - "How do I submit a document?"
-   - "What's the status of document BAG-ADM-RECORDS-48213907?"
+   - "What's the status of document BCC100726123456?"
    - "Who approves personnel decisions?"
 
 ---

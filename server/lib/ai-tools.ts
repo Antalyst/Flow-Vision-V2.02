@@ -43,7 +43,7 @@ export const ASSISTANT_TOOLS: ChatCompletionTool[] = [
           office: { type: 'string', description: 'Name or code of the office the document is currently at' },
           document_type: { type: 'string', description: 'Document type name, e.g. Purchase Request' },
           route: { type: 'string', description: 'Document Route name' },
-          search: { type: 'string', description: 'Words from the title or description, or a tracking code like BAG-ADM-RECORDS-48213907' },
+          search: { type: 'string', description: 'Words from the title or description, or a tracking code like BCC100726123456' },
           submitted_within_days: { type: 'integer', description: 'Only documents submitted in the last N days' },
           limit: { type: 'integer', description: 'How many documents to list (1-50, default 20). Totals always cover every match.' },
         },

@@ -32,13 +32,13 @@ async function hasIndex(table: string, index: string) {
 }
 
 /**
- * Every document carries one permanent routing code ({ORIGIN_CODE}-{8 digits}) from upload on.
+ * Every document carries one permanent routing code ({ORIGIN_CODE}{MMDDYY}{6 digits}) from upload on.
  * The origin is the uploader's assigned office, or their organization for accounts without one
  * (CLIENT). Documents without a code in that format get one now, and documents uploaded by an
  * account without an office get the organization prefix if they carry an office's.
  */
 async function backfillRoutingCodes() {
-  const { ROUTING_CODE_RE, buildRoutingCode, organizationCode } = await import('../server/lib/qr.ts')
+  const { isRoutingCode, buildRoutingCode, organizationCode } = await import('../server/lib/qr.ts')
   const [orgRows] = await connection.query('SELECT g.id, g.name, o.code FROM organizations g LEFT JOIN offices o ON o.org_id = g.id')
   const orgCodes = new Map<string, string>()
   const byOrg = new Map<string, { name: string; codes: string[] }>()
@@ -50,21 +50,22 @@ async function backfillRoutingCodes() {
   for (const [id, { name, codes }] of byOrg) orgCodes.set(id, organizationCode(name, codes))
 
   const [rows] = await connection.query(`
-    SELECT d.id, d.org_id, q.id AS qr_id, q.qr_code_data AS code, q.office_code AS qr_prefix, uo.code AS uploader_office_code
+    SELECT d.id, d.org_id, d.created_at, q.id AS qr_id, q.qr_code_data AS code, q.office_code AS qr_prefix, uo.code AS uploader_office_code
     FROM documents d
     JOIN users u ON u.id = d.submitted_by
     LEFT JOIN offices uo ON uo.id = u.office_id
     LEFT JOIN qr_codes q ON q.document_id = d.id`)
-  const docs = rows as Array<{ id: string; org_id: string; qr_id: string | null; code: string | null; qr_prefix: string | null; uploader_office_code: string | null }>
+  const docs = rows as Array<{ id: string; org_id: string; created_at: Date; qr_id: string | null; code: string | null; qr_prefix: string | null; uploader_office_code: string | null }>
   const taken = new Set(docs.map((d) => d.code).filter(Boolean))
   let issued = 0
   for (const doc of docs) {
     const prefix = doc.uploader_office_code ?? orgCodes.get(doc.org_id) ?? 'ORG'
-    const valid = Boolean(doc.code && ROUTING_CODE_RE.test(doc.code))
+    // Labels in the older {CODE}-{8 digits} format are already printed, so they stay valid.
+    const valid = Boolean(doc.code && isRoutingCode(doc.code))
     // Office uploads keep a valid code; organization uploads must carry the organization prefix.
     if (valid && (doc.uploader_office_code || doc.qr_prefix === prefix)) continue
-    let code = buildRoutingCode(prefix)
-    while (taken.has(code)) code = buildRoutingCode(prefix)
+    let code = buildRoutingCode(prefix, new Date(doc.created_at))
+    while (taken.has(code)) code = buildRoutingCode(prefix, new Date(doc.created_at))
     taken.add(code)
     if (doc.qr_id) {
       await connection.query('UPDATE qr_codes SET qr_code_data = ?, office_code = ? WHERE id = ?', [code, prefix, doc.qr_id])
@@ -83,6 +84,14 @@ try {
     console.log('[migrate] route_steps.sla_hours added')
   } else {
     console.log('[migrate] route_steps.sla_hours already present')
+  }
+
+  // Whoever creates an account chooses which pages it may open (NULL = every page of its role).
+  if (!(await hasColumn('users', 'page_access'))) {
+    await connection.query("ALTER TABLE `users` ADD COLUMN `page_access` text DEFAULT NULL COMMENT 'JSON list of pages the account may open (NULL = every page of its role)' AFTER `two_factor_enabled`")
+    console.log('[migrate] users.page_access added')
+  } else {
+    console.log('[migrate] users.page_access already present')
   }
 
   // Step 0 (the origin) of a CLIENT upload is the organization itself, not an office.

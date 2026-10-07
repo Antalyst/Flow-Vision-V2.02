@@ -444,6 +444,7 @@ CREATE TABLE `users` (
   `last_login` timestamp NULL DEFAULT NULL COMMENT 'Last login time',
   `email_verified` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Email verification status',
   `two_factor_enabled` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Two-factor authentication',
+  `page_access` text DEFAULT NULL COMMENT 'JSON list of pages the account may open (NULL = every page of its role)',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='User accounts with role-based access';

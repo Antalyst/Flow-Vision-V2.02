@@ -23,7 +23,7 @@ export type ActivityScope = (typeof ACTIVITY_SCOPES)[number]
 export const ACTIVITY_CATEGORIES = ['all', 'documents', 'messengers', 'approvals', 'admin'] as const
 export type ActivityCategory = (typeof ACTIVITY_CATEGORIES)[number]
 
-const MESSENGER_EVENTS = new Set(['PICKUP_REQUESTED', 'MESSENGER_REASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED', 'DELIVERY_FAILED'])
+const MESSENGER_EVENTS = new Set(['PICKUP_REQUESTED', 'MESSENGER_REASSIGNED', 'SENT_BACK', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED', 'DELIVERY_FAILED'])
 const APPROVAL_EVENTS = new Set(['APPROVAL_REQUESTED', 'APPROVED', 'RETURNED', 'COMPLETED'])
 // Covered by document events already, or too noisy to be useful here.
 const SKIPPED_AUDIT = new Set(['LOGIN', 'DOCUMENT_CREATE', 'DOCUMENT_SUBMIT', 'APPROVAL_APPROVED', 'APPROVAL_RETURNED'])
@@ -183,7 +183,7 @@ export async function activityLog(actor: Actor, query: ActivityQuery) {
   const userIds = new Set<string>()
   for (const e of filtered) {
     if (e.by) userIds.add(e.by)
-    for (const k of ['liaison_id', 'previous_liaison_id', 'received_by']) {
+    for (const k of ['liaison_id', 'previous_liaison_id', 'received_by', 'from_staff_id']) {
       const v = e.meta?.[k]
       if (typeof v === 'string') userIds.add(v)
     }
@@ -223,6 +223,8 @@ export async function activityLog(actor: Actor, query: ActivityQuery) {
       messenger: personName(e.meta?.liaison_id),
       previous_messenger: personName(e.meta?.previous_liaison_id),
       received_by: personName(e.meta?.received_by),
+      // Received from the previous desk of the same office.
+      from_staff: personName(e.meta?.from_staff_id),
       next_office: nextOffice ? (nextOffice.name as string) : null,
       document: doc ? { id: doc.id, title: doc.title, status: doc.status, tracking_number: trackingNumber(doc.id), qr_code: qrByDoc.get(doc.id) ?? null } : null,
     }

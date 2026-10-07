@@ -21,6 +21,8 @@ const deadline = computed(() => deadlineState(props.doc))
           <PriorityBadge :priority="doc.priority" />
           <ToneBadge v-if="deadline" :tone="deadline.tone" icon="clock">{{ deadline.label }}</ToneBadge>
           <ToneBadge v-if="(doc.file_count ?? 0) > 1" tone="neutral" icon="layers">{{ doc.file_count }} files</ToneBadge>
+          <ToneBadge v-if="doc.sent_back" tone="danger" icon="flag">Sent back to {{ doc.sent_back.office_name ?? 'previous office' }}</ToneBadge>
+          <ToneBadge v-else-if="doc.open_issues" tone="danger" icon="flag">Flagged</ToneBadge>
         </div>
         <NuxtLink
           :to="`/documents/${doc.id}`"
@@ -55,6 +57,9 @@ const deadline = computed(() => deadlineState(props.doc))
       </span>
       <span v-if="doc.liaison" class="inline-flex items-center gap-1.5">
         <FIcon name="truck" :size="13" /> {{ fullName(doc.liaison) }}
+      </span>
+      <span class="inline-flex items-center gap-1.5" :title="`Uploaded ${formatDate(doc.created_at)}, ${formatTime(doc.created_at)}`">
+        <FIcon name="calendar" :size="13" /> Uploaded {{ formatDate(doc.created_at) }}
       </span>
       <span class="ml-auto">Updated {{ timeAgo(doc.updated_at) }}</span>
     </div>

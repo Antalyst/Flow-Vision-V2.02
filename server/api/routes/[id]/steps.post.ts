@@ -3,10 +3,12 @@ import { updateRoute } from '~~/server/lib/routes.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { routeDto } from '~~/server/lib/serializers.ts'
 import { badRequest } from '~~/server/lib/errors.ts'
+import { requirePage } from '~~/server/lib/team.ts'
 
 /** Append steps to a Document Route (an edit: documents in flight keep their current steps). */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'CLIENT')
+  requirePage(user, '/client/routes')
   const routeId = routeParam(event, 'id')
   const body = await readJson(event)
   const added = Array.isArray(body.steps) ? body.steps : body.office_id ? [body] : []

@@ -50,6 +50,7 @@ export const EVENT_LABELS: Record<string, string> = {
   RESUBMITTED: 'Resubmitted',
   RECEIVED: 'Received (QR scanned)',
   PICKUP_REQUESTED: 'Messenger assigned',
+  SENT_BACK: 'Flagged & sent back',
   PICKED_UP: 'Picked up by messenger',
   IN_TRANSIT: 'In transit',
   ARRIVED: 'Dropped off at office',
@@ -59,6 +60,8 @@ export const EVENT_LABELS: Record<string, string> = {
   RETURNED: 'Returned to submitter',
   COMPLETED: 'Completed',
   MESSENGER_REASSIGNED: 'Messenger reassigned',
+  PASSED_TO_STAFF: 'Passed to the next staff',
+  PASS_CANCELLED: 'Taken back from the next staff',
   NOTE: 'Note',
 }
 

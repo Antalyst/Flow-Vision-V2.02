@@ -39,7 +39,7 @@ const freeCount = computed(() => liaisons.value.filter((l) => l.availability ===
 async function load() {
   loading.value = true
   try {
-    liaisons.value = (await api.get<{ data: LiaisonRow[] }>('/liaisons')).data
+    liaisons.value = (await api.get<{ data: LiaisonRow[] }>('/liaisons', { document_id: props.doc?.id })).data
     if (selected.value && !liaisons.value.some((l) => l.user.id === selected.value && l.availability === 'AVAILABLE')) selected.value = null
   } finally {
     loading.value = false
@@ -94,7 +94,7 @@ const availabilityLabel = { AVAILABLE: 'free', BUSY: 'busy', OFF_DUTY: 'off duty
     </p>
     <p class="mb-3 text-xs text-ink-body">
       {{ atOrigin ? `They pick it up from ${doc?.origin?.name ?? 'the origin'} and bring it to ${doc?.next_office_name ?? 'the first office'}.` : '' }}
-      Only free messengers can be chosen: on duty, with nothing to pick up or deliver.
+      Only free messengers can be chosen: on duty, with nothing to pick up or deliver<template v-if="doc?.currentOffice">, and from {{ doc.currentOffice.name }}'s own messengers</template>.
     </p>
 
     <div class="relative mb-2">

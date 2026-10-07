@@ -3,10 +3,12 @@ import { documentTypeDto, readProcessingTime } from '~~/server/lib/knowledge.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { conflict } from '~~/server/lib/errors.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { requirePage } from '~~/server/lib/team.ts'
 
 /** Add a document type (CLIENT only): name, description, processing_days + processing_hours (how long such documents may take). */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'CLIENT')
+  requirePage(user, '/client/settings')
   const body = await readJson(event)
   const name = v.reqStr(body, 'name', { max: 100, label: 'Name' })
   if (await DocumentType.count({ where: { org_id: user.org_id, name } })) throw conflict(`There is already a document type called “${name}”`, 'DUPLICATE')

@@ -4,6 +4,7 @@ import { userAttrs } from '~~/server/lib/document-queries.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { badRequest } from '~~/server/lib/errors.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { requirePage } from '~~/server/lib/team.ts'
 
 /**
  * Upload an AI knowledge file (CLIENT only). multipart/form-data: file, title, description.
@@ -11,6 +12,7 @@ import * as v from '~~/server/lib/validate.ts'
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'CLIENT')
+  requirePage(user, '/client/settings')
   const parts = (await readMultipartFormData(event)) ?? []
   const filePart = parts.find((p) => p.name === 'file' && p.filename !== undefined && p.data.length)
   if (!filePart) throw badRequest('Choose a file to upload')
