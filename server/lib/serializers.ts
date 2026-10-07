@@ -1,6 +1,7 @@
 import { Op } from 'sequelize'
 import { User, type Row } from './models.ts'
-import { readLog } from './tracking-log.ts'
+import { pendingPass, readLog } from './tracking-log.ts'
+import { parsePageAccess } from '../../shared/page-access.ts'
 
 /**
  * The database follows the project schema (org_id, sla_days, content, …); the API
@@ -123,6 +124,9 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
   const moving = CARRYING.includes(d.status)
   const handler = atOffice ? (val(d, 'visit_handler_id') as string | null) : null
   const liaisonId = atOffice || moving ? (val(d, 'visit_liaison_id') as string | null) : null
+  // Flagged and on its way back to the previous office (released for it, or being carried there).
+  const sendBack = String(val(d, 'send_back_raw') ?? '')
+  const sentBack = liaisonId && sendBack.startsWith('"') ? { office_id: sendBack.slice(1, 37), office_name: (val(d, 'send_back_office_name') as string | null) ?? null } : null
   const slaHours = val(d, 'step_sla_hours')
   const fileName = d.file_url ? String(d.file_url).split('/').pop() : null
   return {
@@ -131,7 +135,7 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
     route_id: d.route_id,
     route_name: val(d, 'route_name') ?? null,
     tracking_number: trackingNumber(d.id),
-    // The routing code printed on the document's QR label (OFFICE-CODE-12345678).
+    // The routing code printed on the document's QR label ({OFFICE}{MMDDYY}{6 digits}, e.g. BCC100726123456).
     qr_code: val(d, 'qr_code') ?? null,
     title: d.title,
     description: d.description ?? null,
@@ -160,7 +164,9 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
     created_at: iso(d.created_at),
     updated_at: iso(d.updated_at),
     total_steps: Number(val(d, 'total_steps') ?? 0),
-    next_office_name: val(d, 'next_office_name') ?? null,
+    next_office_name: sentBack ? sentBack.office_name : (val(d, 'next_office_name') ?? null),
+    sent_back: sentBack,
+    open_issues: Number(val(d, 'open_issues') ?? 0),
     step_sla_hours: slaHours == null ? null : Number(slaHours),
     step_entered_at: iso(val(d, 'visit_arrived_at')),
     currentOffice: officeDto(d.currentOffice),
@@ -234,7 +240,7 @@ export function routingVisits(visits: Row[], users: Map<string, Row>, offices: M
     const entry = first('ARRIVED', 'SUBMITTED', 'RESUBMITTED')
     const arrivedAt = entry?.at ?? iso(visit.arrived_at) ?? iso(visit.created_at)!
     const received = first('RECEIVED')
-    const release = last('PICKUP_REQUESTED', 'MESSENGER_REASSIGNED')
+    const release = last('PICKUP_REQUESTED', 'MESSENGER_REASSIGNED', 'SENT_BACK')
     const pickedUp = last('PICKED_UP')
     const decision = last('APPROVED', 'RETURNED')
     const failed = last('DELIVERY_FAILED')
@@ -253,6 +259,22 @@ export function routingVisits(visits: Row[], users: Map<string, Row>, offices: M
     const leftAt = pickedUp?.at ?? decision?.at ?? (open ? null : iso(visit.completed_at))
     const processedUntil = release?.at ?? decision?.at ?? leftAt ?? (state === 'AT_OFFICE' ? now : null)
     const toOfficeId = (pickedUp?.meta?.next_office_id ?? release?.meta?.next_office_id ?? null) as string | null
+    const pass = state === 'AT_OFFICE' ? pendingPass(visit) : null
+
+    // Desk by desk inside the office: each staff member who received it, until they passed it on.
+    const desks: Array<{ staff: ReturnType<typeof person>; received_at: string; passed_at: string | null; remarks: string | null; minutes: number | null; current: boolean }> = []
+    for (const e of log) {
+      const desk = desks.at(-1)
+      if (e.type === 'RECEIVED') desks.push({ staff: person(e.by), received_at: e.at, passed_at: null, remarks: null, minutes: null, current: false })
+      else if (e.type === 'PASSED_TO_STAFF' && desk) Object.assign(desk, { passed_at: e.at, remarks: e.remarks ?? null })
+      else if (e.type === 'PASS_CANCELLED' && desk) Object.assign(desk, { passed_at: null, remarks: null })
+    }
+    desks.forEach((d, i) => {
+      const holding = i === desks.length - 1 && !d.passed_at
+      d.current = holding && state === 'AT_OFFICE'
+      const until = d.passed_at ?? (holding ? (release && release.at >= d.received_at ? release.at : (decision?.at ?? leftAt ?? (d.current ? now : null))) : null)
+      d.minutes = minutesBetween(d.received_at, until)
+    })
 
     return {
       id: visit.id as string,
@@ -279,6 +301,11 @@ export function routingVisits(visits: Row[], users: Map<string, Row>, offices: M
       decided_by: person(decision?.by),
       left_at: leftAt,
       to_office: office(toOfficeId) ?? (state === 'TRANSFERRED' ? officeLite(nextVisit?.office) : null),
+      // Flagged with an issue and sent back to the previous office (instead of forward).
+      sent_back: release ? Boolean(release.type === 'SENT_BACK' || release.meta?.send_back_to) : false,
+      desks,
+      // Passed to the next staff and not received at the next desk yet: no messenger until it is.
+      pending_pass: pass ? { by: person(pass.by), at: pass.at, remarks: pass.remarks ?? null } : null,
       durations: {
         // Arrival → scanned in by the office.
         waiting_receipt: received ? minutesBetween(arrivedAt, received.at) : state === 'AT_OFFICE' ? minutesBetween(arrivedAt, now) : null,
@@ -294,7 +321,9 @@ export function routingVisits(visits: Row[], users: Map<string, Row>, offices: M
         at: e.at,
         actor: person(e.by),
         remarks: e.remarks ?? null,
-        messenger: e.type === 'PICKUP_REQUESTED' || e.type === 'MESSENGER_REASSIGNED' ? person(e.meta?.liaison_id) : null,
+        messenger: ['PICKUP_REQUESTED', 'MESSENGER_REASSIGNED', 'SENT_BACK'].includes(e.type) ? person(e.meta?.liaison_id) : null,
+        // A receipt from the previous desk of the same office.
+        from_staff: person(e.meta?.from_staff_id),
       })),
     }
   })
@@ -321,6 +350,7 @@ export function referencedUserIds(doc: Row, visits: Row[]) {
     for (const e of readLog(v)) {
       if (e.by) ids.add(e.by)
       if (typeof e.meta?.liaison_id === 'string') ids.add(e.meta.liaison_id)
+      if (typeof e.meta?.from_staff_id === 'string') ids.add(e.meta.from_staff_id)
     }
   }
   return [...ids]
@@ -405,5 +435,6 @@ export function memberDto(u: Row) {
     office: officeDto(u.office),
     last_login_at: iso(u.last_login),
     liaisonProfile: liaisonDto(u.liaisonProfile),
+    page_access: parsePageAccess(u.page_access),
   }
 }

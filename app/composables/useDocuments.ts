@@ -24,7 +24,13 @@ export function useDocuments() {
   const api = useApi()
 
   return {
-    list: (params: { scope?: DocumentScope; status?: string; q?: string; priority?: string; page?: number; limit?: number } = {}) =>
+    /**
+     * `office` = where it is now (office id, CLIENT only), `staff` = uploaded or handled by this staff
+     * member of your office (EMPLOYEE only), `type` = document type name.
+     */
+    list: (
+      params: { scope?: DocumentScope; status?: string; q?: string; priority?: string; office?: string; staff?: string; type?: string; page?: number; limit?: number } = {},
+    ) =>
       api.get<{ data: FlowDocument[]; meta: { total: number; page: number; limit: number } }>('/documents', params),
     get: (id: string) => api.get<DocumentDetail>(`/documents/${id}`),
     /** AI reads the file and suggests a title, description and type (nothing is saved). */
@@ -61,6 +67,9 @@ export function useDocuments() {
     requestPickup: (id: string, body: { liaison_user_id: string; remarks?: string }) =>
       api.post<{ document: FlowDocument; reassigned: boolean }>(`/documents/${id}/pickup-request`, body),
     cancelPickup: (id: string) => api.del<{ document: FlowDocument }>(`/documents/${id}/pickup-request`),
+    /** Pass it desk to desk to the next staff of the office; no messenger until another staff member scans it in. */
+    passToStaff: (id: string, remarks?: string) => api.post<{ document: FlowDocument }>(`/documents/${id}/pass-staff`, remarks ? { remarks } : {}),
+    takeBackPass: (id: string) => api.del<{ document: FlowDocument }>(`/documents/${id}/pass-staff`),
     startTransit: (id: string) => api.post<{ document: FlowDocument }>(`/documents/${id}/transit`),
     failDelivery: (id: string, remarks: string) => api.post<{ document: FlowDocument }>(`/documents/${id}/fail-delivery`, { remarks }),
     addNote: (id: string, remarks: string) => api.post(`/documents/${id}/notes`, { remarks }),

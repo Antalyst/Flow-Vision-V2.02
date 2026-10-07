@@ -46,7 +46,8 @@ const api = useApi()
 const phToday = () => new Intl.DateTimeFormat('en-CA', { timeZone: TIME_ZONE }).format(new Date())
 const shiftDay = (iso: string, days: number) => new Date(Date.parse(`${iso}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10)
 
-const officeId = ref('')
+// Shared with the dashboard: the office picked here also scopes its headline cards.
+const officeId = defineModel<string>('office', { default: '' })
 const to = ref(phToday())
 const from = ref(shiftDay(to.value, -29))
 const horizon = ref(7)
@@ -209,6 +210,23 @@ watch(data, () => nextTick(render))
 watch(slide, () => nextTick(() => charts.forEach((c) => c.reflow())))
 
 const trendTone = (pct: number) => (pct > 10 ? 'text-danger-ink' : pct < -10 ? 'text-sage-ink' : 'text-ink-body')
+
+// ── Expected workload, in plain words ─────────────────────────────────────────
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
+const waitingText = (n: number) => (n ? `${plural(n, 'document')} waiting now` : 'Nothing waiting now')
+function expectedText(predicted: number) {
+  const n = Math.round(predicted)
+  if (predicted <= 0) return 'no new ones expected'
+  if (n === 0) return 'maybe 1 more on the way'
+  return `about ${n} more expected`
+}
+const loadMax = computed(() => Math.max(1, ...(data.value?.busyness.offices ?? []).map((o) => o.queue + o.predicted)))
+function loadLevel(o: { queue: number; predicted: number; score: number }) {
+  if (o.queue + o.predicted < 0.5) return { label: 'Free', tone: 'neutral' as const }
+  if (o.score >= 75) return { label: 'Heavy', tone: 'danger' as const }
+  if (o.score >= 45) return { label: 'Moderate', tone: 'warning' as const }
+  return { label: 'Light', tone: 'success' as const }
+}
 </script>
 
 <template>
@@ -331,19 +349,31 @@ const trendTone = (pct: number) => (pct > 10 ? 'text-danger-ink' : pct < -10 ? '
               <div ref="busynessEl" class="mt-4 h-[280px]" />
             </div>
             <div>
-              <p class="text-sm font-semibold">Predicted load · next {{ data?.range.horizon ?? horizon }} days</p>
-              <p class="mt-0.5 text-xs text-ink-2">Waiting now + forecast arrivals</p>
+              <p class="text-sm font-semibold">Expected workload · next {{ data?.range.horizon ?? horizon }} days</p>
+              <p class="mt-0.5 text-xs text-ink-2">How much each office will have to handle: the documents already waiting there, plus the ones likely to arrive.</p>
+              <div class="mt-2 flex flex-wrap gap-3 text-[11px] text-ink-2">
+                <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-ink/70" /> Waiting now</span>
+                <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-info/40" /> Expected to arrive</span>
+              </div>
               <p v-if="!data?.busyness.offices.length" class="mt-4 text-sm text-ink-2">No office activity in this range.</p>
-              <ul v-else class="mt-3 space-y-3">
+              <ul v-else class="mt-3 space-y-3.5">
                 <li v-for="o in data.busyness.offices" :key="o.id">
-                  <button type="button" class="w-full text-left" @click="officeId = officeId === o.id ? '' : o.id">
+                  <button
+                    type="button"
+                    class="w-full rounded-lg text-left"
+                    :aria-pressed="officeId === o.id"
+                    :title="officeId === o.id ? 'Show all offices again' : `Show ${o.name} only`"
+                    @click="officeId = officeId === o.id ? '' : o.id"
+                  >
                     <div class="flex items-center justify-between gap-2 text-[13px]">
                       <span class="truncate font-medium" :class="officeId === o.id && 'text-terracotta-ink'">{{ o.name }}</span>
-                      <span class="mono shrink-0 text-ink-2">{{ o.queue }} + {{ Math.round(o.predicted) }}</span>
+                      <ToneBadge :tone="loadLevel(o).tone" class="shrink-0">{{ loadLevel(o).label }}</ToneBadge>
                     </div>
-                    <div class="mt-1.5 h-2 overflow-hidden rounded-full bg-line/50">
-                      <div class="h-full rounded-full" :class="o.score >= 75 ? 'bg-danger' : o.score >= 45 ? 'bg-amber' : 'bg-sage'" :style="{ width: `${Math.max(3, o.score)}%` }" />
+                    <div class="mt-1.5 flex h-2 overflow-hidden rounded-full bg-line/50">
+                      <div class="h-full bg-ink/70" :style="{ width: `${(o.queue / loadMax) * 100}%` }" />
+                      <div class="h-full bg-info/40" :style="{ width: `${(o.predicted / loadMax) * 100}%` }" />
                     </div>
+                    <p class="mt-1 text-xs text-ink-2">{{ waitingText(o.queue) }} · {{ expectedText(o.predicted) }}</p>
                   </button>
                 </li>
               </ul>

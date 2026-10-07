@@ -1,3 +1,4 @@
+import { canOpenPage } from '#shared/page-access'
 import type { AccountType } from '~/types'
 
 // "/" is the public landing page; signed-in users skip it and land in their portal.
@@ -28,6 +29,9 @@ export default defineNuxtRouteMiddleware(async (to) => {
 
   const portal = Object.keys(PORTALS).find((prefix) => to.path === prefix || to.path.startsWith(`${prefix}/`))
   if (portal && PORTALS[portal] !== auth.role) return navigateTo(auth.homePath)
+
+  // Pages the account's manager didn't grant are closed to it.
+  if (auth.role && !canOpenPage(auth.role, auth.user?.page_access, to.path)) return navigateTo(auth.homePath)
 
   // Conditional UI: the approval page exists only for STAFF at the final checkpoint.
   if (to.path.startsWith('/staff/approval') && !auth.user?.has_approval_authority) {

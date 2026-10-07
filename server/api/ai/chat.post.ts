@@ -13,6 +13,7 @@ import {
   touchConversation,
 } from '~~/server/lib/ai-history.ts'
 import { AiMessage } from '~~/server/lib/models.ts'
+import { requirePage } from '~~/server/lib/team.ts'
 
 // The free models allow 8,000 tokens a minute, so only the recent turns go along.
 const MAX_HISTORY = 12
@@ -74,6 +75,7 @@ type StreamEvent =
  */
 export default defineApiHandler(async (event) => {
   const actor = await requireUser(event, ...ASSISTANT_ROLES)
+  requirePage(actor, '/ai/chat')
   throttle(actor.id)
   const body = await readJson(event)
   const text = readQuestion(body)

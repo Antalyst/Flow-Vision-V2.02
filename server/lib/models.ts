@@ -72,6 +72,8 @@ export const User = define(
     last_login: DataTypes.DATE,
     email_verified: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     two_factor_enabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // JSON list of the pages the account may open, set by whoever manages it. NULL = every page of its role.
+    page_access: DataTypes.TEXT,
   },
   {
     defaultScope: { attributes: { exclude: ['password_hash'] } },
@@ -181,7 +183,7 @@ export const Liaison = define('liaisons', {
   vehicle_type: DataTypes.STRING(50),
 })
 
-/** One row per document: its permanent routing code ({OFFICE_CODE}-{8 digits}), issued on upload and scanned at every hand-off. */
+/** One row per document: its permanent routing code ({OFFICE_CODE}{MMDDYY}{6 digits}, older ones {OFFICE_CODE}-{8 digits}), issued on upload and scanned at every hand-off. */
 export const QrCode = define(
   'qr_codes',
   {

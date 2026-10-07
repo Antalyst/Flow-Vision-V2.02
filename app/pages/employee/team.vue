@@ -16,6 +16,7 @@ interface TeamMember {
   last_login_at: string | null
   must_change_password: boolean
   liaisonProfile: LiaisonProfile | null
+  page_access: string[] | null
 }
 
 type ManagedType = 'STAFF' | 'LIAISON'
@@ -50,7 +51,7 @@ const counts = computed(() => {
 
 const formOpen = ref(false)
 const editing = ref<TeamMember | null>(null)
-const form = reactive({ account_type: 'STAFF' as ManagedType, first_name: '', last_name: '', email: '', phone: '', status: 'ACTIVE' })
+const form = reactive({ account_type: 'STAFF' as ManagedType, first_name: '', last_name: '', email: '', phone: '', status: 'ACTIVE', page_access: null as string[] | null })
 
 function openForm(member?: TeamMember) {
   editing.value = member ?? null
@@ -61,6 +62,7 @@ function openForm(member?: TeamMember) {
     email: member?.email ?? '',
     phone: member?.phone ?? '',
     status: member?.status ?? 'ACTIVE',
+    page_access: member?.page_access ? [...member.page_access] : null,
   })
   formOpen.value = true
 }
@@ -156,6 +158,7 @@ async function copyCredentials() {
                 {{ fullName(m) }}
                 <ToneBadge v-if="m.status === 'SUSPENDED'" tone="danger">Suspended</ToneBadge>
                 <ToneBadge v-else-if="m.must_change_password" tone="warning">Temp password</ToneBadge>
+                <ToneBadge v-if="m.page_access" tone="neutral" icon="lock">{{ m.page_access.length }} pages</ToneBadge>
               </p>
               <p class="truncate text-xs text-ink-2">{{ m.email }}</p>
             </div>
@@ -189,7 +192,7 @@ async function copyCredentials() {
               class="flex cursor-pointer flex-col rounded-xl border p-3 transition-colors"
               :class="form.account_type === role ? 'border-terracotta bg-terracotta/[0.06]' : 'border-line hover:bg-card'"
             >
-              <input v-model="form.account_type" type="radio" :value="role" class="sr-only" />
+              <input v-model="form.account_type" type="radio" :value="role" class="sr-only" @change="form.page_access = null" />
               <span class="flex items-center gap-2 text-sm font-semibold"><span class="size-2 rounded-full" :class="TONE_DOT[ROLE_META[role].tone]" />{{ meta.label }}</span>
               <span class="mt-1 text-xs text-ink-body">{{ meta.description }}</span>
             </label>
@@ -220,6 +223,7 @@ async function copyCredentials() {
             <option value="SUSPENDED">Suspended — cannot sign in</option>
           </select>
         </div>
+        <PageAccessPicker v-model="form.page_access" :role="form.account_type" />
       </form>
       <template #footer>
         <button class="btn btn-ghost" @click="formOpen = false">Cancel</button>

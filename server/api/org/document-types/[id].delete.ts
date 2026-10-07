@@ -1,10 +1,12 @@
 import { DocumentType } from '~~/server/lib/models.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { notFound } from '~~/server/lib/errors.ts'
+import { requirePage } from '~~/server/lib/team.ts'
 
 /** Remove a document type (CLIENT only). Documents already filed under it keep the name. */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'CLIENT')
+  requirePage(user, '/client/settings')
   const type = await DocumentType.findOne({ where: { id: routeParam(event, 'id'), org_id: user.org_id } })
   if (!type) throw notFound('Document type')
   await type.destroy()

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { canOpenPage } from '#shared/page-access'
 import type { AccountType } from '~/types'
 
 interface NavItem {
@@ -82,6 +83,7 @@ const ROLE_NAV: Record<AccountType, NavGroup[]> = {
         { to: '/documents/new', label: 'Upload document', icon: 'plus-circle' },
       ],
     },
+    { id: 'team', title: 'Team', items: [{ to: '/staff/team', label: 'Messengers', icon: 'users', hidden: !auth.user?.office }] },
   ],
   LIAISON: [
     { id: 'overview', title: null, items: [{ to: '/liaison/dashboard', label: 'Pickups', icon: 'home' }] },
@@ -118,7 +120,7 @@ const SHARED_GROUPS: NavGroup[] = [
 
 const groups = computed(() =>
   [...(auth.role ? ROLE_NAV[auth.role] : []), ...SHARED_GROUPS]
-    .map((g) => ({ ...g, items: g.items.filter((i) => !i.hidden) }))
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.hidden && canOpenPage(auth.role!, auth.user?.page_access, i.to)) }))
     .filter((g) => g.items.length),
 )
 

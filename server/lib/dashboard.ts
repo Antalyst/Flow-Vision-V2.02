@@ -1,8 +1,10 @@
 import { Op, fn, col, literal } from 'sequelize'
-import { Approval, Document, DocumentTracking, Issue, Liaison, Office, User } from './models.ts'
+import { Approval, Document, DocumentTracking, DocumentType, Issue, Liaison, Office, User } from './models.ts'
 import { countActiveRoutes } from './routes.ts'
 import { hasApprovalAuthority, type Actor } from './auth.ts'
 import { deliveriesToday } from './liaisons.ts'
+import { badRequest } from './errors.ts'
+import { typeHours } from './knowledge.ts'
 import { AT_OFFICE, CARRYING, documentDtos, liaisonDto, officeDto } from './serializers.ts'
 import { carriedBy, documentAttributes, documentIncludes, hasOpenPickup, incomingTo, isReceived, noOpenPickup, notReceived, pickupsWhere, submittedFromOffice } from './document-queries.ts'
 
@@ -53,6 +55,80 @@ export async function clientDashboard(user: Actor) {
     team: Object.fromEntries(team.map((t) => [t.account_type, Number(t.count)])),
     routes: routeCount,
     recent: await documentDtos(recent),
+  }
+}
+
+/**
+ * The four headline cards of the client dashboard, for the whole organization or one office
+ * (the office picked in the Forecasts filter):
+ *   active      documents at the office now (moving on from it included)
+ *   approvals   waiting for a final decision there
+ *   completed   documents uploaded by the office's people that were approved — per document type
+ *   overdue     past their target date while at the office
+ */
+export async function dashboardCards(user: Actor, officeId: string | null) {
+  const org = user.org_id
+  const office = officeId ? await Office.findOne({ where: { id: officeId, org_id: org }, attributes: ['id', 'name', 'code'] }) : null
+  if (officeId && !office) throw badRequest('Unknown office', { field: 'office_id' })
+
+  const here = office ? { current_office_id: office.id } : {}
+  const fromOffice = office ? { [Op.and]: [submittedFromOffice(office.id)] } : {}
+  const [active, overdue, pendingApprovals, byType, orgTypes, usedTypes] = await Promise.all([
+    Document.count({ where: { org_id: org, status: { [Op.in]: ACTIVE }, ...here } }),
+    Document.count({ where: { org_id: org, status: { [Op.in]: ACTIVE }, target_completion_date: { [Op.lt]: new Date() }, ...here } }),
+    Approval.count({
+      where: { status: 'PENDING', ...(office ? { office_id: office.id } : {}) },
+      distinct: true,
+      col: 'document_id',
+      include: [{ model: Document, as: 'document', where: { org_id: org }, attributes: [] }],
+    }),
+    Document.findAll({
+      where: { org_id: org, status: 'COMPLETED', ...fromOffice },
+      attributes: [
+        'category',
+        [fn('COUNT', col('id')), 'count'],
+        [fn('AVG', literal('CASE WHEN completed_at IS NOT NULL THEN TIMESTAMPDIFF(MINUTE, submitted_at, completed_at) END')), 'minutes'],
+      ],
+      group: ['category'],
+      raw: true,
+    }) as unknown as Promise<Array<{ category: string | null; count: number; minutes: number | null }>>,
+    DocumentType.findAll({ where: { org_id: org }, attributes: ['name', 'is_active', 'sort_order', 'processing_days', 'processing_hours'] }),
+    // One office: the document types its people picked when uploading (any status).
+    office
+      ? (Document.findAll({ where: { org_id: org, ...fromOffice }, attributes: ['category'], group: ['category'], raw: true }) as unknown as Promise<Array<{ category: string | null }>>)
+      : Promise.resolve([] as Array<{ category: string | null }>),
+  ])
+
+  // Every document type in scope — all the organization's (active) types, or the ones the office
+  // uploaded with — plus any type a completed document carries, each with its completed count.
+  const typeName = (c: string | null) => c || 'No type'
+  const typeInfo = new Map(orgTypes.map((t) => [t.name as string, t]))
+  const completedBy = new Map(byType.map((t) => [typeName(t.category), t]))
+  const names = new Set<string>([
+    ...(office ? usedTypes.map((u) => typeName(u.category)) : orgTypes.filter((t) => t.is_active).map((t) => t.name as string)),
+    ...completedBy.keys(),
+  ])
+  const types = [...names]
+    .map((name) => {
+      const done = completedBy.get(name)
+      const info = typeInfo.get(name)
+      return {
+        type: name,
+        count: done ? Number(done.count) : 0,
+        avg_minutes: done?.minutes == null ? null : Math.round(Number(done.minutes)),
+        // The time Organization Settings allows for the type (0 = no limit).
+        target_hours: info ? typeHours(info) : 0,
+        sort: info ? Number(info.sort_order ?? 0) : Number.MAX_SAFE_INTEGER,
+      }
+    })
+    .sort((a, b) => b.count - a.count || a.sort - b.sort || a.type.localeCompare(b.type))
+    .map(({ sort: _sort, ...t }) => t)
+  return {
+    office: office ? { id: office.id as string, name: office.name as string, code: office.code as string } : null,
+    active,
+    pending_approvals: pendingApprovals,
+    overdue,
+    completed: { total: types.reduce((n, t) => n + t.count, 0), by_type: types },
   }
 }
 

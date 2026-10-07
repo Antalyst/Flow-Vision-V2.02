@@ -3,10 +3,12 @@ import { Document, DocumentType, KnowledgeFile, Organization, User } from '~~/se
 import { documentTypeDto, knowledgeDto } from '~~/server/lib/knowledge.ts'
 import { userAttrs } from '~~/server/lib/document-queries.ts'
 import { env } from '~~/server/lib/env.ts'
+import { requirePage } from '~~/server/lib/team.ts'
 
 /** Organization Settings (CLIENT only): profile, document types (with how many documents use each), AI knowledge files. */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'CLIENT')
+  requirePage(user, '/client/settings')
   const [org, types, usage, files] = await Promise.all([
     Organization.findByPk(user.org_id),
     DocumentType.findAll({ where: { org_id: user.org_id }, order: [['sort_order', 'ASC'], ['name', 'ASC']] }),

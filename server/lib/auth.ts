@@ -4,6 +4,7 @@ import { Op } from 'sequelize'
 import { AuthSession, Liaison, Office, Organization, User, type Row } from './models.ts'
 import { liaisonDto, officeDto } from './serializers.ts'
 import { env } from './env.ts'
+import { parsePageAccess } from '../../shared/page-access.ts'
 
 /** A signed-in user with `office` and `organization` loaded. */
 export type Actor = Row
@@ -122,5 +123,6 @@ export async function serializeActor(user: Actor) {
     office: officeDto(user.office),
     has_approval_authority: hasApprovalAuthority(user),
     liaison: liaisonDto(liaison),
+    page_access: parsePageAccess(user.page_access),
   }
 }

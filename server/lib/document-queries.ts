@@ -11,6 +11,13 @@ export const userAttrs = ['id', 'first_name', 'last_name', 'full_name', 'email',
 export const currentVisit = (column: string, doc = 'documents') =>
   `(SELECT t.${column} FROM document_tracking t WHERE t.document_id = ${doc}.id AND t.step_number = ${doc}.current_step_number ORDER BY t.created_at DESC LIMIT 1)`
 
+/**
+ * SQL twin of tracking-log.ts sendBackTarget: the text after the last `"send_back_to":` in the
+ * current visit's event log. It is '"<office id>"' (38 chars) while a send-back is open — the
+ * document is going back to that office — and anything not starting with a quote otherwise.
+ */
+export const sendBackSql = (doc = 'documents') => `LEFT(SUBSTRING_INDEX(${currentVisit('notes', doc)}, '"send_back_to":', -1), 38)`
+
 // Computed per row so lists can show progress, destination, SLA and visit state without extra round trips.
 export const documentAttributes: any = {
   include: [
@@ -33,6 +40,10 @@ export const documentAttributes: any = {
     [sequelize.literal('(SELECT o.id FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office_id'],
     [sequelize.literal('(SELECT o.name FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office_name'],
     [sequelize.literal('(SELECT g.name FROM organizations g WHERE g.id = documents.org_id)'), 'org_name'],
+    // Flagged and sent back to the previous office (see sendBackSql), and issues still open on it.
+    [sequelize.literal(sendBackSql()), 'send_back_raw'],
+    [sequelize.literal(`(SELECT o.name FROM offices o WHERE CONCAT('"', o.id, '"') = ${sendBackSql()})`), 'send_back_office_name'],
+    [sequelize.literal("(SELECT COUNT(*) FROM issues i WHERE i.document_id = documents.id AND i.status IN ('OPEN', 'IN_PROGRESS'))"), 'open_issues'],
   ],
 }
 
@@ -52,7 +63,10 @@ const esc = (value: string) => sequelize.escape(value)
 
 /** Documents travelling towards `officeId` (destination = the step after the current one). */
 export const incomingTo = (officeId: string) =>
-  lit(`EXISTS (SELECT 1 FROM route_steps rs WHERE rs.route_id = documents.route_id AND rs.step_number = documents.current_step_number + 1 AND rs.office_id = ${esc(officeId)})`)
+  lit(
+    `(${sendBackSql()} = CONCAT('"', ${esc(officeId)}, '"') OR (COALESCE(${sendBackSql()}, '') NOT LIKE '"%' AND ` +
+      `EXISTS (SELECT 1 FROM route_steps rs WHERE rs.route_id = documents.route_id AND rs.step_number = documents.current_step_number + 1 AND rs.office_id = ${esc(officeId)})))`,
+  )
 
 // A document waiting at an office has an open pickup once it is released to a messenger.
 export const hasOpenPickup = () => lit(`${currentVisit('liaison_id')} IS NOT NULL`)
@@ -118,7 +132,7 @@ export const visitedOffice = (officeId: string) => lit(`EXISTS (SELECT 1 FROM do
  *   EMPLOYEE  its own uploads, uploads by its office's staff, and every document that is
  *             at, arrived at, or is heading to its office
  *   STAFF     only its own uploads
- *   LIAISON   unchanged — pickups and deliveries are filtered by scope
+ *   LIAISON   only the documents released to it or in its hands right now
  */
 export function visibleWhere(actor: Actor): WhereOptions {
   switch (actor.account_type) {
@@ -137,17 +151,26 @@ export function visibleWhere(actor: Actor): WhereOptions {
     }
     case 'STAFF':
       return { submitted_by: actor.id }
+    case 'LIAISON':
+      return { status: { [Op.in]: [...AT_OFFICE, ...CARRYING] }, [Op.and]: [carriedBy(actor.id)] }
     default:
       return {}
   }
 }
 
+/** Documents this messenger was ever given or carried (their delivery history). */
+const handledBy = (userId: string) =>
+  lit(
+    `EXISTS (SELECT 1 FROM document_tracking t WHERE t.document_id = documents.id AND (t.liaison_id = ${esc(userId)} OR t.notes LIKE ${esc(`%"liaison_id":"${userId}"%`)} OR t.notes LIKE ${esc(`%"by":"${userId}"%`)}))`,
+  )
+
 /**
  * Who can open a single document: everyone it is visible to, plus STAFF for documents
  * waiting at their own office — they still receive and approve those, even though the
- * documents don't show up in their lists.
+ * documents don't show up in their lists — and messengers for documents they delivered before.
  */
 export function openableWhere(actor: Actor): WhereOptions {
+  if (actor.account_type === 'LIAISON') return { [Op.or]: [visibleWhere(actor), handledBy(actor.id)] }
   if (actor.account_type === 'STAFF' && actor.office_id) {
     return { [Op.or]: [visibleWhere(actor), { current_office_id: actor.office_id, status: { [Op.in]: AT_OFFICE } }] }
   }

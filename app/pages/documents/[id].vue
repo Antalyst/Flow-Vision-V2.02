@@ -57,6 +57,13 @@ const shownRoute = computed(() =>
 )
 
 const pickupOpen = ref(false)
+const passOpen = ref(false)
+const sendBackOpen = ref(false)
+// Passed to the next staff of the office, not received at the next desk yet (current visit only).
+const pendingPass = computed(() => {
+  const visit = data.value?.routing?.at(-1)
+  return visit?.state === 'AT_OFFICE' ? visit.pending_pass : null
+})
 const failOpen = ref(false)
 const failRemarks = ref('')
 const note = ref('')
@@ -143,8 +150,20 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
       >
         <FIcon name="user-check" :size="18" class="mt-0.5 shrink-0" />
         <span>
-          <strong>{{ fullName(doc.received_by) }}</strong> received this document, so only they can release it and assign its messenger<template v-if="doc.liaison"> (now {{ fullName(doc.liaison) }})</template>.
+          <strong>{{ fullName(doc.received_by) }}</strong> received this document, so only they can pass it to the next staff or release it and assign its messenger<template v-if="doc.liaison"> (now {{ fullName(doc.liaison) }})</template>.
         </span>
+      </div>
+
+      <!-- Desk to desk: passed on inside the office, waiting for the next staff to scan it in. -->
+      <div v-if="pendingPass" class="mb-4 flex items-start gap-3 rounded-2xl bg-amber/15 p-4 text-sm text-amber-ink">
+        <FIcon name="users" :size="18" class="mt-0.5 shrink-0" />
+        <div class="min-w-0">
+          <p>
+            <strong>{{ pendingPass.by ? fullName(pendingPass.by) : 'A staff member' }}</strong> passed this document to the next staff at {{ doc.currentOffice?.name ?? 'this office' }}
+            {{ timeAgo(pendingPass.at) }}. No messenger can be assigned until another staff member scans it in.
+          </p>
+          <p v-if="pendingPass.remarks" class="mt-1 italic">“{{ pendingPass.remarks }}”</p>
+        </div>
       </div>
 
       <!-- Actions available to this user right now -->
@@ -182,6 +201,22 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
           <FIcon name="truck" :size="16" />
           {{ doc.current_step_number === 0 ? 'Assign messenger' : 'Release to messenger' }} → {{ doc.next_office_name ?? 'next office' }}
         </button>
+        <button v-if="perms!.canPassToStaff" class="btn btn-secondary" @click="passOpen = true">
+          <FIcon name="users" :size="16" /> Pass to next staff
+        </button>
+        <button v-if="perms!.canSendBack" class="btn btn-danger" @click="sendBackOpen = true">
+          <FIcon name="flag" :size="16" /> Flag issue &amp; send back
+        </button>
+        <ToneBadge v-if="doc.sent_back" tone="danger" icon="flag">Flagged — going back to {{ doc.sent_back.office_name ?? 'the previous office' }}</ToneBadge>
+        <NuxtLink v-if="doc.open_issues" :to="`/issues?document=${doc.id}`" class="btn btn-ghost btn-sm">
+          <FIcon name="alert-circle" :size="14" /> {{ doc.open_issues }} open issue{{ doc.open_issues === 1 ? '' : 's' }}
+        </NuxtLink>
+        <template v-if="perms!.canTakeBackPass">
+          <ToneBadge tone="warning" icon="users">Waiting for the next staff to scan it in</ToneBadge>
+          <button class="btn btn-ghost" :disabled="!!busy" :aria-busy="busy === 'takeback'" @click="act('takeback', () => docsApi.takeBackPass(id), 'Taken back — it is at your desk again')">
+            <FIcon name="corner-up-left" :size="16" /> Take it back
+          </button>
+        </template>
         <template v-if="perms!.canReassign || perms!.canCancelPickup">
           <ToneBadge tone="warning" icon="user">Waiting for {{ fullName(doc.liaison) }} to pick it up</ToneBadge>
           <button v-if="perms!.canReassign" class="btn btn-secondary" @click="pickupOpen = true"><FIcon name="repeat" :size="16" /> Reassign messenger</button>
@@ -318,6 +353,8 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
       </div>
 
       <RequestPickupModal :open="pickupOpen" :doc="doc" @close="pickupOpen = false" @requested="onRequested" />
+      <PassToStaffModal :open="passOpen" :doc="doc" @close="passOpen = false" @passed="onRequested" />
+      <SendBackModal :open="sendBackOpen" :doc="doc" @close="sendBackOpen = false" @sent="onRequested" />
 
       <AppModal :open="failOpen" title="Report failed delivery" description="The document goes back to its origin office, which will route it again." width="sm" @close="failOpen = false">
         <label class="field-label" for="fail-remarks">What happened?</label>

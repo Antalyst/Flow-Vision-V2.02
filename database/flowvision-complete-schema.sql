@@ -335,7 +335,7 @@ CREATE TABLE `pending_approvals` (
 CREATE TABLE `qr_codes` (
   `id` char(36) NOT NULL,
   `document_id` char(36) NOT NULL COMMENT 'Document reference',
-  `qr_code_data` varchar(500) NOT NULL COMMENT 'Routing code on the QR label: {OFFICE_CODE}-{8 digits}',
+  `qr_code_data` varchar(500) NOT NULL COMMENT 'Routing code on the QR label: {OFFICE_CODE}{MMDDYY}{6 digits}',
   `format` varchar(50) NOT NULL DEFAULT 'QR' COMMENT 'QR code format',
   `size` varchar(20) NOT NULL DEFAULT '25mm' COMMENT 'Standard size',
   `office_code` varchar(50) DEFAULT NULL COMMENT 'Organization-office code',
@@ -384,6 +384,7 @@ CREATE TABLE `users` (
   `last_login` timestamp NULL DEFAULT NULL COMMENT 'Last login time',
   `email_verified` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Email verification status',
   `two_factor_enabled` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Two-factor authentication',
+  `page_access` text DEFAULT NULL COMMENT 'JSON list of pages the account may open (NULL = every page of its role)',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='User accounts with role-based access';

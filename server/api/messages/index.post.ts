@@ -1,4 +1,6 @@
+import { Op } from 'sequelize'
 import { Document, Message, User } from '~~/server/lib/models.ts'
+import { openableWhere } from '~~/server/lib/document-queries.ts'
 import { senderInclude } from '~~/server/lib/messages.ts'
 import { messageDto } from '~~/server/lib/serializers.ts'
 import { emit } from '~~/server/lib/realtime.ts'
@@ -23,7 +25,7 @@ export default defineApiHandler(async (event) => {
     record.recipient_id = recipient.id
     topics = [`user:${recipient.id}`, `user:${user.id}`]
   } else if (threadType === 'DOCUMENT') {
-    const doc = await Document.findOne({ where: { id: String(body.document_id ?? ''), org_id: user.org_id }, attributes: ['id'] })
+    const doc = await Document.findOne({ where: { id: String(body.document_id ?? ''), org_id: user.org_id, [Op.and]: [openableWhere(user)] }, attributes: ['id'] })
     if (!doc) throw badRequest('Document not found')
     record.document_id = doc.id
     topics = [`doc:${doc.id}`]

@@ -10,6 +10,7 @@ onMounted(() => notifications.load().catch(() => {}))
 const ICONS: Record<string, string> = {
   DOCUMENT_INCOMING: 'inbox',
   DOCUMENT_RECEIVED: 'check',
+  DOCUMENT_PASSED: 'users',
   PICKUP_REQUESTED: 'package',
   DOCUMENT_PICKED_UP: 'truck',
   DOCUMENT_ARRIVED: 'map-pin',
@@ -19,6 +20,7 @@ const ICONS: Record<string, string> = {
   APPROVAL_REQUESTED: 'clock',
   DOCUMENT_COMPLETED: 'award',
   DOCUMENT_RETURNED: 'corner-up-left',
+  DOCUMENT_SENT_BACK: 'flag',
   ISSUE_REPORTED: 'flag',
   ISSUE_ASSIGNED: 'flag',
 }

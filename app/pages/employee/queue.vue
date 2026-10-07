@@ -40,6 +40,7 @@ const buckets = computed<Record<TabKey, FlowDocument[]>>(() => {
 })
 
 const pickupDoc = ref<FlowDocument | null>(null)
+const passDoc = ref<FlowDocument | null>(null)
 
 async function cancelPickup(d: FlowDocument) {
   if (await run(`cancel-${d.id}`, () => docsApi.cancelPickup(d.id), 'Release cancelled — the messenger was told')) refreshAll()
@@ -79,9 +80,10 @@ async function cancelPickup(d: FlowDocument) {
           <template v-else-if="tab === 'process'">
             <template v-if="d.next_office_name">
               <button v-if="releasesDocument(d, auth.user?.id)" class="btn btn-sm btn-primary" @click="pickupDoc = d"><FIcon name="truck" :size="14" /> Release → {{ d.next_office_name }}</button>
-              <ToneBadge v-else tone="info" icon="user">Received by {{ fullName(d.received_by) }} — they release it</ToneBadge>
+              <ToneBadge v-else tone="info" icon="user">Received by {{ fullName(d.received_by) }} — they pass or release it</ToneBadge>
             </template>
             <NuxtLink v-else :to="`/documents/${d.id}#approval`" class="btn btn-sm btn-success"><FIcon name="check-square" :size="14" /> Last office — review &amp; approve</NuxtLink>
+            <button v-if="d.current_step_number !== 0 && releasesDocument(d, auth.user?.id)" class="btn btn-sm btn-secondary" @click="passDoc = d"><FIcon name="users" :size="14" /> Pass to next staff</button>
           </template>
           <template v-else-if="tab === 'pickup'">
             <ToneBadge tone="warning" icon="user">Waiting for {{ fullName(d.liaison) }}</ToneBadge>
@@ -97,5 +99,6 @@ async function cancelPickup(d: FlowDocument) {
     </div>
 
     <RequestPickupModal :open="Boolean(pickupDoc)" :doc="pickupDoc" @close="pickupDoc = null" @requested="refreshAll" />
+    <PassToStaffModal :open="Boolean(passDoc)" :doc="passDoc" @close="passDoc = null" @passed="refreshAll" />
   </div>
 </template>

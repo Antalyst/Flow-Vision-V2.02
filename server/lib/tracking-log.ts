@@ -49,3 +49,34 @@ export function appendLog(visit: Row, event: Omit<LogEvent, 'id' | 'at'> & { at?
   visit.notes = next
   return entry
 }
+
+/**
+ * Where the visit's open release takes the document when it is a send-back: flagged with an issue
+ * and carried back to the previous office. Every event that opens or closes a release (assigned,
+ * reassigned, sent back, unassigned, delivery failed) records `send_back_to` — an office id, or
+ * null for a normal release forward — and the last one decides. Null = forward along the route.
+ * (document-queries.ts sendBackSql reads the same marker in SQL.)
+ */
+export function sendBackTarget(visit: Row | null | undefined): { officeId: string; step: number; issueId: string | null } | null {
+  if (!visit) return null
+  const last = readLog(visit)
+    .filter((e) => e.meta && 'send_back_to' in e.meta)
+    .at(-1)
+  if (typeof last?.meta?.send_back_to !== 'string') return null
+  return { officeId: last.meta.send_back_to, step: Number(last.meta.target_step ?? 0), issueId: (last.meta.issue_id as string | undefined) ?? null }
+}
+
+// Events that change who holds the document inside an office.
+const DESK_EVENTS = ['RECEIVED', 'PASSED_TO_STAFF', 'PASS_CANCELLED', 'DELIVERY_FAILED']
+
+/**
+ * The visit's open desk-to-desk hand-off: a staff member passed the document to the next staff
+ * of the same office (handler_id cleared) and nobody has scanned it in since. Null otherwise.
+ */
+export function pendingPass(visit: Row | null | undefined): LogEvent | null {
+  if (!visit || visit.handler_id) return null
+  const last = readLog(visit)
+    .filter((e) => DESK_EVENTS.includes(e.type))
+    .at(-1)
+  return last?.type === 'PASSED_TO_STAFF' ? last : null
+}

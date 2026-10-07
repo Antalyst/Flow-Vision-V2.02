@@ -13,7 +13,8 @@ const auth = useAuthStore()
 
 const [{ data: docs, refresh: refreshDocs }, { data: liaisonData, refresh: refreshLiaisons }] = await Promise.all([
   useAsyncData('liaison-page-docs', () => docsApi.list({ scope: 'office', limit: 100 })),
-  useAsyncData('liaison-page-liaisons', () => api.get<{ data: LiaisonRow[] }>('/liaisons')),
+  // Each office releases documents with its own messengers.
+  useAsyncData('liaison-page-liaisons', () => api.get<{ data: LiaisonRow[] }>('/liaisons', { office_id: auth.user?.office?.id })),
 ])
 useLiveRefresh(() => Promise.all([refreshDocs(), refreshLiaisons()]))
 

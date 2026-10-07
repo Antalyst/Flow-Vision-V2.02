@@ -2,6 +2,7 @@ import { createDocument, SUBMITTER_TYPES } from '~~/server/lib/documents.ts'
 import { loadDocumentDto } from '~~/server/lib/document-queries.ts'
 import { parseDocumentForm, removeUpload } from '~~/server/lib/uploads.ts'
 import { badRequest } from '~~/server/lib/errors.ts'
+import { requirePage } from '~~/server/lib/team.ts'
 import * as v from '~~/server/lib/validate.ts'
 
 /**
@@ -13,6 +14,7 @@ import * as v from '~~/server/lib/validate.ts'
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, ...SUBMITTER_TYPES)
+  requirePage(user, '/documents/new')
   const { fields, files } = await parseDocumentForm(await readMultipartFormData(event), user.id)
   try {
     let pages: number | null = null

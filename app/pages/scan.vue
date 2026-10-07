@@ -136,7 +136,7 @@ async function onDecode(data: string) {
 async function verify(data: string) {
   const value = data.trim().toUpperCase()
   if (!qrApi.looksValid(value)) {
-    ui.error('Not a FlowVision document code', 'Expected the office code followed by 8 digits, e.g. BAG-ADM-RECORDS-48213907')
+    ui.error('Not a FlowVision document code', 'Expected the office code, the upload date and 6 digits, e.g. BCC100726123456')
     resume()
     return
   }
@@ -238,7 +238,7 @@ onBeforeUnmount(() => {
 
     <form v-if="phase === 'scanning'" class="mt-2 flex gap-2" @submit.prevent="verify(manual)">
       <label class="sr-only" for="manual">Document code</label>
-      <input id="manual" v-model="manual" class="input font-mono text-[13px] uppercase" placeholder="Or type the code: BAG-ADM-RECORDS-48213907" autocomplete="off" />
+      <input id="manual" v-model="manual" class="input font-mono text-[13px] uppercase" placeholder="Or type the code: BCC100726123456" autocomplete="off" />
       <button class="btn btn-ghost shrink-0" :disabled="!manual.trim()">Check</button>
     </form>
 
@@ -263,8 +263,9 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <dl v-if="preview.messenger || preview.received_by" class="mt-4 space-y-2 text-sm">
+      <dl v-if="preview.messenger || preview.received_by || preview.passed_by" class="mt-4 space-y-2 text-sm">
         <div v-if="preview.received_by" class="flex justify-between gap-4"><dt class="text-ink-2">Received by</dt><dd>{{ fullName(preview.received_by) }}</dd></div>
+        <div v-if="preview.passed_by" class="flex justify-between gap-4"><dt class="text-ink-2">Passed on by</dt><dd>{{ fullName(preview.passed_by) }}</dd></div>
         <div v-if="preview.messenger" class="flex justify-between gap-4"><dt class="text-ink-2">Messenger</dt><dd>{{ fullName(preview.messenger) }}</dd></div>
       </dl>
 

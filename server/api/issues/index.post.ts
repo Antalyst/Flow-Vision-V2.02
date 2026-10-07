@@ -1,4 +1,6 @@
+import { Op } from 'sequelize'
 import { Document, Issue, User, ISSUE_PRIORITIES, ISSUE_TYPES } from '~~/server/lib/models.ts'
+import { openableWhere } from '~~/server/lib/document-queries.ts'
 import { issueIncludes } from '~~/server/lib/issues.ts'
 import { issueDto } from '~~/server/lib/serializers.ts'
 import { notify } from '~~/server/lib/notifications.ts'
@@ -16,7 +18,7 @@ export default defineApiHandler(async (event) => {
   const severity = v.oneOf(body, 'severity', ISSUE_PRIORITIES, { fallback: 'MEDIUM' })!
 
   const doc = body.document_id
-    ? await Document.findOne({ where: { id: String(body.document_id), org_id: user.org_id }, attributes: ['id'] })
+    ? await Document.findOne({ where: { id: String(body.document_id), org_id: user.org_id, [Op.and]: [openableWhere(user)] }, attributes: ['id'] })
     : null
   if (!doc) throw badRequest('Choose the document this issue is about', { field: 'document_id' })
 

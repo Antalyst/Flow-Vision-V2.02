@@ -16,14 +16,32 @@ const api = useApi()
 const routesApi = useRoutes()
 const auth = useAuthStore()
 
+interface DashboardCards {
+  office: { id: string; name: string; code: string } | null
+  active: number
+  pending_approvals: number
+  overdue: number
+  completed: { total: number; by_type: Array<{ type: string; count: number; avg_minutes: number | null; target_hours: number }> }
+}
+
+// The office picked in the Forecasts filter also scopes the four cards at the top.
+const officeId = ref('')
+
 const { data, refresh, status } = await useAsyncData('client-dashboard', () => api.get<ClientDashboard>('/dashboard'))
+const { data: cards, refresh: refreshCards } = await useAsyncData(
+  'client-dashboard-cards',
+  () => api.get<DashboardCards>('/dashboard/cards', { office_id: officeId.value || undefined }),
+  { watch: [officeId] },
+)
 const { data: routeData, refresh: refreshRoutes } = await useAsyncData('client-dashboard-routes', () => routesApi.list())
 const forecast = ref<{ refresh: () => unknown }>()
 useLiveRefresh(() => {
   refresh()
+  refreshCards()
   refreshRoutes()
   forecast.value?.refresh()
 })
+const officeName = computed(() => cards.value?.office?.name ?? null)
 
 const greeting = computed(() => {
   const h = localHour()
@@ -68,14 +86,40 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
         </NuxtLink>
       </div>
 
-      <section class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Active documents" :value="data.totals.active" icon="activity" tone="primary" to="/documents" />
-        <StatCard label="Awaiting approval" :value="data.totals.pending_approvals" icon="clock" tone="warning" hint="At the final checkpoint" />
-        <StatCard label="Completed" :value="data.totals.completed" icon="check-circle" tone="success" :hint="data.avg_completion_hours != null ? `Avg ${formatDuration(data.avg_completion_hours * 60)} end-to-end` : undefined" />
-        <StatCard label="Past target date" :value="data.totals.overdue" icon="alert-triangle" :tone="data.totals.overdue ? 'danger' : 'neutral'" />
+      <div v-if="officeName" class="mb-3 flex flex-wrap items-center gap-2 text-sm text-ink-body">
+        <FIcon name="filter" :size="14" class="text-ink-2" />
+        Showing <strong class="font-semibold text-ink">{{ officeName }}</strong>
+        <span class="text-ink-2">— picked in Forecasts below</span>
+        <button type="button" class="btn btn-ghost btn-sm" @click="officeId = ''"><FIcon name="x" :size="14" /> All offices</button>
+      </div>
+
+      <section v-if="cards" class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <StatCard
+          label="Active documents"
+          :value="cards.active"
+          icon="activity"
+          tone="primary"
+          to="/documents"
+          :hint="officeName ? `At ${officeName} now` : 'Across all offices'"
+        />
+        <StatCard
+          label="Awaiting approval"
+          :value="cards.pending_approvals"
+          icon="clock"
+          tone="warning"
+          :hint="officeName ? `Waiting for ${officeName}'s decision` : 'At the final checkpoint'"
+        />
+        <CompletedTypesCard :by-type="cards.completed.by_type" :office-name="officeName" />
+        <StatCard
+          label="Past target date"
+          :value="cards.overdue"
+          icon="alert-triangle"
+          :tone="cards.overdue ? 'danger' : 'neutral'"
+          :hint="officeName ? `Late and still at ${officeName}` : 'Late and still in progress'"
+        />
       </section>
 
-      <ForecastCarousel ref="forecast" class="mt-6" />
+      <ForecastCarousel ref="forecast" v-model:office="officeId" class="mt-6" />
 
       <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <section class="card card-pad">
@@ -104,7 +148,7 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
 
         <div class="space-y-6">
           <section class="card card-pad">
-            <h2 class="text-lg">Pipeline</h2>
+            <h2 class="text-lg">Organization processes</h2>
             <div class="mt-4 flex h-2.5 overflow-hidden rounded-full bg-line/50">
               <div v-for="p in pipeline" :key="p.key" :class="p.tone" :style="{ width: `${(p.count / pipelineTotal) * 100}%` }" />
             </div>

@@ -230,7 +230,7 @@ function selectRole(r: Role) {
               <div class="flex items-center justify-between gap-3">
                 <div class="min-w-0">
                   <p class="text-[11px] tracking-[0.14em] text-white/50 uppercase">Purchase Request</p>
-                  <p class="mt-1 truncate font-mono text-[13px] text-white/90">BAG-ADM-RECORDS-48213907</p>
+                  <p class="mt-1 truncate font-mono text-[13px] text-white/90">BCC100726123456</p>
                 </div>
                 <span class="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-terracotta/25 px-2.5 py-1 text-[11px] font-semibold text-[#FF9A90]">
                   <span class="size-1.5 animate-pulse rounded-full bg-terracotta" /> In transit

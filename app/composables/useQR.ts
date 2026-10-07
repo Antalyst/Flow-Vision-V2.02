@@ -14,12 +14,17 @@ export interface ScanPreview {
   to_office: Pick<Office, 'id' | 'code' | 'name' | 'department_name'> | null
   messenger: UserSummary | null
   received_by: UserSummary | null
+  /** A co-worker passed it to the next staff; it waits to be received at the next desk. */
+  passed_by?: UserSummary | null
 }
 
 type PrintableDoc = Pick<FlowDocument, 'id' | 'title' | 'file_name'>
 
-/** {OFFICE_CODE}-{8 random digits}, e.g. BAG-ADM-RECORDS-48213907 — the prefix is the origin office's code. */
-const QR_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{8}$/i
+/**
+ * {OFFICE_CODE}{MMDDYY upload date}{6 random digits}, e.g. BCC100726123456 — the prefix is the origin
+ * office's code. Labels printed before (BCL-54967520: code, dash, 8 digits) still scan.
+ */
+const QR_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)*(?:\d{12}|-\d{8})$/i
 // Long PDFs print the first pages only, to keep the browser responsive.
 const MAX_PDF_PAGES = 60
 
