@@ -2,8 +2,10 @@
 /** Days + hours a document type may take to process (Organization Settings). 0 + 0 = no deadline. */
 const days = defineModel<number>('days', { required: true })
 const hours = defineModel<number>('hours', { required: true })
-const props = defineProps<{ id: string }>()
-const total = computed(() => (Number(days.value) || 0) * 24 + (Number(hours.value) || 0))
+// `working`: the organization set working hours, so days are working days and hours working hours.
+const props = defineProps<{ id: string; working?: boolean }>()
+const d = computed(() => Number(days.value) || 0)
+const h = computed(() => Number(hours.value) || 0)
 </script>
 
 <template>
@@ -22,7 +24,11 @@ const total = computed(() => (Number(days.value) || 0) * 24 + (Number(hours.valu
       </div>
     </div>
     <p class="mt-1.5 text-xs text-ink-2">
-      {{ total ? `Documents of this type should be done within ${formatSla(total)} of being submitted.` : 'No time limit: these documents get no deadline.' }}
+      <template v-if="d || h">
+        Documents of this type should be done within {{ processingLabel(d, h, !!props.working) }} of being submitted.
+        <template v-if="props.working">Time outside working hours, on days off and on holidays doesn’t count.</template>
+      </template>
+      <template v-else>No time limit: these documents get no deadline.</template>
     </p>
   </fieldset>
 </template>

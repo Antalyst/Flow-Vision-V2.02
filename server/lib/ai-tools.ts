@@ -1,7 +1,9 @@
 import { Op, fn, type WhereOptions } from 'sequelize'
 import type { Actor } from './auth.ts'
 import { Approval, Document, DocumentTracking, Liaison, Office, OrganizationRoute, QrCode, User, sequelize, type AccountType, type Row } from './models.ts'
-import { currentVisit, liaisonWorkloadSql, visibleWhere } from './document-queries.ts'
+import { currentVisit, liaisonWorkloadSql, submittedFromOffice, visibleWhere } from './document-queries.ts'
+import { wordsOf } from './knowledge.ts'
+import type { FoundDocument } from './ai-history.ts'
 import { AT_OFFICE, CARRYING } from './serializers.ts'
 import { searchKnowledge } from './ai-knowledge.ts'
 import type { ChatCompletionTool } from './ai-groq.ts'
@@ -18,6 +20,7 @@ export const ASSISTANT_ROLES: AccountType[] = ['CLIENT', 'EMPLOYEE', 'STAFF']
 
 export const TOOL_LABELS: Record<string, string> = {
   getDocumentsSummary: 'Checking documents',
+  findDocuments: 'Finding documents',
   getPendingApprovals: 'Checking approvals',
   getOfficeStaff: 'Looking up personnel',
   searchOrgKnowledge: 'Searching knowledge files',
@@ -46,6 +49,27 @@ export const ASSISTANT_TOOLS: ChatCompletionTool[] = [
           search: { type: 'string', description: 'Words from the title or description, or a tracking code like BCC100726123456' },
           submitted_within_days: { type: 'integer', description: 'Only documents submitted in the last N days' },
           limit: { type: 'integer', description: 'How many documents to list (1-50, default 20). Totals always cover every match.' },
+        },
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'findDocuments',
+      description:
+        'Find specific documents, ranked by how well they match: words from the title or description, and/or the dates they were submitted. ' +
+        'Use when the user asks to find, look for, search or pull up documents ("find the payroll memo", "documents about road repair submitted in September", "what did we upload last week?"). ' +
+        'The matches appear under your answer as cards the user clicks to open each document, so name only the best few in your reply.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Words to look for in the title and description, or a tracking code. Omit to list by date only.' },
+          date_from: { type: 'string', description: 'Submitted on or after this day, YYYY-MM-DD (Philippine time)' },
+          date_to: { type: 'string', description: 'Submitted on or before this day, YYYY-MM-DD (Philippine time)' },
+          status: { type: 'string', enum: ['all', 'active', 'draft', 'completed', 'returned'], description: 'Default all' },
+          document_type: { type: 'string', description: 'Document type name, e.g. Purchase Request' },
+          limit: { type: 'integer', description: 'How many to return (1-25, default 10)' },
         },
       },
     },
@@ -367,6 +391,184 @@ async function getDocumentsSummary(actor: Actor, args: Args) {
 }
 
 // ---------------------------------------------------------------------------
+// findDocuments
+// ---------------------------------------------------------------------------
+
+/** Documents found for the chat's cards travel next to the result, never to the model (ids stay out of it). */
+const FOUND = Symbol('found')
+
+/**
+ * Who can find what (narrower than the lists, as the organization asked):
+ *   CLIENT    every document of the organization
+ *   EMPLOYEE  documents uploaded by the people of their office (themselves included)
+ *   STAFF     only their own uploads
+ */
+function findScope(actor: Actor): WhereOptions {
+  const org = { org_id: actor.org_id }
+  switch (actor.account_type) {
+    case 'CLIENT':
+      return org
+    case 'EMPLOYEE':
+      return actor.office_id ? { [Op.and]: [org, submittedFromOffice(actor.office_id)] } : { ...org, submitted_by: actor.id }
+    case 'STAFF':
+      return { ...org, submitted_by: actor.id }
+    default:
+      return { id: null }
+  }
+}
+
+const FIND_SCOPE_NOTE: Record<string, string> = {
+  CLIENT: 'Whole organization.',
+  EMPLOYEE: "Documents uploaded by the people of the user's office.",
+  STAFF: "The user's own uploads.",
+}
+
+/** A YYYY-MM-DD day in Philippine time as [start, end) in UTC; null if it isn't a real date. */
+function manilaDay(value: unknown) {
+  const m = typeof value === 'string' ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim()) : null
+  if (!m) return null
+  const utc = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]))
+  const check = new Date(utc)
+  if (check.getUTCDate() !== Number(m[3]) || check.getUTCMonth() !== Number(m[2]) - 1) return null
+  const start = new Date(utc - 8 * 3_600_000)
+  return { start, end: new Date(start.getTime() + 86_400_000) }
+}
+
+async function findDocuments(actor: Actor, args: Args) {
+  const and: WhereOptions[] = [findScope(actor)]
+  const query = str(args.query, 200)
+  const code = query && /^[A-Z0-9-]{6,}$/i.test(query) && /\d{6}/.test(query) ? query.toUpperCase() : null
+  // Distinctive words (no "the", "of", …); a short query like "HR" is looked for as it is.
+  const words = query ? [...new Set(wordsOf(query))].slice(0, 8) : []
+  if (query && !words.length) words.push(query.toLowerCase())
+  if (words.length || code) {
+    and.push({
+      [Op.or]: [
+        ...words.flatMap((w) => [{ title: { [Op.like]: likePattern(w) } }, { description: { [Op.like]: likePattern(w) } }, { category: { [Op.like]: likePattern(w) } }]),
+        ...(code ? [lit(`EXISTS (SELECT 1 FROM qr_codes q WHERE q.document_id = documents.id AND q.qr_code_data LIKE ${esc(likePattern(code))})`)] : []),
+      ],
+    })
+  }
+
+  const from = args.date_from ? manilaDay(args.date_from) : null
+  const to = args.date_to ? manilaDay(args.date_to) : null
+  if (args.date_from && !from) return { error: `date_from "${String(args.date_from)}" is not a date (YYYY-MM-DD).` }
+  if (args.date_to && !to) return { error: `date_to "${String(args.date_to)}" is not a date (YYYY-MM-DD).` }
+  if (from) and.push({ submitted_at: { [Op.gte]: from.start } })
+  if (to) and.push({ submitted_at: { [Op.lt]: to.end } })
+
+  switch (oneOf(args.status, ['all', 'active', 'draft', 'completed', 'returned'] as const, 'all')) {
+    case 'active':
+      and.push({ status: { [Op.in]: ACTIVE } })
+      break
+    case 'draft':
+      and.push({ status: 'CREATED' })
+      break
+    case 'completed':
+      and.push({ status: 'COMPLETED' })
+      break
+    case 'returned':
+      and.push({ status: 'RETURNED' })
+      break
+  }
+  const type = str(args.document_type)
+  if (type) and.push({ category: { [Op.like]: likePattern(type) } })
+  const limit = int(args.limit, 1, 25, 10)!
+
+  // Candidates (newest first), then ranked here by where the words appear.
+  const rows = await Document.findAll({
+    where: { [Op.and]: and },
+    attributes: [
+      'id', 'title', 'description', 'category', 'status', 'current_step_number', 'submitted_at', 'completed_at',
+      [lit('(SELECT q.qr_code_data FROM qr_codes q WHERE q.document_id = documents.id)'), 'tracking_code'],
+      [lit('(SELECT o.name FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office'],
+    ],
+    include: [
+      { model: Office, as: 'currentOffice', attributes: ['name'] },
+      { model: User, as: 'submitter', attributes: ['first_name', 'last_name', 'full_name'] },
+    ],
+    order: [['submitted_at', 'DESC']],
+    limit: 300,
+  })
+
+  const phrase = query?.toLowerCase() ?? ''
+  const scored = rows.map((d) => {
+    const title = String(d.title ?? '').toLowerCase()
+    const description = String(d.description ?? '').toLowerCase()
+    const category = String(d.category ?? '').toLowerCase()
+    let score = 0
+    const matched = new Set<string>()
+    for (const w of words) {
+      if (title.includes(w)) {
+        score += 3
+        matched.add('title')
+      }
+      if (category.includes(w)) {
+        score += 2
+        matched.add('type')
+      }
+      if (description.includes(w)) {
+        score += 1
+        matched.add('description')
+      }
+    }
+    if (phrase.length > 3 && title.includes(phrase)) score += 4
+    const trackingCode = (d.get('tracking_code') as string | null) ?? null
+    if (code && trackingCode?.includes(code)) {
+      score += 10
+      matched.add('tracking code')
+    }
+    return { d, score, matched: [...matched], trackingCode }
+  })
+  if (words.length || code) scored.sort((a, b) => b.score - a.score || new Date(b.d.submitted_at).getTime() - new Date(a.d.submitted_at).getTime())
+  const top = scored.slice(0, limit)
+
+  const whereNow = (d: Row) => {
+    const status = String(d.status)
+    if (status === 'COMPLETED') return 'Completed'
+    if (status === 'RETURNED') return 'Returned to the uploader'
+    if (status === 'CREATED') return 'Draft (not submitted)'
+    if (CARRYING.includes(status)) return 'With a messenger'
+    return (d.currentOffice?.name as string | undefined) ?? 'At its origin'
+  }
+  const found: FoundDocument[] = top.map(({ d, trackingCode }) => ({
+    id: d.id as string,
+    title: d.title as string,
+    tracking_code: trackingCode,
+    status: String(d.status),
+    document_type: (d.category as string | null) ?? null,
+    submitted_at: d.submitted_at ? new Date(d.submitted_at).toISOString() : null,
+    location: whereNow(d),
+  }))
+
+  const result: Record<string | symbol, unknown> = {
+    scope: FIND_SCOPE_NOTE[actor.account_type],
+    searched_for: { words: words.length ? words : null, submitted_from: from ? String(args.date_from) : null, submitted_to: to ? String(args.date_to) : null },
+    total_matches: rows.length === 300 ? '300 or more' : rows.length,
+    listed: top.length,
+    documents: top.map(({ d, matched, trackingCode }, i) => ({
+      rank: i + 1,
+      tracking_code: trackingCode,
+      title: d.title,
+      document_type: d.category ?? null,
+      status: STATUS_LABEL[String(d.status)] ?? d.status,
+      where: whereNow(d),
+      uploaded_by: personName(d.submitter),
+      from_office: (d.get('origin_office') as string | null) ?? 'The organization',
+      submitted: humanDate(d.submitted_at),
+      ...(d.completed_at && { completed: humanDate(d.completed_at) }),
+      ...(matched.length && { matched_in: matched.join(', ') }),
+      ...(d.description && { description: String(d.description).slice(0, 160) }),
+    })),
+    note: top.length
+      ? 'The user sees these documents as cards under your answer and clicks one to open it. Name the best matches (title and tracking code) briefly; do not repeat the whole list.'
+      : 'Nothing matched. Suggest other words or a wider date range.',
+  }
+  result[FOUND] = found
+  return result as Record<string, unknown>
+}
+
+// ---------------------------------------------------------------------------
 // getPendingApprovals
 // ---------------------------------------------------------------------------
 
@@ -568,6 +770,7 @@ async function searchOrgKnowledge(actor: Actor, args: Args) {
 
 const HANDLERS: Record<string, (actor: Actor, args: Args) => Promise<Record<string, unknown>>> = {
   getDocumentsSummary,
+  findDocuments,
   getPendingApprovals,
   getOfficeStaff,
   searchOrgKnowledge,
@@ -579,6 +782,8 @@ export interface ToolOutcome {
   content: string
   /** One line for the chat page, e.g. "12 documents". */
   summary: string
+  /** findDocuments: the matches for the chat's cards (never sent to the model). */
+  documents?: FoundDocument[]
 }
 
 function summarize(name: string, r: Record<string, any>) {
@@ -586,6 +791,8 @@ function summarize(name: string, r: Record<string, any>) {
   switch (name) {
     case 'getDocumentsSummary':
       return `${r.total ?? 0} document${r.total === 1 ? '' : 's'}`
+    case 'findDocuments':
+      return `${r.listed ?? 0} found`
     case 'getPendingApprovals':
       return `${r.count ?? 0} approval${r.count === 1 ? '' : 's'}`
     case 'getOfficeStaff':
@@ -637,7 +844,8 @@ export async function runAssistantTool(name: string, rawArgs: string | null | un
 
   try {
     const result = await handler(actor, args)
-    return { ok: !result.error, content: scrubIds(fitResult(result)), summary: summarize(name, result) }
+    const documents = (result as Record<symbol, unknown>)[FOUND] as FoundDocument[] | undefined
+    return { ok: !result.error, content: scrubIds(fitResult(result)), summary: summarize(name, result), ...(documents?.length && { documents }) }
   } catch (err) {
     console.error('[ai] tool failed', name, err)
     return { ok: false, content: JSON.stringify({ error: 'The lookup failed. Tell the user the data could not be loaded right now.' }), summary: 'Lookup failed' }

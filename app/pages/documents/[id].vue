@@ -110,6 +110,9 @@ function onRequested(updated: FlowDocument) {
 }
 
 const anyAction = computed(() => perms.value && Object.values(perms.value).some(Boolean))
+// Approved at the last office: the QR label is retired, and issues and discussion are closed.
+const isComplete = computed(() => doc.value?.status === 'COMPLETED')
+const processing = computed(() => doc.value?.processing ?? null)
 </script>
 
 <template>
@@ -280,7 +283,8 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
             </div>
           </section>
 
-          <section class="card card-pad">
+          <!-- Approved and complete: nothing left to discuss on it. -->
+          <section v-if="!isComplete" class="card card-pad">
             <h2 class="mb-1 text-lg">Discussion</h2>
             <p class="mb-4 text-sm text-ink-body">Everyone working on this document can see this thread.</p>
             <MessageThread kind="DOCUMENT" :target-id="doc.id" height="h-[340px]" />
@@ -303,7 +307,21 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
                 <dt class="text-ink-2">Deadline</dt>
                 <dd><ToneBadge :tone="deadlineState(doc)!.tone" icon="clock">{{ deadlineState(doc)!.label }}</ToneBadge></dd>
               </div>
+              <!-- Processing time counts only the organization's working hours (Organization Settings). -->
+              <div v-if="processing?.used_minutes != null" class="flex justify-between gap-4">
+                <dt class="text-ink-2">{{ isComplete ? 'Processed in' : 'Processing time' }}</dt>
+                <dd class="text-right">
+                  {{ formatWorkTime(processing.used_minutes, processing.day_minutes) }}
+                  <span v-if="processing.working_hours_only" class="block text-xs text-ink-2">working time</span>
+                </dd>
+              </div>
             </dl>
+            <p v-if="processing?.paused" class="mt-4 flex items-start gap-2 rounded-xl bg-info/10 p-3 text-[13px] text-info-ink">
+              <FIcon name="pause-circle" :size="16" class="mt-0.5 shrink-0" />
+              <span>
+                Processing time is paused — outside working hours, a day off or a holiday.<template v-if="processing.resumes_at"> It resumes {{ formatDateTime(processing.resumes_at) }}.</template>
+              </span>
+            </p>
             <p v-if="doc.description" class="mt-5 border-t border-line/60 pt-4 text-sm whitespace-pre-wrap text-ink-body">{{ doc.description }}</p>
             <!-- Every file of the document (a bulk upload has several, all under one QR) -->
             <div v-if="data.files.length" class="mt-5 border-t border-line/60 pt-4">
@@ -348,7 +366,7 @@ const anyAction = computed(() => perms.value && Object.values(perms.value).some(
             </ul>
           </section>
 
-          <NuxtLink :to="`/issues?document=${doc.id}`" class="btn btn-ghost w-full"><FIcon name="flag" :size="16" /> Report an issue</NuxtLink>
+          <NuxtLink v-if="!isComplete" :to="`/issues?document=${doc.id}`" class="btn btn-ghost w-full"><FIcon name="flag" :size="16" /> Report an issue</NuxtLink>
         </aside>
       </div>
 

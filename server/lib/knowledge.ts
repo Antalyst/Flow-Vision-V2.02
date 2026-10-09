@@ -51,9 +51,18 @@ export const typeHours = (t: Row | null | undefined) => (t ? Number(t.processing
  * of that name. 0 when the type is unknown or has no time set (then the document gets no deadline).
  */
 export async function processingHoursFor(orgId: string, typeName: string | null | undefined, transaction?: Transaction) {
-  if (!typeName) return 0
+  const { days, hours } = await processingTimeFor(orgId, typeName, transaction)
+  return days * 24 + hours
+}
+
+/**
+ * The same as days + hours. Days are working days once the organization sets its working hours
+ * (see work-calendar.ts); 0 + 0 when the type is unknown or untimed.
+ */
+export async function processingTimeFor(orgId: string, typeName: string | null | undefined, transaction?: Transaction) {
+  if (!typeName) return { days: 0, hours: 0 }
   const type = await DocumentType.findOne({ where: { org_id: orgId, name: typeName }, attributes: ['processing_days', 'processing_hours'], transaction })
-  return typeHours(type)
+  return { days: Number(type?.processing_days ?? 0), hours: Number(type?.processing_hours ?? 0) }
 }
 
 /** Processing time from a request body: whole days 0–365 plus hours 0–23. */

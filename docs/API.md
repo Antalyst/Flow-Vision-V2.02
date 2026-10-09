@@ -100,6 +100,15 @@ What a scan does:
 | GET    | `/liaisons/me`                | L          | `{ profile, carrying[], activity[], today }`, `since` (ISO date) widens the activity window |
 | PATCH  | `/liaisons/me`                | L          | `availability` = AVAILABLE · OFF_DUTY (stored in `liaisons.available`; BUSY is derived). Going off duty is refused (`409 MESSENGER_BUSY`) while a document is released to them or in their hands. |
 | GET    | `/dashboard`                  | All        | Role-specific aggregates for the dashboard pages |
+| GET    | `/org/settings`               | C          | Profile (+ `logo_url`), `work_calendar`, `holidays`, document types, `templates`, knowledge files |
+| POST / DELETE | `/org/logo`            | C          | Upload (multipart `file`, PNG/JPG ≤ 2 MB) or remove the organization logo. `GET /org/logo` (all) serves it. |
+| PUT    | `/org/work-hours`             | C          | `{ work_start: "08:00", work_end: "17:00", work_days: [1,2,3,4,5] }` → `{ work_calendar, rescheduled }`. `DELETE` = around the clock again. |
+| POST   | `/org/holidays`               | C          | `{ date: "2026-12-25", name, recurring }` → `{ holiday, rescheduled }`. `DELETE /org/holidays/:id` removes one. |
+| GET    | `/org/templates`              | C, E, S    | Active document templates with the organization name and logo (for AI canvases) |
+| POST   | `/org/templates`              | C          | `name, description, show_logo, header_text, body_guide, signatory_name, signatory_title, footer_text, is_default`. `POST /org/templates/starter` adds Memorandum, Official Letter and Report. |
+| PATCH / DELETE | `/org/templates/:id`  | C          | Edit (also `is_active`, `sort_order`) or delete |
+| POST / DELETE | `/org/templates/:id/signature` | C | Upload (multipart `file`) or remove the signature image. `GET` (C, E, S) serves it. |
+| GET    | `/activity`                   | All        | `scope`, `category`, `days`, `q`, `before`, `limit`; CLIENT: `office` narrows the organization log to one office |
 
 ## Collaboration
 

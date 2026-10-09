@@ -14,6 +14,30 @@ export interface StoredTool {
   label: string
   summary?: string
   ok?: boolean
+  /** findDocuments: the matches, shown under the answer as cards that open each document. */
+  documents?: FoundDocument[]
+}
+
+/** A document the assistant found for the user (findDocuments), as the chat shows it. */
+export interface FoundDocument {
+  id: string
+  title: string
+  tracking_code: string | null
+  status: string
+  document_type: string | null
+  submitted_at: string | null
+  location: string | null
+}
+
+/** Only the fields the chat shows, from untrusted JSON (an import, or an older row). */
+function cleanDocuments(list: unknown): FoundDocument[] | undefined {
+  if (!Array.isArray(list)) return undefined
+  const str = (v: unknown) => (typeof v === 'string' ? v.slice(0, 300) : null)
+  const docs = list
+    .filter((d) => d && typeof d === 'object' && typeof d.id === 'string' && /^[0-9a-f-]{36}$/.test(d.id) && typeof d.title === 'string')
+    .slice(0, 25)
+    .map((d) => ({ id: d.id, title: str(d.title)!, tracking_code: str(d.tracking_code), status: str(d.status) ?? '', document_type: str(d.document_type), submitted_at: str(d.submitted_at), location: str(d.location) }))
+  return docs.length ? docs : undefined
 }
 
 export const titleFrom = (text: string) => {
@@ -25,7 +49,7 @@ function parseTools(raw: string | null): StoredTool[] | undefined {
   if (!raw) return undefined
   try {
     const list = JSON.parse(raw)
-    return Array.isArray(list) ? list : undefined
+    return Array.isArray(list) ? list.map((t) => ({ ...t, documents: cleanDocuments(t?.documents) })) : undefined
   } catch {
     return undefined
   }
@@ -90,7 +114,7 @@ export async function addMessage(
     role: m.role,
     content: m.content,
     model: m.model ?? null,
-    tools: m.tools?.length ? JSON.stringify(m.tools.map(({ name, label, summary, ok }) => ({ name, label, summary, ok }))) : null,
+    tools: m.tools?.length ? JSON.stringify(m.tools.map(({ name, label, summary, ok, documents }) => ({ name, label, summary, ok, documents: cleanDocuments(documents) }))) : null,
     is_error: Boolean(m.isError),
     created_at: m.at ?? new Date(),
   })

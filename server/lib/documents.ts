@@ -2,8 +2,9 @@ import { Op, QueryTypes, Transaction } from 'sequelize'
 import { sequelize, Approval, Document, DocumentFile, DocumentTracking, Issue, Liaison, Office, Organization, QrCode, User, type Row } from './models.ts'
 import { badRequest, conflict, forbidden, notFound } from './errors.ts'
 import type { Actor, RequestMeta } from './auth.ts'
-import { getLiveRoute, getStep, routeForNewDocument, routeHoursOf } from './routes.ts'
-import { processingHoursFor } from './knowledge.ts'
+import { getLiveRoute, getStep, routeForNewDocument, routeTimeOf } from './routes.ts'
+import { processingTimeFor } from './knowledge.ts'
+import { deadlineFrom, loadWorkCalendar } from './work-calendar.ts'
 import { autoPriority } from './priority.ts'
 import { buildRoutingCode, organizationCode, parseRoutingCode, renderQr } from './qr.ts'
 import { notify, officeMemberIds } from './notifications.ts'
@@ -247,9 +248,12 @@ async function enterRoute(doc: Row, actor: Actor, eventType: 'SUBMITTED' | 'RESU
   }
   const { route, steps } = live
   const first = steps[0]!
-  // The deadline is the document type's processing time from now; priority follows the document and that time.
-  const hours = await allowedHoursFor(doc.org_id, doc.category, route.id, transaction)
+  // The deadline is the document type's processing time from now, counted in the organization's
+  // working hours (paused at night, on days off and on holidays); priority follows the document and that time.
+  const time = await allowedTimeFor(doc.org_id, doc.category, route.id, transaction)
+  const hours = time.days * 24 + time.hours
   const now = new Date()
+  const { calendar } = await loadWorkCalendar(doc.org_id)
 
   // The origin is where the uploader belongs: their office, or (no office) the organization itself.
   const submitter = doc.submitted_by === actor.id ? actor : await User.findByPk(doc.submitted_by, { transaction })
@@ -264,7 +268,7 @@ async function enterRoute(doc: Row, actor: Actor, eventType: 'SUBMITTED' | 'RESU
       current_office_id: startsAtFirst ? first.office_id : originOfficeId,
       submitted_at: now,
       completed_at: null,
-      target_completion_date: hours > 0 ? new Date(now.getTime() + hours * 3600_000) : null,
+      target_completion_date: hours > 0 ? deadlineFrom(now, time, calendar) : null,
       priority: autoPriority({ title: doc.title, description: doc.description, document_type: doc.category, routeHours: hours || null }),
     },
     { transaction },
@@ -307,8 +311,14 @@ async function enterRoute(doc: Row, actor: Actor, eventType: 'SUBMITTED' | 'RESU
  * 0 = no deadline.
  */
 export async function allowedHoursFor(orgId: string, typeName: string | null | undefined, routeId: string, transaction?: Transaction) {
-  const byType = await processingHoursFor(orgId, typeName, transaction)
-  return byType > 0 ? byType : routeHoursOf(routeId, transaction)
+  const { days, hours } = await allowedTimeFor(orgId, typeName, routeId, transaction)
+  return days * 24 + hours
+}
+
+/** The same as days + hours (working days and hours once the organization sets its working hours). */
+export async function allowedTimeFor(orgId: string, typeName: string | null | undefined, routeId: string, transaction?: Transaction) {
+  const byType = await processingTimeFor(orgId, typeName, transaction)
+  return byType.days || byType.hours ? byType : routeTimeOf(routeId, transaction)
 }
 
 // ---------------------------------------------------------------------------
@@ -731,7 +741,8 @@ const inform = (reason: string): ScanDecision => ({ action: null, reason, tone: 
 function resolveScanAction(doc: Row, visit: Row | null, actor: Actor, at: string, next: Row | null): ScanDecision {
   const to = next?.office?.name ?? 'the next office'
   if (doc.status === 'CREATED') return deny('This document is still a draft. It has to be submitted before it can be routed.')
-  if (doc.status === 'COMPLETED') return inform('This document is completed. There is nothing left to scan.')
+  // Approved at the last office: its QR label is retired, a scan only says so.
+  if (doc.status === 'COMPLETED') return inform('This document is already completed: it was approved at the last office on its route. Its QR label no longer works, so there is nothing to pick up or receive.')
   if (doc.status === 'RETURNED') return inform('This document was returned to its submitter.')
   if (!visit) return deny('This document has no tracking record for its current step')
   const atOffice = AT_OFFICE.includes(doc.status)
@@ -784,6 +795,18 @@ export async function verifyScan(code: string, actor: Actor) {
   })
   const person = (id?: string | null) => (id ? userSummary(people.find((u) => u.id === id)) : null)
   const carrying = CARRYING.includes(doc.status)
+  // A completed document: who approved it, and where.
+  const approval =
+    doc.status === 'COMPLETED'
+      ? await Approval.findOne({
+          where: { document_id: doc.id, status: 'APPROVED' },
+          include: [
+            { model: User, as: 'staff', attributes: ['id', 'first_name', 'last_name', 'full_name', 'email', 'account_type'] },
+            { model: Office, as: 'office', attributes: ['name'] },
+          ],
+          order: [['approved_at', 'DESC']],
+        })
+      : null
   return {
     action: decision.action,
     reason: decision.reason ?? null,
@@ -796,7 +819,9 @@ export async function verifyScan(code: string, actor: Actor) {
       priority: doc.priority,
       status: doc.status,
       current_step_number: doc.current_step_number,
+      completed_at: doc.completed_at ? new Date(doc.completed_at).toISOString() : null,
     },
+    completed: approval ? { approved_by: userSummary(approval.staff), office_name: (approval.office?.name as string | undefined) ?? null } : doc.status === 'COMPLETED' ? { approved_by: null, office_name: null } : null,
     // Carried documents travel from the current office to the next; otherwise they are at the current one.
     from_office: lite(current) ?? { id: '', code: '', name: here, department_name: '' },
     to_office: lite(next?.office),
@@ -1164,7 +1189,10 @@ export function availableActions(doc: Row, actor: Actor, ctx: ActionContext) {
 export async function renderDocumentQr(documentId: string) {
   const qr = await QrCode.findOne({ where: { document_id: documentId } })
   if (!qr) return null
-  return { id: qr.id, payload: qr.qr_code_data, status: 'ACTIVE', created_at: new Date(qr.created_at).toISOString(), ...(await renderQr(qr.qr_code_data)) }
+  // A completed document's label is retired: scanning it only says the document is complete.
+  const doc = await Document.findByPk(documentId, { attributes: ['status'] })
+  const status = doc?.status === 'COMPLETED' ? 'COMPLETED' : 'ACTIVE'
+  return { id: qr.id, payload: qr.qr_code_data, status, created_at: new Date(qr.created_at).toISOString(), ...(await renderQr(qr.qr_code_data)) }
 }
 
 /** The routing code on a document's QR label (for scripts and tests). */

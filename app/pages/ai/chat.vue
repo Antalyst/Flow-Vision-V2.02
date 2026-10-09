@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import type { AccountType } from '~/types'
+import type { AccountType, DocumentStatus } from '~/types'
 import type { CanvasDoc } from '~/utils/markdown'
-import type { Conversation } from '~/stores/assistant'
+import type { AssistantMessage, Conversation, FoundDocument } from '~/stores/assistant'
 import CanvasPanel from './components/CanvasPanel.vue'
 
 // A full-screen workspace of its own: no app navigation, just a way back.
@@ -17,17 +17,17 @@ const SUGGESTIONS: Partial<Record<AccountType, Array<{ icon: string; text: strin
     { icon: 'sun', text: 'Brief me on what needs my attention today' },
     { icon: 'alert-triangle', text: 'Which documents are overdue, and where are they stuck?' },
     { icon: 'grid', text: 'Make a report of all pending approvals by office' },
-    { icon: 'truck', text: 'Which messengers are free right now?' },
+    { icon: 'search', text: 'Find documents about payroll submitted this month' },
   ],
   EMPLOYEE: [
     { icon: 'inbox', text: 'What documents are at my office right now?' },
     { icon: 'alert-triangle', text: 'Which of our documents are overdue?' },
-    { icon: 'grid', text: 'Make a table of documents routed through my office this week' },
-    { icon: 'users', text: 'Who works in my office?' },
+    { icon: 'search', text: 'Find our office’s documents uploaded last week' },
+    { icon: 'file-text', text: 'Draft a memo reminding staff to submit their reports' },
   ],
   STAFF: [
     { icon: 'check-square', text: 'What approvals are waiting for me?' },
-    { icon: 'map-pin', text: 'Where are the documents I uploaded?' },
+    { icon: 'search', text: 'Find the documents I uploaded this month' },
     { icon: 'file-text', text: 'Summarize my returned documents and their remarks' },
     { icon: 'book-open', text: 'What do our policies say about travel orders?' },
   ],
@@ -95,6 +95,13 @@ function removeConversation(c: Conversation) {
 const thread = computed(() =>
   assistant.messages.map((m) => ({ ...m, segments: m.role === 'assistant' && !m.error ? splitCanvas(m.content, m.id) : null })),
 )
+
+/** Documents the assistant found for this answer (findDocuments), each listed once. */
+function foundIn(m: AssistantMessage): FoundDocument[] {
+  const seen = new Set<string>()
+  return (m.tools ?? []).flatMap((t) => t.documents ?? []).filter((d) => !seen.has(d.id) && seen.add(d.id))
+}
+const isStatus = (s: string): s is DocumentStatus => s in STATUS_META
 
 function canvasMeta(c: CanvasDoc) {
   const rows = parseMarkdown(c.content).reduce((n, b) => n + (b.type === 'table' ? b.rows.length : 0), 0)
@@ -374,6 +381,32 @@ onMounted(() => {
                       </li>
                       <li v-if="m.model" class="badge bg-transparent font-medium text-ink-3" :title="'Answered by ' + m.model"><FIcon name="cpu" :size="12" /> {{ m.model }}</li>
                     </ul>
+
+                    <!-- Documents it found: each card opens the document -->
+                    <div v-if="foundIn(m).length" class="rounded-2xl border border-line bg-white/70 p-2">
+                      <p class="flex items-center justify-between gap-2 px-2 pt-1 pb-2 text-xs font-medium text-ink-2">
+                        <span class="flex items-center gap-1.5"><FIcon name="search" :size="13" /> {{ foundIn(m).length }} document{{ foundIn(m).length === 1 ? '' : 's' }} found · click to open</span>
+                        <NuxtLink to="/documents" class="hover:text-ink hover:underline">All documents →</NuxtLink>
+                      </p>
+                      <ul class="space-y-1">
+                        <li v-for="d in foundIn(m)" :key="d.id">
+                          <NuxtLink :to="`/documents/${d.id}`" class="group flex items-center gap-3 rounded-xl px-2.5 py-2 transition-colors hover:bg-ink/[0.04]">
+                            <span class="grid size-9 shrink-0 place-items-center rounded-xl" :class="TONE_CLASSES.primary"><FIcon name="file-text" :size="16" /></span>
+                            <span class="min-w-0 flex-1">
+                              <span class="block truncate text-sm font-semibold text-ink group-hover:underline">{{ d.title }}</span>
+                              <span class="block truncate text-xs text-ink-2">
+                                <span v-if="d.tracking_code" class="mono">{{ d.tracking_code }}</span>
+                                <template v-if="d.document_type"> · {{ d.document_type }}</template>
+                                <template v-if="d.submitted_at"> · {{ formatDate(d.submitted_at) }}</template>
+                                <template v-if="d.location"> · {{ d.location }}</template>
+                              </span>
+                            </span>
+                            <StatusBadge v-if="isStatus(d.status)" :status="d.status" class="hidden sm:inline-flex" />
+                            <FIcon name="chevron-right" :size="16" class="shrink-0 text-ink-3" />
+                          </NuxtLink>
+                        </li>
+                      </ul>
+                    </div>
 
                     <template v-for="(s, si) in m.segments" :key="si">
                       <div v-if="s.kind === 'text'" class="fv-prose" v-html="renderMarkdown(s.text)" />

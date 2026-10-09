@@ -12,6 +12,7 @@
     "db:schema": "node scripts/db-schema.ts",
     "db:seed": "node scripts/db-seed.ts",
     "db:migrate": "node scripts/db-migrate.ts",
+    "db:add-settings": "node scripts/db-add-settings.ts",
     "db:reset": "node scripts/db-schema.ts && node scripts/db-seed.ts",
     "test:flow": "node tests/flow.test.ts"
   },

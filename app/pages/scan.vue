@@ -242,8 +242,27 @@ onBeforeUnmount(() => {
       <button class="btn btn-ghost shrink-0" :disabled="!manual.trim()">Check</button>
     </form>
 
+    <!-- Already completed: the QR label is retired, nothing to pick up or receive -->
+    <section v-if="phase === 'confirm' && preview && preview.document.status === 'COMPLETED'" class="card card-pad text-center" role="alert">
+      <span class="mx-auto grid size-16 place-items-center rounded-full bg-sage/15 text-sage-ink"><FIcon name="check-circle" :size="30" /></span>
+      <h2 class="mt-5 text-xl">This document is already complete</h2>
+      <p class="mt-2 text-sm text-ink-body">
+        <span class="mono">{{ preview.document.qr_code }}</span> · {{ preview.document.title }}
+      </p>
+      <p class="mx-auto mt-4 max-w-md rounded-xl bg-ink/[0.035] p-4 text-sm text-ink-body">
+        It was approved<template v-if="preview.completed?.approved_by"> by <strong>{{ fullName(preview.completed.approved_by) }}</strong></template
+        ><template v-if="preview.completed?.office_name"> at {{ preview.completed.office_name }}</template
+        ><template v-if="preview.document.completed_at"> on {{ formatDateTime(preview.document.completed_at) }}</template>. Its QR label no longer works — there is nothing to pick up or
+        receive.
+      </p>
+      <div class="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-center">
+        <NuxtLink v-if="!isLiaison" :to="`/documents/${preview.document.id}`" class="btn btn-ghost">Open document</NuxtLink>
+        <button class="btn btn-primary" @click="resume"><FIcon name="maximize" :size="16" /> Scan another</button>
+      </div>
+    </section>
+
     <!-- Confirm -->
-    <section v-if="phase === 'confirm' && preview" class="card card-pad">
+    <section v-else-if="phase === 'confirm' && preview" class="card card-pad">
       <div class="flex flex-wrap items-center gap-2">
         <span class="mono rounded-md bg-ink/[0.05] px-2 py-1 text-ink-body">{{ preview.document.qr_code }}</span>
         <StatusBadge :status="preview.document.status" />

@@ -14,6 +14,7 @@ const props = withDefaults(
 const emit = defineEmits<{ regenerated: [qr: QrInfo] }>()
 
 const { printLabel, printWithDocument, regenerate } = useQR()
+const retired = computed(() => props.qr.status === 'COMPLETED')
 const { busy, run } = useAction()
 const ui = useUiStore()
 
@@ -42,8 +43,20 @@ async function reissue() {
 </script>
 
 <template>
+  <!-- A completed document's label is retired: scanning it only says the document is complete. -->
+  <div v-if="retired" class="flex flex-col items-center text-center">
+    <div class="relative rounded-2xl border border-line bg-white p-3">
+      <div class="size-36 opacity-20 grayscale [&>svg]:size-full" aria-hidden="true" v-html="qr.svg" />
+      <span class="absolute inset-0 grid place-items-center">
+        <span class="inline-flex items-center gap-1.5 rounded-full bg-sage px-3 py-1.5 text-[13px] font-semibold text-white shadow-sm"><FIcon name="check" :size="14" :stroke="2.5" /> Completed</span>
+      </span>
+    </div>
+    <p class="mono mt-4 text-sm text-ink-2 line-through decoration-ink-3">{{ qr.payload }}</p>
+    <p class="mt-3 text-[13px] text-ink-body">This document is complete, so its QR label no longer works. Scanning it only shows that the document is already complete.</p>
+  </div>
+
   <!-- Always stacked: it lives in the narrow sidebar of the document page. -->
-  <div class="flex flex-col items-center text-center">
+  <div v-else class="flex flex-col items-center text-center">
     <div class="rounded-2xl border border-line bg-white p-3 shadow-sm">
       <div class="size-44 [&>svg]:size-full" v-html="qr.svg" />
     </div>

@@ -45,6 +45,13 @@ const scopes = computed<Scope[]>(() => (auth.role === 'CLIENT' ? ['organization'
 const scope = ref<Scope>(scopes.value[0]!)
 const category = ref<Category>('all')
 const days = ref(30)
+// CLIENT only: narrow the organization's log to one office (what happened there or was done by its people).
+const officeId = ref('')
+const isClient = computed(() => auth.role === 'CLIENT')
+const { data: officeData } = await useAsyncData('activity-offices', () => (isClient.value ? useRoutes().offices() : Promise.resolve(null)))
+const officeOptions = computed(() => officeData.value?.data ?? [])
+const showOfficeFilter = computed(() => isClient.value && scope.value === 'organization' && officeOptions.value.length > 0)
+watch(scope, (s) => s !== 'organization' && (officeId.value = ''))
 const q = ref('')
 const debouncedQ = refDebounced(q, 300)
 
@@ -63,7 +70,7 @@ const RANGES = [
   { value: 365, label: 'Last year' },
 ]
 
-const params = computed(() => ({ scope: scope.value, category: category.value, days: days.value, q: debouncedQ.value || undefined, limit: 50 }))
+const params = computed(() => ({ scope: scope.value, category: category.value, days: days.value, q: debouncedQ.value || undefined, office: officeId.value || undefined, limit: 50 }))
 const { data, refresh, status } = await useAsyncData('activity-log', () => api.get<ActivityPage>('/activity', params.value), { watch: [params] })
 useLiveRefresh(refresh)
 
@@ -107,6 +114,14 @@ const ADMIN_LABELS: Record<string, string> = {
   PASSWORD_CHANGE: 'Changed their password',
   ORG_REGISTER: 'Registered the organization',
   ORG_UPDATE: 'Updated the organization profile',
+  ORG_LOGO_UPDATE: 'Changed the organization logo',
+  ORG_LOGO_DELETE: 'Removed the organization logo',
+  ORG_WORK_HOURS_UPDATE: 'Changed the working hours',
+  HOLIDAY_CREATE: 'Added a holiday',
+  HOLIDAY_DELETE: 'Removed a holiday',
+  TEMPLATE_CREATE: 'Added a document template',
+  TEMPLATE_UPDATE: 'Updated a document template',
+  TEMPLATE_DELETE: 'Deleted a document template',
   DOCUMENT_TYPE_CREATE: 'Added a document type',
   DOCUMENT_TYPE_UPDATE: 'Updated a document type',
   DOCUMENT_TYPE_DELETE: 'Deleted a document type',
@@ -150,6 +165,10 @@ function detail(r: ActivityRow) {
   return bits.join(' · ')
 }
 const isMe = (r: ActivityRow) => r.actor?.id === auth.user?.id
+
+// Every entry carries its full date and time (Philippine time), not just the time under its day.
+const stampFmt = new Intl.DateTimeFormat('en-PH', { month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: TIME_ZONE })
+const stamp = (v: string) => stampFmt.format(new Date(v))
 </script>
 
 <template>
@@ -169,6 +188,10 @@ const isMe = (r: ActivityRow) => r.actor?.id === auth.user?.id
         <FIcon name="search" :size="16" class="absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-2" />
         <input v-model="q" class="input pl-10" placeholder="Search by document, QR code, person or office" aria-label="Search the activity log" />
       </div>
+      <select v-if="showOfficeFilter" v-model="officeId" class="input sm:w-52" aria-label="Office">
+        <option value="">All offices</option>
+        <option v-for="o in officeOptions" :key="o.id" :value="o.id">{{ o.name }}</option>
+      </select>
       <select v-model="category" class="input sm:w-44" aria-label="Kind of activity">
         <option v-for="c in CATEGORIES" :key="c.value" :value="c.value">{{ c.label }}</option>
       </select>
@@ -201,7 +224,7 @@ const isMe = (r: ActivityRow) => r.actor?.id === auth.user?.id
                   <span v-if="r.actor && !isMe(r)" class="text-ink-2"> · {{ ROLE_META[r.actor.account_type]?.label }}</span>
                   <span class="text-ink-body"> — {{ label(r) }}</span>
                 </p>
-                <time class="mono text-ink-2" :datetime="r.created_at" :title="formatDateTime(r.created_at)">{{ formatTime(r.created_at) }}</time>
+                <time class="mono shrink-0 text-[12px] text-ink-2" :datetime="r.created_at">{{ stamp(r.created_at) }}</time>
               </div>
               <NuxtLink v-if="r.document" :to="`/documents/${r.document.id}`" class="mt-1 flex min-w-0 items-center gap-2 text-sm hover:underline">
                 <span class="mono shrink-0 rounded bg-ink/[0.05] px-1.5 py-0.5 text-[12px] text-ink-body">{{ r.document.qr_code ?? r.document.tracking_number }}</span>

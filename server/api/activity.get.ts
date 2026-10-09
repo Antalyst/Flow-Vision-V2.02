@@ -13,7 +13,8 @@ function pick<T extends string>(raw: string, allowed: readonly T[], fallback: T,
 /**
  * The activity log (who did what, when). Query: `scope` (mine · office · organization — what the
  * account may see, see activity.ts), `category` (all · documents · messengers · approvals · admin),
- * `days` (1–365, default 30), `q` (document, code, person, office), `before` (cursor), `limit`.
+ * `days` (1–365, default 30), `q` (document, code, person, office), `office` (CLIENT only: one
+ * office — what happened there or was done by its people), `before` (cursor), `limit`.
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event)
@@ -27,5 +28,6 @@ export default defineApiHandler(async (event) => {
     before: before && !Number.isNaN(Date.parse(before)) ? new Date(before).toISOString() : null,
     q: v.q(query, 'q', 100),
     limit: Math.min(Math.max(Number(query.limit) || 50, 1), 200),
+    officeId: v.q(query, 'office', 36) || null,
   })
 })

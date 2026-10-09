@@ -113,10 +113,16 @@ function readSla(step: StepInput, index: number) {
 /** Total processing time of a step, in hours. */
 export const stepHours = (s: Record<string, any>) => Number(s.sla_days ?? 0) * 24 + Number(s.sla_hours ?? 0)
 
+/** Total processing time of a route: every step's days, and every step's hours. */
+export async function routeTimeOf(routeId: string, transaction?: Transaction) {
+  const steps = await RouteStep.findAll({ where: { route_id: routeId }, attributes: ['sla_days', 'sla_hours'], transaction })
+  return { days: steps.reduce((n, s) => n + Number(s.sla_days ?? 0), 0), hours: steps.reduce((n, s) => n + Number(s.sla_hours ?? 0), 0) }
+}
+
 /** Total processing time of a route (every step's days + hours), in hours. */
 export async function routeHoursOf(routeId: string, transaction?: Transaction) {
-  const steps = await RouteStep.findAll({ where: { route_id: routeId }, attributes: ['sla_days', 'sla_hours'], transaction })
-  return steps.reduce((n, s) => n + stepHours(s), 0)
+  const { days, hours } = await routeTimeOf(routeId, transaction)
+  return days * 24 + hours
 }
 
 /** Validate submitted steps against the organization's active offices. The last step is the final checkpoint. */

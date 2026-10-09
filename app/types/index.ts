@@ -54,7 +54,8 @@ export interface CurrentUser {
   account_type: AccountType
   status: string
   must_change_password: boolean
-  organization: { id: string; name: string } | null
+  /** logo_url: the organization logo (Organization Settings), printed on QR labels and letterheads. */
+  organization: { id: string; name: string; logo_url?: string | null } | null
   office: Office | null
   has_approval_authority: boolean
   liaison: LiaisonProfile | null
@@ -109,6 +110,29 @@ export interface FlowDocument {
   received_by?: UserSummary | null
   /** Where it comes from: the uploader's assigned office, or their organization for CLIENT accounts. */
   origin?: DocumentOrigin
+  /** Processing time on the organization's working calendar (null for drafts). */
+  processing?: DocumentProcessing | null
+}
+
+/**
+ * How much processing time a document used and has left, in working minutes: the clock only runs
+ * in the organization's working hours (Organization Settings), never at night, on days off or holidays.
+ */
+export interface DocumentProcessing {
+  /** The organization set working hours; otherwise the clock runs around the clock. */
+  working_hours_only: boolean
+  /** One working day in minutes (1440 around the clock). */
+  day_minutes: number
+  /** Working time used so far (up to completion, for a finished document). */
+  used_minutes: number | null
+  /** Working time its deadline allows. */
+  allowed_minutes: number | null
+  /** Working time left before the deadline; negative once overdue. Null when not in progress or untimed. */
+  left_minutes: number | null
+  /** The clock is paused right now (after hours, a day off or a holiday). */
+  paused: boolean
+  /** When it runs again. */
+  resumes_at: string | null
 }
 
 export interface DocumentOrigin {
@@ -300,6 +324,47 @@ export interface DocumentTypeItem {
   sort_order: number
   /** How many documents are filed under it (settings page only). */
   usage?: number
+}
+
+/** Organization Settings: the letterhead a document drafted by the AI is laid out on. */
+export interface DocumentTemplateItem {
+  id: string
+  name: string
+  /** When to use it: the AI reads this to choose a template. */
+  description: string | null
+  show_logo: boolean
+  /** Letterhead lines under the logo. */
+  header_text: string | null
+  /** Structure the AI follows for the body (Markdown). */
+  body_guide: string | null
+  signatory_name: string | null
+  signatory_title: string | null
+  signature_url: string | null
+  footer_text: string | null
+  is_default: boolean
+  is_active: boolean
+  sort_order: number
+}
+
+/** Organization Settings: working hours (Philippine time); processing time only runs inside them. */
+export interface WorkCalendarSettings {
+  /** The organization set working hours (otherwise the clock runs around the clock). */
+  configured: boolean
+  /** The database has the settings tables (npm run db:add-settings). */
+  available: boolean
+  work_start: string
+  work_end: string
+  /** 0 = Sunday … 6 = Saturday */
+  work_days: number[]
+}
+
+export interface HolidayItem {
+  id: string
+  /** YYYY-MM-DD */
+  date: string
+  name: string
+  /** Same month and day every year. */
+  recurring: boolean
 }
 
 /** Organization Settings: a file whose text the AI uses as organization knowledge. */

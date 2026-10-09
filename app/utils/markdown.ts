@@ -26,6 +26,8 @@ export interface CanvasDoc {
   type: 'table' | 'document'
   title: string
   content: string
+  /** Name of the document template (letterhead) the AI chose for it, if any. */
+  template: string | null
 }
 
 export type MessageSegment = { kind: 'text'; text: string } | { kind: 'canvas'; canvas: CanvasDoc }
@@ -214,7 +216,8 @@ export function splitCanvas(content: string, idPrefix: string): MessageSegment[]
     if (fenced) body = fenced[1]!.trim()
     const declared = attr(m[1]!, 'type')
     const type = declared === 'document' || declared === 'table' ? declared : parseMarkdown(body).some((b) => b.type === 'table') ? 'table' : 'document'
-    segments.push({ kind: 'canvas', canvas: { id: `${idPrefix}:${n++}`, type, title: attr(m[1]!, 'title')?.trim() || 'Untitled canvas', content: body } })
+    const template = attr(m[1]!, 'template')?.trim() || null
+    segments.push({ kind: 'canvas', canvas: { id: `${idPrefix}:${n++}`, type, title: attr(m[1]!, 'title')?.trim() || 'Untitled canvas', content: body, template } })
     last = m.index! + m[0].length
   }
   const rest = content.slice(last)

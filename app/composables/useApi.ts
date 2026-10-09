@@ -44,6 +44,7 @@ export function useApi() {
     get: <T>(path: string, query?: Record<string, unknown>) => request<T>('GET', path, { query }),
     post: <T>(path: string, body?: unknown) => request<T>('POST', path, { body }),
     patch: <T>(path: string, body?: unknown) => request<T>('PATCH', path, { body }),
+    put: <T>(path: string, body?: unknown) => request<T>('PUT', path, { body }),
     del: <T>(path: string) => request<T>('DELETE', path),
   }
 }

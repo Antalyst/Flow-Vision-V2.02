@@ -8,6 +8,19 @@ export interface AssistantTool {
   summary?: string
   ok?: boolean
   done: boolean
+  /** findDocuments: what it found, shown as cards that open each document. */
+  documents?: FoundDocument[]
+}
+
+/** A document the assistant found (findDocuments). */
+export interface FoundDocument {
+  id: string
+  title: string
+  tracking_code: string | null
+  status: string
+  document_type: string | null
+  submitted_at: string | null
+  location: string | null
 }
 
 export interface AssistantMessage {
@@ -46,7 +59,7 @@ type ConversationSummary = Omit<Conversation, 'messages' | 'loaded' | 'draft'>
 type StreamEvent =
   | { type: 'saved'; conversation: ConversationSummary; question: { id: string; at: string } }
   | { type: 'tool_start'; id: string; name: string; label: string }
-  | { type: 'tool_done'; id: string; name: string; label: string; summary: string; ok: boolean }
+  | { type: 'tool_done'; id: string; name: string; label: string; summary: string; ok: boolean; documents?: FoundDocument[] }
   | { type: 'reply'; id: string; at: string; content: string; model: string | null; tools: AssistantTool[] }
   | { type: 'error'; id?: string; at?: string; message: string }
 
@@ -217,7 +230,7 @@ export const useAssistantStore = defineStore('assistant', () => {
     } else if (e.type === 'tool_start') liveTools.value.push({ id: e.id, name: e.name, label: e.label, done: false })
     else if (e.type === 'tool_done') {
       const t = liveTools.value.find((x) => x.id === e.id)
-      if (t) Object.assign(t, { summary: e.summary, ok: e.ok, done: true })
+      if (t) Object.assign(t, { summary: e.summary, ok: e.ok, done: true, documents: e.documents })
     } else if (e.type === 'reply') {
       const msg: AssistantMessage = { id: e.id, role: 'assistant', content: e.content, at: e.at, model: e.model, tools: e.tools.map((t) => ({ ...t, done: true })) }
       convo.messages.push(msg)

@@ -1,11 +1,15 @@
 <script setup lang="ts">
-import type { DocumentTypeItem, KnowledgeFileItem } from '~/types'
+import type { DocumentTemplateItem, DocumentTypeItem, HolidayItem, KnowledgeFileItem, WorkCalendarSettings } from '~/types'
+import { describeCalendar, parseClock } from '#shared/work-calendar'
 
 useHead({ title: 'Organization Settings · FlowVision' })
 
 interface SettingsData {
-  organization: { id: string; name: string; description: string | null; website: string | null }
+  organization: { id: string; name: string; description: string | null; website: string | null; logo_url: string | null }
+  work_calendar: WorkCalendarSettings
+  holidays: HolidayItem[]
   document_types: DocumentTypeItem[]
+  templates: DocumentTemplateItem[]
   knowledge_files: KnowledgeFileItem[]
   limits: { knowledge_max_bytes: number }
   ai_configured: boolean
@@ -18,12 +22,14 @@ const { busy, run } = useAction()
 
 const { data, refresh } = await useAsyncData('org-settings', () => api.get<SettingsData>('/org/settings'))
 
-type Tab = 'profile' | 'types' | 'knowledge'
+type Tab = 'profile' | 'hours' | 'types' | 'templates' | 'knowledge'
 const route = useRoute()
 const router = useRouter()
 const TABS: Array<{ key: Tab; label: string; icon: string }> = [
   { key: 'profile', label: 'Organization', icon: 'home' },
+  { key: 'hours', label: 'Working hours', icon: 'clock' },
   { key: 'types', label: 'Document types', icon: 'tag' },
+  { key: 'templates', label: 'Templates', icon: 'layout' },
   { key: 'knowledge', label: 'AI knowledge', icon: 'book-open' },
 ]
 const tab = ref<Tab>((TABS.find((t) => t.key === route.query.tab)?.key ?? 'profile') as Tab)
@@ -51,6 +57,12 @@ async function saveProfile() {
 // Document types
 // ---------------------------------------------------------------------------
 const types = computed(() => data.value?.document_types ?? [])
+// How processing time is counted: in working days and hours, once working hours are set.
+const calendarText = computed(() => {
+  const c = data.value?.work_calendar
+  if (!c?.configured) return null
+  return describeCalendar({ start: parseClock(c.work_start) ?? 480, end: parseClock(c.work_end) ?? 1020, days: c.work_days, holidays: [], recurring: [] })
+})
 const newType = reactive({ name: '', description: '', processing_days: 1, processing_hours: 0 })
 async function addType() {
   if (!newType.name.trim()) return
@@ -193,38 +205,58 @@ const STATUS = {
 
 <template>
   <div class="fv-rise">
-    <PageHeader eyebrow="Administration" title="Organization Settings" description="Your organization’s profile, the document types offered when uploading, and the knowledge the AI uses to read documents." />
+    <PageHeader
+      eyebrow="Administration"
+      title="Organization Settings"
+      description="Your organization’s profile and logo, working hours, the document types offered when uploading, document templates, and the knowledge the AI uses."
+    />
 
     <div class="mb-6 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-ink/[0.04] p-1" role="tablist">
       <button v-for="t in TABS" :key="t.key" role="tab" class="tab shrink-0" :class="tab === t.key && 'tab-active'" :aria-selected="tab === t.key" @click="tab = t.key">
         <FIcon :name="t.icon" :size="15" /> {{ t.label }}
         <span v-if="t.key === 'types'" class="text-xs text-ink-2">{{ types.length }}</span>
+        <span v-else-if="t.key === 'templates'" class="text-xs text-ink-2">{{ data?.templates.length ?? 0 }}</span>
         <span v-else-if="t.key === 'knowledge'" class="text-xs text-ink-2">{{ files.length }}</span>
       </button>
     </div>
 
-    <!-- Organization profile -->
-    <section v-if="tab === 'profile'" class="card card-pad max-w-2xl">
-      <h2 class="text-lg">Organization</h2>
-      <p class="mt-1 text-sm text-ink-body">Shown across FlowVision. The AI also uses the name when it reads documents.</p>
-      <form class="mt-5 space-y-4" @submit.prevent="saveProfile">
-        <div>
-          <label class="field-label" for="org-name">Name</label>
-          <input id="org-name" v-model="profile.name" class="input" maxlength="255" required />
-        </div>
-        <div>
-          <label class="field-label" for="org-desc">Description</label>
-          <textarea id="org-desc" v-model="profile.description" class="input" rows="3" maxlength="2000" placeholder="e.g. City Hall, Bago City, Negros Occidental" />
-        </div>
-        <div>
-          <label class="field-label" for="org-web">Website</label>
-          <input id="org-web" v-model="profile.website" class="input" type="url" maxlength="500" placeholder="https://" />
-        </div>
-        <div class="flex justify-end">
-          <button class="btn btn-primary" :disabled="busy === 'profile' || !profile.name.trim()" :aria-busy="busy === 'profile'">{{ busy === 'profile' ? 'Saving…' : 'Save' }}</button>
-        </div>
-      </form>
-    </section>
+    <!-- Organization profile and logo -->
+    <div v-if="tab === 'profile'" class="space-y-6">
+      <section class="card card-pad max-w-2xl">
+        <h2 class="text-lg">Organization</h2>
+        <p class="mt-1 text-sm text-ink-body">Shown across FlowVision. The AI also uses the name when it reads documents.</p>
+        <form class="mt-5 space-y-4" @submit.prevent="saveProfile">
+          <div>
+            <label class="field-label" for="org-name">Name</label>
+            <input id="org-name" v-model="profile.name" class="input" maxlength="255" required />
+          </div>
+          <div>
+            <label class="field-label" for="org-desc">Description</label>
+            <textarea id="org-desc" v-model="profile.description" class="input" rows="3" maxlength="2000" placeholder="e.g. City Hall, Bago City, Negros Occidental" />
+          </div>
+          <div>
+            <label class="field-label" for="org-web">Website</label>
+            <input id="org-web" v-model="profile.website" class="input" type="url" maxlength="500" placeholder="https://" />
+          </div>
+          <div class="flex justify-end">
+            <button class="btn btn-primary" :disabled="busy === 'profile' || !profile.name.trim()" :aria-busy="busy === 'profile'">{{ busy === 'profile' ? 'Saving…' : 'Save' }}</button>
+          </div>
+        </form>
+      </section>
+      <SettingsOrgLogo :logo-url="data?.organization.logo_url ?? null" @changed="refresh()" />
+    </div>
+
+    <!-- Working hours and holidays: processing time pauses outside them -->
+    <SettingsWorkHours v-else-if="tab === 'hours' && data" :calendar="data.work_calendar" :holidays="data.holidays" @changed="refresh()" />
+
+    <!-- Document templates for the AI Assistant's canvases -->
+    <SettingsTemplates
+      v-else-if="tab === 'templates' && data"
+      :templates="data.templates"
+      :organization="{ name: data.organization.name, logo_url: data.organization.logo_url }"
+      :available="data.work_calendar.available"
+      @changed="refresh()"
+    />
 
     <!-- Document types -->
     <div v-else-if="tab === 'types'" class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -232,6 +264,11 @@ const STATUS = {
         <div class="card-pad pb-3">
           <h2 class="text-lg">Document types</h2>
           <p class="mt-1 text-sm text-ink-body">Offered when anyone uploads a document. Each type's processing time sets the deadline of documents submitted with it. The AI picks a type when it reads a file, using the description to decide.</p>
+          <p class="mt-2 flex items-start gap-2 rounded-xl bg-ink/[0.035] px-3 py-2 text-[13px] text-ink-body">
+            <FIcon name="clock" :size="14" class="mt-0.5 shrink-0 text-ink-2" />
+            <span v-if="calendarText">Processing time counts working time only — {{ calendarText }}. Nights, days off and holidays don’t count, so 1 day means one working day.</span>
+            <span v-else>Processing time runs around the clock. Set your <button type="button" class="font-medium underline" @click="tab = 'hours'">working hours and holidays</button> to pause it outside them.</span>
+          </p>
         </div>
         <div v-if="!types.length" class="px-6 pb-6">
           <EmptyState icon="tag" title="No document types yet" description="Add the kinds of documents your organization handles." />
@@ -246,7 +283,7 @@ const STATUS = {
             <form v-if="editing === t.id" class="min-w-0 flex-1 space-y-2" @submit.prevent="saveEdit(t)">
               <input v-model="editForm.name" class="input" maxlength="100" required aria-label="Name" />
               <textarea v-model="editForm.description" class="input" rows="2" maxlength="500" placeholder="What documents belong here (helps the AI choose)" aria-label="Description" />
-              <ProcessingTimeInput :id="`edit-time-${t.id}`" v-model:days="editForm.processing_days" v-model:hours="editForm.processing_hours" />
+              <ProcessingTimeInput :id="`edit-time-${t.id}`" v-model:days="editForm.processing_days" v-model:hours="editForm.processing_hours" :working="!!calendarText" />
               <p v-if="editForm.processing_days !== t.processing_days || editForm.processing_hours !== t.processing_hours" class="text-xs text-ink-2">
                 Applies to documents submitted from now on. Documents already in progress keep their deadline.
               </p>
@@ -266,7 +303,7 @@ const STATUS = {
                 <p v-if="t.description" class="mt-0.5 text-[13px] text-ink-body">{{ t.description }}</p>
                 <p class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-2">
                   <span class="inline-flex items-center gap-1" :class="t.total_hours ? 'text-ink-body' : ''">
-                    <FIcon name="clock" :size="12" /> {{ t.total_hours ? `Process within ${formatSla(t.total_hours)}` : 'No time limit' }}
+                    <FIcon name="clock" :size="12" /> {{ t.total_hours ? `Process within ${processingLabel(t.processing_days, t.processing_hours, !!calendarText)}` : 'No time limit' }}
                   </span>
                   <span>{{ t.usage ?? 0 }} document{{ t.usage === 1 ? '' : 's' }}</span>
                 </p>
@@ -294,7 +331,7 @@ const STATUS = {
             <label class="field-label" for="type-desc">Description <span class="font-normal text-ink-2">(optional)</span></label>
             <textarea id="type-desc" v-model="newType.description" class="input" rows="3" maxlength="500" placeholder="What documents belong here — helps the AI choose" />
           </div>
-          <ProcessingTimeInput id="new-type-time" v-model:days="newType.processing_days" v-model:hours="newType.processing_hours" />
+          <ProcessingTimeInput id="new-type-time" v-model:days="newType.processing_days" v-model:hours="newType.processing_hours" :working="!!calendarText" />
           <button class="btn btn-primary w-full justify-center" :disabled="busy === 'add-type' || !newType.name.trim()" :aria-busy="busy === 'add-type'"><FIcon name="plus" :size="16" /> Add type</button>
         </form>
       </aside>

@@ -2,6 +2,8 @@ import { Op } from 'sequelize'
 import { User, type Row } from './models.ts'
 import { pendingPass, readLog } from './tracking-log.ts'
 import { parsePageAccess } from '../../shared/page-access.ts'
+import { dayMinutes, isWorkingTime, nextWorkingStart, workingMinutesBetween } from '../../shared/work-calendar.ts'
+import { loadWorkCalendar, type LoadedCalendar } from './work-calendar.ts'
 
 /**
  * The database follows the project schema (org_id, sla_days, content, …); the API
@@ -112,7 +114,37 @@ export async function documentDtos(rows: Row[]) {
   const userIds = [...new Set(rows.flatMap((r) => [val(r, 'visit_liaison_id'), val(r, 'visit_handler_id')]).filter(Boolean))] as string[]
   const users = userIds.length ? await User.findAll({ where: { id: { [Op.in]: userIds } }, attributes: ['id', 'first_name', 'last_name', 'full_name', 'email', 'account_type'] }) : []
   const byId = new Map(users.map((u) => [u.id, u]))
-  return rows.map((r) => documentDto(r, byId))
+  // Each organization's working calendar: processing time only runs inside its working hours.
+  const calendars = new Map<string, LoadedCalendar>()
+  for (const orgId of new Set(rows.map((r) => r.org_id as string))) calendars.set(orgId, await loadWorkCalendar(orgId))
+  const now = new Date()
+  return rows.map((r) => ({ ...documentDto(r, byId), processing: processingOf(r, calendars.get(r.org_id), now) }))
+}
+
+/**
+ * The document's processing time on its organization's working calendar (working minutes):
+ * how much it has used, how much its deadline allows and how much is left (negative = overdue),
+ * and whether its clock is paused right now (after hours, a day off or a holiday).
+ * Null for drafts.
+ */
+function processingOf(d: Row, loaded: LoadedCalendar | undefined, now: Date) {
+  if (!loaded || d.status === 'CREATED' || !d.submitted_at) return null
+  const cal = loaded.calendar
+  const active = AT_OFFICE.includes(d.status) || CARRYING.includes(d.status)
+  const end = active ? now : d.completed_at ? new Date(d.completed_at) : null
+  const target = d.target_completion_date ? new Date(d.target_completion_date) : null
+  const paused = active && loaded.configured && !isWorkingTime(now, cal)
+  return {
+    /** Working hours only (the organization set them), or around the clock. */
+    working_hours_only: loaded.configured,
+    /** One working day, in minutes (for showing working days). */
+    day_minutes: loaded.configured ? dayMinutes(cal) : 1440,
+    used_minutes: end ? Math.round(workingMinutesBetween(d.submitted_at, end, cal)) : null,
+    allowed_minutes: target ? Math.round(workingMinutesBetween(d.submitted_at, target, cal)) : null,
+    left_minutes: target && active ? Math.round(now < target ? workingMinutesBetween(now, target, cal) : -workingMinutesBetween(target, now, cal)) : null,
+    paused,
+    resumes_at: paused ? (nextWorkingStart(now, cal)?.toISOString() ?? null) : null,
+  }
 }
 
 export async function documentDtoOne(row: Row) {

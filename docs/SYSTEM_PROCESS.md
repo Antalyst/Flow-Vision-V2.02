@@ -79,6 +79,8 @@ FlowVision tracks paper documents for Bago City LGU. Someone uploads a document 
 - **Only the last office on the route** can approve or return. The owner and the CLIENT can't, unless they belong to that office.
 - A **failed delivery** (reported by the messenger) sends the document back to the office it came from, which has to scan it in again.
 - Once a document is **COMPLETED**, it leaves everyone's lists except the uploader's and the CLIENT's. It is still reachable from the activity log.
+- A **completed document's QR label is retired**: scanning it shows "This document is already complete" (who approved it, where and when) and offers nothing to pick up or receive. Its page shows the label struck through, and the **Report an issue** button and the **Discussion** thread are gone.
+- **Processing time counts working time only.** A document type's processing time (days + hours) runs only inside the organization's working hours and working days, and never on its holidays (Organization Settings › Working hours). With 8:00–17:00, Monday–Friday, a document still in progress at 17:00 on Friday pauses and picks up again at 8:00 on Monday; 1 day of processing time = one working day. The deadline is set this way on submission, and moves when the working hours or holidays change. Until working hours are set, the clock runs around the clock (holidays still pause it).
 
 ---
 
@@ -182,7 +184,7 @@ Anyone reports ──► OPEN ──► IN PROGRESS ──► RESOLVED (with res
 
 ### 5.2 Activity log (who did what, when)
 
-The `/logs` page is the system's audit report. You can filter it by category (Documents · Messengers · Approvals · Administration), by date range (today to 365 days) and by a search term.
+The `/logs` page is the system's audit report. You can filter it by category (Documents · Messengers · Approvals · Administration), by date range (today to 365 days) and by a search term. The CLIENT can also filter the organization log by **office** (what happened at that office or was done by its people). Every entry shows its full date and time.
 
 | Account | Scopes it can view |
 |---|---|
@@ -196,6 +198,8 @@ The `/logs` page is the system's audit report. You can filter it by category (Do
 - **Document timeline / routing**: an office-by-office breakdown of each visit: who received it, how long it waited, who carried it.
 - **Forecast**: estimated processing times per office.
 - **AI Assistant** (CLIENT, EMPLOYEE, STAFF): answers questions such as "which documents are overdue?" using only the documents that account can see.
+  - **Find documents**: "find the payroll memo from last week" searches titles and descriptions and/or the submission dates and shows the matches as cards that open each document. CLIENT finds every document of the organization; EMPLOYEE finds documents uploaded by the people of their office; STAFF finds only their own uploads.
+  - **Canvases on templates**: a formal document the assistant drafts is laid out on the document template it chooses (letterhead with the organization logo, header lines, signature block, footer). The user can switch the template, print, or export to Word, Excel or PDF, and every canvas notes that it was created with FlowVision.
 
 ---
 
@@ -207,7 +211,7 @@ The `/logs` page is the system's audit report. You can filter it by category (Do
 | **Team accounts** | CLIENT (all) · EMPLOYEE (STAFF + LIAISON in own office) · STAFF (LIAISON in own office) | Invite, edit, suspend, reset password, set page access | Can't suspend or demote yourself, or change your own page access |
 | **Offices** | CLIENT | Add and edit offices | Others can only view them |
 | **Document Routes** | CLIENT | Build routes (office steps, processing time, final checkpoint) | Documents already in flight keep their original steps |
-| **Org Settings** | CLIENT | Organization profile, document types, AI knowledge files | Knowledge files up to `KNOWLEDGE_MAX_MB` (200 MB default) |
+| **Org Settings** | CLIENT | Organization profile and **logo** (printed on QR labels and letterheads), **working hours, working days and holidays** (processing time pauses outside them), document types and their processing time, **document templates** for AI canvases (several, one default), AI knowledge files | Knowledge files up to `KNOWLEDGE_MAX_MB` (200 MB default) · logo and signature images: PNG/JPG up to 2 MB · working hours, holidays and templates need `npm run db:add-settings` once |
 | **Messages** | All | Direct messages, per-document threads, office channel | Office channel needs an office |
 | **Notifications** | All | Realtime alerts (pickup, incoming, received, approved, returned, failed delivery, issues) | Stored in memory for realtime; single server instance |
 | **QR / Scan** | EMPLOYEE, STAFF, LIAISON | Verify (preview what the scan will do), then confirm | Not available to CLIENT |

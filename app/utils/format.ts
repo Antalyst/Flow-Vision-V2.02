@@ -133,13 +133,44 @@ export function formatBytes(bytes?: number | null) {
   return `${n.toFixed(n < 10 && i > 0 ? 1 : 0)} ${units[i]}`
 }
 
-/** SLA status of the step a document is currently on. */
+/**
+ * A document type's processing time in words: "3 working days 2 hours" once the organization
+ * set working hours (days are working days then), else "3d 2h".
+ */
+export function processingLabel(days: number, hours: number, working: boolean) {
+  if (!working) return formatSla(days * 24 + hours)
+  const parts = [days && `${days} working day${days === 1 ? '' : 's'}`, hours && `${hours} working hour${hours === 1 ? '' : 's'}`].filter(Boolean)
+  return parts.join(' ') || '0 hours'
+}
+
+/**
+ * Working time as working days + hours: with an 8-hour working day, 1,200 minutes → "2d 4h".
+ * Around the clock (dayMinutes 1440) the days are ordinary days.
+ */
+export function formatWorkTime(minutes?: number | null, dayMinutes = 1440) {
+  if (minutes == null || Number.isNaN(minutes)) return '—'
+  const total = Math.max(0, Math.round(minutes))
+  if (total < dayMinutes || dayMinutes <= 0) return formatDuration(total)
+  const d = Math.floor(total / dayMinutes)
+  const h = Math.floor((total - d * dayMinutes) / 60)
+  return h ? `${d}d ${h}h` : `${d}d`
+}
+
 /**
  * How the document stands against its deadline: its document type's processing time from
- * submission (target_at). Warning in the last quarter of the time, danger once overdue.
+ * submission (target_at), counted in the organization's working hours. Warning in the last
+ * quarter of the time, danger once overdue. `paused`: the clock is stopped right now.
  */
-export function deadlineState(doc: FlowDocument): { tone: Tone; label: string } | null {
+export function deadlineState(doc: FlowDocument): { tone: Tone; label: string; paused?: boolean } | null {
   if (!doc.target_at || !doc.submitted_at || ['COMPLETED', 'RETURNED', 'CREATED'].includes(doc.status)) return null
+  const p = doc.processing
+  if (p && p.left_minutes != null && p.allowed_minutes != null) {
+    const time = (m: number) => formatWorkTime(m, p.day_minutes)
+    const paused = p.paused ? ' · paused' : ''
+    if (p.left_minutes < 0) return { tone: 'danger', label: `Overdue by ${time(-p.left_minutes)}${paused}`, paused: p.paused }
+    const tone: Tone = p.left_minutes < p.allowed_minutes * 0.25 ? 'warning' : 'success'
+    return { tone, label: `${time(p.left_minutes)} left${paused}`, paused: p.paused }
+  }
   const total = (new Date(doc.target_at).getTime() - new Date(doc.submitted_at).getTime()) / 60_000
   const remaining = (new Date(doc.target_at).getTime() - Date.now()) / 60_000
   if (remaining < 0) return { tone: 'danger', label: `Overdue by ${formatDuration(-remaining)}` }

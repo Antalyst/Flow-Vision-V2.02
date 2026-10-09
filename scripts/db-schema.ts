@@ -16,8 +16,8 @@ assertSafeTarget('schema', { host: env.db.host, port: env.db.port, name: env.db.
 
 const VIEWS = ['active_documents_by_office', 'liaison_performance', 'pending_approvals']
 const TABLES = [
-  'ai_messages', 'ai_conversations', 'approvals', 'audit_logs', 'auth_sessions', 'documents', 'document_files', 'document_tracking', 'document_types', 'file_blobs', 'issues', 'knowledge_files', 'liaisons', 'messages',
-  'notifications', 'offices', 'organizations', 'organization_routes', 'qr_codes', 'route_steps', 'users',
+  'ai_messages', 'ai_conversations', 'approvals', 'audit_logs', 'auth_sessions', 'documents', 'document_files', 'document_templates', 'document_tracking', 'document_types', 'file_blobs', 'issues',
+  'knowledge_files', 'liaisons', 'messages', 'notifications', 'offices', 'organizations', 'organization_holidays', 'organization_routes', 'organization_settings', 'qr_codes', 'route_steps', 'users',
 ]
 
 const schemaPath = path.resolve(import.meta.dirname, '../database/flowvision-complete-schema.sql')

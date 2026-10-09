@@ -44,6 +44,8 @@ export interface ActivityQuery {
   before: string | null
   q: string
   limit: number
+  /** CLIENT, organization scope: only what happened at this office or was done by its people. */
+  officeId?: string | null
 }
 
 interface RawEvent {
@@ -83,10 +85,25 @@ function auditSummary(a: Row) {
   return name ? `${name}${extra}` : null
 }
 
+/** The people of an office (its employees, staff and messengers), for the CLIENT's office filter. */
+async function membersOf(orgId: string, officeId: string) {
+  const members = await User.findAll({ where: { org_id: orgId, office_id: officeId }, attributes: ['id'] })
+  return new Set<string>(members.map((u) => u.id as string))
+}
+
 export async function activityLog(actor: Actor, query: ActivityQuery) {
   if (!scopesFor(actor).includes(query.scope)) throw badRequest('You can’t view that activity log')
-  const { scope, since } = query
-  const people = scope === 'office' ? await officePeople(actor) : null
+  const { since } = query
+  // The CLIENT can narrow the organization's log to one office: it reads like that office's own log.
+  let filterOffice: string | null = null
+  if (query.officeId && actor.account_type === 'CLIENT' && query.scope === 'organization') {
+    const office = await Office.findOne({ where: { id: query.officeId, org_id: actor.org_id }, attributes: ['id'] })
+    if (!office) throw badRequest('That office is not in your organization', { field: 'office' })
+    filterOffice = office.id as string
+  }
+  const scope: ActivityScope = filterOffice ? 'office' : query.scope
+  const officeId = filterOffice ?? (actor.office_id as string | null)
+  const people = filterOffice ? await membersOf(actor.org_id, filterOffice) : scope === 'office' ? await officePeople(actor) : null
   const peopleIds = people ? [...people] : []
   const wantDocs = query.category !== 'admin'
   const wantAdmin = query.category === 'all' || query.category === 'admin'
@@ -94,7 +111,7 @@ export async function activityLog(actor: Actor, query: ActivityQuery) {
   // 1. Document steps, from each visit's event log.
   const visitWhere: WhereOptions[] = [{ updated_at: { [Op.gte]: since } }]
   if (scope === 'mine') visitWhere.push(likeBy(actor.id))
-  if (scope === 'office') visitWhere.push({ [Op.or]: [{ office_id: actor.office_id }, ...peopleIds.map(likeBy)] })
+  if (scope === 'office') visitWhere.push({ [Op.or]: [{ office_id: officeId }, ...peopleIds.map(likeBy)] })
   const visits = wantDocs
     ? await DocumentTracking.findAll({
         where: { [Op.and]: visitWhere },
@@ -111,7 +128,7 @@ export async function activityLog(actor: Actor, query: ActivityQuery) {
       if (e.at < sinceIso) continue
       const mine = e.by === actor.id
       if (scope === 'mine' && !mine) continue
-      if (scope === 'office' && visit.office_id !== actor.office_id && !(e.by && people!.has(e.by))) continue
+      if (scope === 'office' && visit.office_id !== officeId && !(e.by && people!.has(e.by))) continue
       events.push({
         id: e.id,
         type: e.type,
@@ -132,7 +149,7 @@ export async function activityLog(actor: Actor, query: ActivityQuery) {
   if (wantDocs && (query.category === 'all' || query.category === 'documents')) {
     const docWhere: WhereOptions = { org_id: actor.org_id, created_at: { [Op.gte]: since } }
     if (scope === 'mine') Object.assign(docWhere, { submitted_by: actor.id })
-    if (scope === 'office') Object.assign(docWhere, { submitted_by: { [Op.in]: peopleIds } })
+    if (scope === 'office') Object.assign(docWhere, { submitted_by: { [Op.in]: peopleIds.length ? peopleIds : [''] } })
     const created = await Document.findAll({ where: docWhere, attributes: ['id', 'submitted_by', 'created_at'], order: [['created_at', 'DESC']], limit: MAX_VISITS })
     for (const d of created) {
       events.push({
@@ -155,7 +172,7 @@ export async function activityLog(actor: Actor, query: ActivityQuery) {
   if (wantAdmin) {
     const auditWhere: WhereOptions = { created_at: { [Op.gte]: since }, action: { [Op.notIn]: [...SKIPPED_AUDIT] } }
     if (scope === 'mine') Object.assign(auditWhere, { user_id: actor.id })
-    else if (scope === 'office') Object.assign(auditWhere, { user_id: { [Op.in]: peopleIds } })
+    else if (scope === 'office') Object.assign(auditWhere, { user_id: { [Op.in]: peopleIds.length ? peopleIds : [''] } })
     else Object.assign(auditWhere, { user_id: { [Op.in]: sequelize.literal(`(SELECT u.id FROM users u WHERE u.org_id = ${sequelize.escape(actor.org_id)})`) } })
     const audits = await AuditLog.findAll({ where: auditWhere, order: [['created_at', 'DESC']], limit: 1000 })
     for (const a of audits) {
@@ -244,7 +261,8 @@ export async function activityLog(actor: Actor, query: ActivityQuery) {
   return {
     data: page,
     next_before: searched.length > query.limit ? page[page.length - 1]!.created_at : null,
-    scope,
+    scope: query.scope,
+    office_id: filterOffice,
     scopes: scopesFor(actor),
   }
 }

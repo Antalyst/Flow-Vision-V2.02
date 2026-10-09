@@ -120,8 +120,9 @@ try {
     }
   }
   // …plus AI Assistant chat history (conversations before their messages, for the foreign key),
-  // and file_blobs, where uploads are kept on hosts with a read-only disk (Vercel).
-  for (const table of ['document_types', 'knowledge_files', 'document_files', 'ai_conversations', 'ai_messages', 'file_blobs']) {
+  // file_blobs, where uploads are kept on hosts with a read-only disk (Vercel), and Organization
+  // Settings' working hours, holidays and document templates (also: scripts/db-add-settings.ts).
+  for (const table of ['document_types', 'knowledge_files', 'document_files', 'ai_conversations', 'ai_messages', 'file_blobs', 'organization_settings', 'organization_holidays', 'document_templates']) {
     if (await hasTable(table)) {
       console.log(`[migrate] ${table} already present`)
       continue

@@ -1,6 +1,30 @@
 import type { CanvasDoc, MdBlock } from '~/utils/markdown'
+import type { LoadedImage } from '~/utils/print'
+import type { DocumentTemplateItem } from '~/types'
 
 export type ExportFormat = 'docx' | 'xlsx' | 'pdf'
+
+/** How a canvas is laid out: its template (letterhead) and the organization it belongs to. */
+export interface ExportLayout {
+  template: DocumentTemplateItem | null
+  orgName: string
+  logoUrl: string | null
+}
+
+/** The layout with its images loaded. */
+interface Brand {
+  template: DocumentTemplateItem | null
+  orgName: string
+  logo: LoadedImage | null
+  signature: LoadedImage | null
+}
+
+/** The letterhead lines: the template's, or just the organization name. */
+const headerLines = (b: Brand) => {
+  const lines = (b.template?.header_text ?? '').split(/\r?\n/).map((l) => l.trim()).filter(Boolean)
+  return lines.length ? lines : [b.orgName]
+}
+const hasSignatureBlock = (b: Brand) => Boolean(b.template && (b.template.signatory_name || b.template.signatory_title || b.signature))
 
 const INK = '111113'
 const MUTED = '6B6B70'
@@ -45,9 +69,9 @@ const isWide = (blocks: MdBlock[]) => blocks.some((b) => b.type === 'table' && b
 // Word (.docx)
 // ---------------------------------------------------------------------------
 
-async function toDocx(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
+async function toDocx(canvas: CanvasDoc, blocks: MdBlock[], meta: string, brand: Brand) {
   const d = await import('docx')
-  const { AlignmentType, BorderStyle, Document, HeadingLevel, LevelFormat, Packer, PageOrientation, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } = d
+  const { AlignmentType, BorderStyle, Document, Footer, HeadingLevel, ImageRun, LevelFormat, Packer, PageOrientation, Paragraph, ShadingType, Table, TableCell, TableRow, TextRun, WidthType } = d
 
   const runs = (text: string, opts: { size?: number; bold?: boolean; color?: string } = {}) =>
     parseInline(text).map(
@@ -57,10 +81,23 @@ async function toDocx(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
   const cellBorders = { top: border, bottom: border, left: border, right: border }
   const headings = [HeadingLevel.HEADING_1, HeadingLevel.HEADING_2, HeadingLevel.HEADING_3]
 
-  const children: Array<InstanceType<typeof Paragraph> | InstanceType<typeof Table>> = [
-    new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun({ text: canvas.title })] }),
-    new Paragraph({ spacing: { after: 280 }, children: [new TextRun({ text: meta, color: MUTED, size: 18 })] }),
-  ]
+  const image = (img: LoadedImage, maxWidth: number, maxHeight: number) => new ImageRun({ type: img.type, data: img.bytes, transformation: fitImage(img, maxWidth, maxHeight) })
+  const children: Array<InstanceType<typeof Paragraph> | InstanceType<typeof Table>> = []
+  if (brand.template) {
+    // Letterhead: logo, header lines (the last one stands out), a double rule.
+    if (brand.logo) children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 }, children: [image(brand.logo, 160, 72)] }))
+    const lines = headerLines(brand)
+    lines.forEach((line, i) => {
+      const last = i === lines.length - 1
+      children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: last ? line.toUpperCase() : line, bold: last, size: last ? 26 : 21, color: last ? INK : '3B3B40' })] }))
+    })
+    children.push(new Paragraph({ border: { bottom: { style: BorderStyle.DOUBLE, size: 6, color: INK } }, spacing: { after: 280 }, children: [] }))
+  } else {
+    children.push(
+      new Paragraph({ heading: HeadingLevel.TITLE, children: [new TextRun({ text: canvas.title })] }),
+      new Paragraph({ spacing: { after: 280 }, children: [new TextRun({ text: meta, color: MUTED, size: 18 })] }),
+    )
+  }
   let listInstance = 0
 
   for (const b of blocks) {
@@ -131,6 +168,24 @@ async function toDocx(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
     }
   }
 
+  // Signature block, on the right.
+  if (brand.template && hasSignatureBlock(brand)) {
+    const t = brand.template
+    children.push(new Paragraph({ spacing: { before: 600 }, children: [] }))
+    if (brand.signature) children.push(new Paragraph({ alignment: AlignmentType.RIGHT, children: [image(brand.signature, 180, 64)] }))
+    if (t.signatory_name) {
+      children.push(new Paragraph({ alignment: AlignmentType.RIGHT, border: { top: { style: BorderStyle.SINGLE, size: 6, color: INK } }, children: [new TextRun({ text: t.signatory_name.toUpperCase(), bold: true })] }))
+    }
+    if (t.signatory_title) children.push(new Paragraph({ alignment: AlignmentType.RIGHT, children: [new TextRun({ text: t.signatory_title, size: 20, color: '3B3B40' })] }))
+  }
+  // Every page ends with the template's footer and the FlowVision note.
+  const footer = new Footer({
+    children: [
+      ...(brand.template?.footer_text ? [new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: brand.template.footer_text, size: 16, color: MUTED })] })] : []),
+      new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: FLOWVISION_NOTE, italics: true, size: 16, color: MUTED })] }),
+    ],
+  })
+
   const doc = new Document({
     creator: 'FlowVision Assistant',
     title: canvas.title,
@@ -143,7 +198,7 @@ async function toDocx(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
         },
       ],
     },
-    sections: [{ properties: { page: { size: { orientation: isWide(blocks) ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT } } }, children }],
+    sections: [{ properties: { page: { size: { orientation: isWide(blocks) ? PageOrientation.LANDSCAPE : PageOrientation.PORTRAIT } } }, footers: { default: footer }, children }],
   })
   download(await Packer.toBlob(doc), fileName(canvas.title, 'docx'))
 }
@@ -155,7 +210,7 @@ async function toDocx(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
 const NUMBER = /^-?\d{1,15}(\.\d+)?$/
 const cellValue = (v: string) => (NUMBER.test(v) && !/^-?0\d/.test(v) ? Number(v) : v)
 
-async function toXlsx(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
+async function toXlsx(canvas: CanvasDoc, blocks: MdBlock[], meta: string, brand: Brand) {
   const mod = await import('exceljs')
   const ExcelJS = ((mod as { default?: unknown }).default ?? mod) as typeof import('exceljs')
   const wb = new ExcelJS.Workbook()
@@ -172,9 +227,25 @@ async function toXlsx(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
   }
   const thin = { style: 'thin' as const, color: { argb: `FF${RULE}` } }
 
+  // The template's letterhead lines head each sheet; the FlowVision note ends it.
+  const letterhead = (ws: import('exceljs').Worksheet) => {
+    if (!brand.template) return
+    const lines = headerLines(brand)
+    lines.forEach((line, i) => (ws.addRow([line]).font = { bold: i === lines.length - 1, size: i === lines.length - 1 ? 12 : 10, color: { argb: `FF${INK}` } }))
+    ws.addRow([])
+  }
+  const signOff = (ws: import('exceljs').Worksheet) => {
+    ws.addRow([])
+    if (brand.template?.signatory_name) ws.addRow([brand.template.signatory_name.toUpperCase()]).font = { bold: true }
+    if (brand.template?.signatory_title) ws.addRow([brand.template.signatory_title])
+    if (brand.template?.footer_text) ws.addRow([brand.template.footer_text]).font = { size: 9, color: { argb: `FF${MUTED}` } }
+    ws.addRow([FLOWVISION_NOTE]).font = { italic: true, size: 9, color: { argb: `FF${MUTED}` } }
+  }
+
   const tables = tablesOf(blocks)
   tables.forEach((t, ti) => {
     const ws = wb.addWorksheet(sheetName(t.name ?? (tables.length === 1 ? canvas.title : `Table ${ti + 1}`)))
+    letterhead(ws)
     ws.addRow([t.name && tables.length > 1 ? `${canvas.title} — ${t.name}` : canvas.title]).font = { bold: true, size: 14, color: { argb: `FF${INK}` } }
     ws.addRow([meta]).font = { italic: true, size: 9, color: { argb: `FF${MUTED}` } }
     ws.addRow([])
@@ -203,12 +274,14 @@ async function toXlsx(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
       const longest = Math.max(h.length, ...t.rows.map((r) => (r[c] ?? '').length))
       ws.getColumn(c + 1).width = Math.min(60, Math.max(10, longest + 2))
     })
+    signOff(ws)
   })
 
   // Prose (or a canvas without tables): one readable sheet of its text.
   if (!tables.length) {
     const ws = wb.addWorksheet(sheetName(canvas.title))
     ws.getColumn(1).width = 110
+    letterhead(ws)
     ws.addRow([canvas.title]).font = { bold: true, size: 14 }
     ws.addRow([meta]).font = { italic: true, size: 9, color: { argb: `FF${MUTED}` } }
     ws.addRow([])
@@ -220,6 +293,7 @@ async function toXlsx(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
       else continue
       ws.lastRow!.alignment = { wrapText: true, vertical: 'top' }
     }
+    signOff(ws)
   }
 
   const buffer = await wb.xlsx.writeBuffer()
@@ -245,7 +319,7 @@ const pdfText = (s: string) =>
 
 const rgb = (hex: string): [number, number, number] => [parseInt(hex.slice(0, 2), 16), parseInt(hex.slice(2, 4), 16), parseInt(hex.slice(4, 6), 16)]
 
-async function toPdf(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
+async function toPdf(canvas: CanvasDoc, blocks: MdBlock[], meta: string, brand: Brand) {
   const [{ jsPDF }, { autoTable }] = await Promise.all([import('jspdf'), import('jspdf-autotable')])
   const doc = new jsPDF({ orientation: isWide(blocks) ? 'landscape' : 'portrait', unit: 'pt', format: 'a4' })
   const W = doc.internal.pageSize.getWidth()
@@ -273,11 +347,38 @@ async function toPdf(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
     y += opts.gap ?? 0
   }
 
-  write(canvas.title, { size: 18, bold: true, color: INK, gap: 2 })
-  write(meta, { size: 9, color: MUTED, gap: 8 })
-  doc.setDrawColor(...rgb(RULE))
-  doc.line(M, y, W - M, y)
-  y += 14
+  const centered = (text: string, size: number, bold: boolean, color: string) => {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal')
+    doc.setFontSize(size)
+    doc.setTextColor(...rgb(color))
+    for (const line of doc.splitTextToSize(pdfText(text), width) as string[]) {
+      doc.text(line, W / 2, y + size, { align: 'center' })
+      y += size * 1.3
+    }
+  }
+  if (brand.template) {
+    // Letterhead: logo, header lines (the last one stands out), a double rule.
+    if (brand.logo) {
+      const { width: w, height: h } = fitImage(brand.logo, 140, 60)
+      doc.addImage(brand.logo.dataUrl, brand.logo.type === 'png' ? 'PNG' : 'JPEG', (W - w) / 2, y, w, h)
+      y += h + 6
+    }
+    const lines = headerLines(brand)
+    lines.forEach((line, i) => (i === lines.length - 1 ? centered(line.toUpperCase(), 12.5, true, INK) : centered(line, 10, false, '3B3B40')))
+    y += 6
+    doc.setDrawColor(...rgb(INK))
+    doc.setLineWidth(1.4)
+    doc.line(M, y, W - M, y)
+    doc.setLineWidth(0.5)
+    doc.line(M, y + 3, W - M, y + 3)
+    y += 20
+  } else {
+    write(canvas.title, { size: 18, bold: true, color: INK, gap: 2 })
+    write(meta, { size: 9, color: MUTED, gap: 8 })
+    doc.setDrawColor(...rgb(RULE))
+    doc.line(M, y, W - M, y)
+    y += 14
+  }
 
   for (const b of blocks) {
     switch (b.type) {
@@ -331,13 +432,49 @@ async function toPdf(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
     }
   }
 
+  // Signature block, on the right.
+  if (brand.template && hasSignatureBlock(brand)) {
+    const t = brand.template
+    const blockW = 200
+    const x = W - M - blockW
+    ensure(110)
+    y += 36
+    if (brand.signature) {
+      const { width: w, height: h } = fitImage(brand.signature, 180, 56)
+      doc.addImage(brand.signature.dataUrl, brand.signature.type === 'png' ? 'PNG' : 'JPEG', x + (blockW - w) / 2, y, w, h)
+      y += h - 4
+    }
+    doc.setDrawColor(...rgb(INK))
+    doc.setLineWidth(0.8)
+    doc.line(x, y, x + blockW, y)
+    y += 2
+    doc.setTextColor(...rgb(INK))
+    if (t.signatory_name) {
+      doc.setFont('helvetica', 'bold')
+      doc.setFontSize(10.5)
+      doc.text(pdfText(t.signatory_name.toUpperCase()), x + blockW / 2, y + 11, { align: 'center' })
+      y += 14
+    }
+    if (t.signatory_title) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(9.5)
+      doc.setTextColor(...rgb('3B3B40'))
+      doc.text(pdfText(t.signatory_title), x + blockW / 2, y + 10, { align: 'center' })
+      y += 13
+    }
+  }
+
+  // Every page: the template's footer, the FlowVision note and the page number.
   const pages = doc.getNumberOfPages()
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p)
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(8)
     doc.setTextColor(...rgb(MUTED))
-    doc.text(pdfText(canvas.title).slice(0, 90), M, H - 24)
+    if (brand.template?.footer_text) doc.text(pdfText(brand.template.footer_text).slice(0, 140), W / 2, H - 36, { align: 'center' })
+    doc.setFont('helvetica', 'italic')
+    doc.text(pdfText(FLOWVISION_NOTE), M, H - 24)
+    doc.setFont('helvetica', 'normal')
     doc.text(`Page ${p} of ${pages}`, W - M, H - 24, { align: 'right' })
   }
   doc.save(fileName(canvas.title, 'pdf'))
@@ -346,21 +483,27 @@ async function toPdf(canvas: CanvasDoc, blocks: MdBlock[], meta: string) {
 /**
  * Canvas exports, built in the browser as real Office/PDF files — Word through `docx`, Excel
  * through `exceljs` (one sheet per table, typed numbers, frozen header and filters), PDF through
- * `jspdf` + `jspdf-autotable`. The libraries load only when an export is first used.
+ * `jspdf` + `jspdf-autotable`. The libraries load only when an export is first used. A canvas on a
+ * template gets its letterhead, signature block and footer; every export notes it was created with FlowVision.
  */
 export function useCanvasExport() {
   const auth = useAuthStore()
   const busy = ref<ExportFormat | null>(null)
 
-  async function exportCanvas(canvas: CanvasDoc, format: ExportFormat) {
+  /** `layout`: the canvas's template (letterhead), laid out the same way as its preview and print. */
+  async function exportCanvas(canvas: CanvasDoc, format: ExportFormat, layout?: ExportLayout) {
     if (busy.value) return
     busy.value = format
     try {
       const blocks = parseMarkdown(canvas.content)
-      const meta = `${auth.user?.organization?.name ?? 'FlowVision'} · Prepared with FlowVision Assistant · ${stampFmt.format(new Date())}`
-      if (format === 'docx') await toDocx(canvas, blocks, meta)
-      else if (format === 'xlsx') await toXlsx(canvas, blocks, meta)
-      else await toPdf(canvas, blocks, meta)
+      const orgName = layout?.orgName || auth.user?.organization?.name || 'FlowVision'
+      const meta = `${orgName} · Prepared with FlowVision Assistant · ${stampFmt.format(new Date())}`
+      const template = layout?.template ?? null
+      const [logo, signature] = await Promise.all([loadImage(template?.show_logo ? layout?.logoUrl : null), loadImage(template?.signature_url)])
+      const brand: Brand = { template, orgName, logo, signature }
+      if (format === 'docx') await toDocx(canvas, blocks, meta, brand)
+      else if (format === 'xlsx') await toXlsx(canvas, blocks, meta, brand)
+      else await toPdf(canvas, blocks, meta, brand)
     } finally {
       busy.value = null
     }

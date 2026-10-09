@@ -5,6 +5,7 @@ import { AuthSession, Liaison, Office, Organization, User, type Row } from './mo
 import { liaisonDto, officeDto } from './serializers.ts'
 import { env } from './env.ts'
 import { parsePageAccess } from '../../shared/page-access.ts'
+import { imageKey, imageVersion } from './org-assets.ts'
 
 /** A signed-in user with `office` and `organization` loaded. */
 export type Actor = Row
@@ -51,7 +52,7 @@ export async function loadActor(userId: string): Promise<Actor | null> {
   const user = await User.findByPk(userId, {
     include: [
       { model: Office, as: 'office' },
-      { model: Organization, as: 'organization', attributes: ['id', 'name', 'status'] },
+      { model: Organization, as: 'organization', attributes: ['id', 'name', 'status', 'logo_url'] },
     ],
   })
   if (!user || user.status === 'inactive') return null
@@ -119,7 +120,14 @@ export async function serializeActor(user: Actor) {
     account_type: user.account_type,
     status: user.status === 'inactive' ? 'SUSPENDED' : 'ACTIVE',
     must_change_password: user.status === 'pending',
-    organization: user.organization ? { id: user.organization.id, name: user.organization.name } : null,
+    organization: user.organization
+      ? {
+          id: user.organization.id,
+          name: user.organization.name,
+          // Printed on QR labels and document letterheads (Organization Settings).
+          logo_url: imageKey(user.organization.logo_url) ? `/api/org/logo?v=${imageVersion(user.organization.logo_url)}` : null,
+        }
+      : null,
     office: officeDto(user.office),
     has_approval_authority: hasApprovalAuthority(user),
     liaison: liaisonDto(liaison),

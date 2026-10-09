@@ -13,6 +13,7 @@ import {
   touchConversation,
 } from '~~/server/lib/ai-history.ts'
 import { AiMessage } from '~~/server/lib/models.ts'
+import type { StoredTool } from '~~/server/lib/ai-history.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
 // The free models allow 8,000 tokens a minute, so only the recent turns go along.
@@ -61,8 +62,8 @@ function toPrompt(turns: Array<{ role: 'user' | 'assistant'; content: string }>)
 type StreamEvent =
   | { type: 'saved'; conversation: ReturnType<typeof serializeConversation>; question: { id: string; at: string } }
   | { type: 'tool_start'; id: string; name: string; label: string }
-  | { type: 'tool_done'; id: string; name: string; label: string; summary: string; ok: boolean }
-  | { type: 'reply'; id: string; at: string; content: string; model: string | null; tools: Array<{ name: string; label: string; summary: string; ok: boolean }> }
+  | ({ type: 'tool_done'; id: string } & StoredTool)
+  | { type: 'reply'; id: string; at: string; content: string; model: string | null; tools: StoredTool[] }
   | { type: 'error'; id?: string; at?: string; message: string }
 
 /**
@@ -102,7 +103,7 @@ export default defineApiHandler(async (event) => {
           open = false
         }
       }
-      const used: Array<{ name: string; label: string; summary: string; ok: boolean }> = []
+      const used: StoredTool[] = []
       send({ type: 'saved', conversation: serializeConversation(convo), question: { id: question.id, at: new Date(question.created_at).toISOString() } })
       try {
         const messages: ChatCompletionMessageParam[] = [{ role: 'system', content: system }, ...history]
@@ -125,8 +126,10 @@ export default defineApiHandler(async (event) => {
             send({ type: 'tool_start', id: call.id, name, label })
             const outcome = await runAssistantTool(name, call.function.arguments, actor)
             messages.push({ role: 'tool', tool_call_id: call.id, content: outcome.content })
-            used.push({ name, label, summary: outcome.summary, ok: outcome.ok })
-            send({ type: 'tool_done', id: call.id, name, label, summary: outcome.summary, ok: outcome.ok })
+            // Documents it found go to the page as cards (with links), not into the AI's text.
+            const done: StoredTool = { name, label, summary: outcome.summary, ok: outcome.ok, ...(outcome.documents && { documents: outcome.documents }) }
+            used.push(done)
+            send({ type: 'tool_done', id: call.id, ...done })
           }
         }
         const content = scrubIds(reply.trim()) || "I couldn't put an answer together this time. Try asking again, or phrase the question differently."

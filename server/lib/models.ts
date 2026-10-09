@@ -321,6 +321,52 @@ export const KnowledgeFile = define('knowledge_files', {
   uploaded_by: DataTypes.CHAR(36),
 })
 
+/**
+ * Organization Settings: the working hours and days processing time counts (Philippine time).
+ * No row = around the clock, every day (how deadlines worked before working hours existed).
+ */
+export const OrganizationSettings = define('organization_settings', {
+  org_id: { type: DataTypes.CHAR(36), primaryKey: true },
+  // "HH:MM"
+  work_start: { type: DataTypes.CHAR(5), allowNull: false, defaultValue: '08:00' },
+  work_end: { type: DataTypes.CHAR(5), allowNull: false, defaultValue: '17:00' },
+  // Comma-separated days of the week, 0 = Sunday … 6 = Saturday.
+  work_days: { type: DataTypes.STRING(20), allowNull: false, defaultValue: '1,2,3,4,5' },
+  updated_by: DataTypes.CHAR(36),
+})
+
+/** Organization Settings: holidays and other no-work days (processing time pauses on them). */
+export const OrganizationHoliday = define('organization_holidays', {
+  id: uuidPk,
+  org_id: { type: DataTypes.CHAR(36), allowNull: false },
+  holiday_date: { type: DataTypes.DATEONLY, allowNull: false },
+  name: { type: DataTypes.STRING(150), allowNull: false },
+  // Same month and day every year (e.g. Christmas Day).
+  recurring: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  created_by: DataTypes.CHAR(36),
+})
+
+/** Organization Settings: letterheads (logo, header, signature, footer) the AI drafts formal documents on. */
+export const DocumentTemplate = define('document_templates', {
+  id: uuidPk,
+  org_id: { type: DataTypes.CHAR(36), allowNull: false },
+  name: { type: DataTypes.STRING(100), allowNull: false },
+  // When to use it — the AI reads this to choose a template.
+  description: DataTypes.STRING(500),
+  show_logo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+  header_text: DataTypes.TEXT,
+  body_guide: DataTypes.TEXT,
+  signatory_name: DataTypes.STRING(150),
+  signatory_title: DataTypes.STRING(150),
+  // "templates/<uuid>/<original name>" under UPLOAD_DIR (see file-store.ts)
+  signature_url: DataTypes.STRING(500),
+  footer_text: DataTypes.STRING(500),
+  is_default: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+  is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+  sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  created_by: DataTypes.CHAR(36),
+})
+
 /** AI Assistant: one chat thread, private to the user who started it. */
 export const AiConversation = define('ai_conversations', {
   id: uuidPk,

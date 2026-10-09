@@ -797,6 +797,76 @@ CREATE TABLE `ai_messages` (
   KEY `idx_ai_messages_conversation` (`conversation_id`,`created_at`),
   CONSTRAINT `fk_ai_messages_conversation` FOREIGN KEY (`conversation_id`) REFERENCES `ai_conversations` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Messages of AI Assistant conversations';
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `organization_settings` (working hours that processing time counts)
+--
+
+CREATE TABLE `organization_settings` (
+  `org_id` char(36) NOT NULL COMMENT 'Organization reference (one row per organization)',
+  `work_start` char(5) NOT NULL DEFAULT '08:00' COMMENT 'Working hours start, HH:MM Philippine time',
+  `work_end` char(5) NOT NULL DEFAULT '17:00' COMMENT 'Working hours end, HH:MM Philippine time',
+  `work_days` varchar(20) NOT NULL DEFAULT '1,2,3,4,5' COMMENT 'Working days: 0 = Sunday … 6 = Saturday',
+  `updated_by` char(36) DEFAULT NULL COMMENT 'CLIENT who last changed it',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`org_id`),
+  CONSTRAINT `fk_organization_settings_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_organization_settings_user` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Working hours and days; processing time pauses outside them (no row = around the clock)';
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `organization_holidays` (no-work days: processing time pauses)
+--
+
+CREATE TABLE `organization_holidays` (
+  `id` char(36) NOT NULL,
+  `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `holiday_date` date NOT NULL COMMENT 'The day (Philippine time)',
+  `name` varchar(150) NOT NULL COMMENT 'e.g. Independence Day',
+  `recurring` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Same month and day every year',
+  `created_by` char(36) DEFAULT NULL COMMENT 'CLIENT who added it',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_organization_holidays_org_date` (`org_id`,`holiday_date`),
+  CONSTRAINT `fk_organization_holidays_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_organization_holidays_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Holidays and other no-work days of an organization';
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `document_templates` (letterheads for documents the AI drafts)
+--
+
+CREATE TABLE `document_templates` (
+  `id` char(36) NOT NULL,
+  `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `name` varchar(100) NOT NULL COMMENT 'e.g. Memorandum, Official Letter',
+  `description` varchar(500) DEFAULT NULL COMMENT 'When to use it (the AI reads this to choose a template)',
+  `show_logo` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Print the organization logo in the letterhead',
+  `header_text` text DEFAULT NULL COMMENT 'Letterhead lines under the logo',
+  `body_guide` text DEFAULT NULL COMMENT 'Structure the AI follows for the body (Markdown)',
+  `signatory_name` varchar(150) DEFAULT NULL COMMENT 'Signature block: name',
+  `signatory_title` varchar(150) DEFAULT NULL COMMENT 'Signature block: position',
+  `signature_url` varchar(500) DEFAULT NULL COMMENT 'templates/<uuid>/<name> signature image under UPLOAD_DIR',
+  `footer_text` varchar(500) DEFAULT NULL COMMENT 'Footer line, e.g. address and contact numbers',
+  `is_default` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Used when the AI picks none',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Offered to the AI',
+  `sort_order` int(11) NOT NULL DEFAULT 0 COMMENT 'Position in the list',
+  `created_by` char(36) DEFAULT NULL COMMENT 'CLIENT who added it',
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
+  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_document_templates_org_name` (`org_id`,`name`),
+  CONSTRAINT `fk_document_templates_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_document_templates_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Document templates (letterhead, signature, footer) for AI canvases';
 COMMIT;
 
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
