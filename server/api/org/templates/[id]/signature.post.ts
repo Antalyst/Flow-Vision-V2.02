@@ -5,9 +5,9 @@ import { requirePage } from '~~/server/lib/team.ts'
 import { readImagePart, removeImage, saveImage } from '~~/server/lib/org-assets.ts'
 import { templateDto } from '~~/server/lib/templates.ts'
 
-/** Upload a template's signature image (CLIENT only). multipart/form-data: file (PNG or JPG, up to 2 MB). */
+/** Upload a template's signature image (ADMIN only). multipart/form-data: file (PNG or JPG, up to 2 MB). */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const template = await DocumentTemplate.findOne({ where: { id: routeParam(event, 'id'), org_id: user.org_id } })
   if (!template) throw notFound('Template')

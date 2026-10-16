@@ -7,10 +7,10 @@ import { memberDto } from '~~/server/lib/serializers.ts'
 import * as v from '~~/server/lib/validate.ts'
 
 export default defineApiHandler(async (event) => {
-  const admin = await requireUser(event, 'CLIENT', 'EMPLOYEE', 'STAFF')
+  const admin = await requireUser(event, 'ADMIN', 'DEPARTMENT_HEAD', 'STAFF')
   requirePage(admin, TEAM_PAGE[admin.account_type]!)
   const user = await User.findOne({ where: { id: routeParam(event, 'id'), org_id: admin.org_id } })
-  // An EMPLOYEE / STAFF member only sees (and manages) the accounts they may create, in their own office.
+  // A DEPARTMENT_HEAD / STAFF member only sees (and manages) the accounts they may create, in their own office.
   if (!user || !canManageMember(admin, user)) throw notFound('User')
   const managedTypes = managedTypesOf(admin)
   const inOwnOffice = managedTypes !== null
@@ -23,7 +23,7 @@ export default defineApiHandler(async (event) => {
   if ('account_type' in body) updates.account_type = v.oneOf(body, 'account_type', (managedTypes ?? ACCOUNT_TYPES) as readonly string[], { required: true })
   const status = 'status' in body ? v.oneOf(body, 'status', ['ACTIVE', 'SUSPENDED'] as const, { required: true }) : null
 
-  if (user.id === admin.id && (status === 'SUSPENDED' || (updates.account_type && updates.account_type !== 'CLIENT'))) {
+  if (user.id === admin.id && (status === 'SUSPENDED' || (updates.account_type && updates.account_type !== 'ADMIN'))) {
     throw forbidden('You cannot suspend or demote your own account')
   }
   // Pages are granted by whoever manages the account — never by the account itself.
@@ -45,7 +45,7 @@ export default defineApiHandler(async (event) => {
   const meta = requestMeta(event)
   await sequelize.transaction(async (transaction) => {
     const accountType = (updates.account_type as string) ?? user.account_type
-    // An EMPLOYEE or STAFF member can't move people to another office.
+    // A DEPARTMENT_HEAD or STAFF member can't move people to another office.
     const officeId = !inOwnOffice && 'office_id' in body ? body.office_id || null : user.office_id
     const office = await resolveOffice(officeId, admin.org_id, accountType, transaction)
     updates.office_id = office?.id ?? null

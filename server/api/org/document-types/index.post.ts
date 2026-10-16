@@ -5,9 +5,9 @@ import { conflict } from '~~/server/lib/errors.ts'
 import * as v from '~~/server/lib/validate.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
-/** Add a document type (CLIENT only): name, description, processing_days + processing_hours (how long such documents may take). */
+/** Add a document type (ADMIN only): name, description, processing_days + processing_hours (how long such documents may take). */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const body = await readJson(event)
   const name = v.reqStr(body, 'name', { max: 100, label: 'Name' })

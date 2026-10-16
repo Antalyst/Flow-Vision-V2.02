@@ -54,7 +54,7 @@ export async function requireUser(event: H3Event, ...accountTypes: AccountType[]
   const actor = await getActor(event)
   if (!actor) throw unauthorized()
   if (accountTypes.length && !accountTypes.includes(actor.account_type)) {
-    throw forbidden(`This action requires a ${accountTypes.join(' or ')} account`)
+    throw forbidden(`This action requires one of these account types: ${accountTypes.join(', ')}`)
   }
   return actor
 }

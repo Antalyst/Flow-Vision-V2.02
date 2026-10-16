@@ -6,7 +6,7 @@ import { requirePage } from '~~/server/lib/team.ts'
 
 /** Add a Document Route. An organization can have as many as it needs. */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/routes')
   const body = await readJson(event)
   const route = await createRoute(user.org_id, user.id, {

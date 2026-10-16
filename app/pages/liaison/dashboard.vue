@@ -38,7 +38,7 @@ async function startTransit(id: string) {
 
 <template>
   <div class="fv-rise">
-    <PageHeader eyebrow="D1 · Liaison" :title="`Hi, ${auth.user?.first_name}`" description="Documents released to you. Scan a document's QR at the office to pick it up, then bring it to the office shown; their staff scan it to receive it from you.">
+    <PageHeader eyebrow="D1 · Messenger" :title="`Hi, ${auth.user?.first_name}`" description="Documents released to you. Scan a document's QR at the office to pick it up, then bring it to the office shown; their staff scan it to receive it from you.">
       <template #actions>
         <NuxtLink to="/scan" class="btn btn-primary"><FIcon name="maximize" :size="16" /> Scan QR</NuxtLink>
       </template>

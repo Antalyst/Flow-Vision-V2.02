@@ -4,7 +4,7 @@ import { requirePage } from '~~/server/lib/team.ts'
 
 /** Remove a Document Route from the list. Deleted if unused, otherwise retired (documents keep their history). */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/routes')
   const { route, deleted } = await removeRoute(user.org_id, routeParam(event, 'id'))
   await audit(requestMeta(event), {

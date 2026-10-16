@@ -2,7 +2,7 @@
 // users.page_access holds the granted paths; NULL means every page of the account's role.
 // Each role's dashboard, notifications and profile are always open, so nobody is locked out.
 
-export type PageRole = 'CLIENT' | 'EMPLOYEE' | 'STAFF' | 'LIAISON'
+export type PageRole = 'ADMIN' | 'DEPARTMENT_HEAD' | 'STAFF' | 'LIAISON'
 
 export interface GrantablePage {
   path: string
@@ -17,7 +17,7 @@ const COLLABORATE: GrantablePage[] = [
 ]
 
 export const GRANTABLE_PAGES: Record<PageRole, GrantablePage[]> = {
-  CLIENT: [
+  ADMIN: [
     { path: '/ai/chat', label: 'AI Assistant', group: 'Overview' },
     { path: '/documents', label: 'All documents', group: 'Documents' },
     { path: '/documents/new', label: 'Upload document', group: 'Documents' },
@@ -27,7 +27,7 @@ export const GRANTABLE_PAGES: Record<PageRole, GrantablePage[]> = {
     { path: '/client/settings', label: 'Organization settings', group: 'Organization' },
     ...COLLABORATE,
   ],
-  EMPLOYEE: [
+  DEPARTMENT_HEAD: [
     { path: '/ai/chat', label: 'AI Assistant', group: 'Overview' },
     { path: '/employee/queue', label: 'Office queue', group: 'Office work' },
     { path: '/scan', label: 'Scan to receive', group: 'Office work' },

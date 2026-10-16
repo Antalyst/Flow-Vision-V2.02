@@ -7,11 +7,11 @@ import * as v from '~~/server/lib/validate.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
 /**
- * Upload an AI knowledge file (CLIENT only). multipart/form-data: file, title, description.
+ * Upload an AI knowledge file (ADMIN only). multipart/form-data: file, title, description.
  * Its text is extracted right away and used whenever the AI reads an uploaded document.
  */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const parts = (await readMultipartFormData(event)) ?? []
   const filePart = parts.find((p) => p.name === 'file' && p.filename !== undefined && p.data.length)

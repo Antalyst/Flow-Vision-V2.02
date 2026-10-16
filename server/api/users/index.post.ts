@@ -9,12 +9,12 @@ import * as v from '~~/server/lib/validate.ts'
 /**
  * Invite a team member. The account starts as status 'pending' with a one-time
  * temporary password the inviter shares; it becomes 'active' when they set their own.
- * The CLIENT invites anyone; an EMPLOYEE creates STAFF and LIAISON (messenger) accounts for their own office;
+ * The ADMIN invites anyone; a DEPARTMENT_HEAD creates STAFF and LIAISON (messenger) accounts for their own office;
  * a STAFF member creates LIAISON accounts for their own office.
  * The inviter also chooses which pages the new account may open (`page_access`, omitted = every page).
  */
 export default defineApiHandler(async (event) => {
-  const admin = await requireUser(event, 'CLIENT', 'EMPLOYEE', 'STAFF')
+  const admin = await requireUser(event, 'ADMIN', 'DEPARTMENT_HEAD', 'STAFF')
   requirePage(admin, TEAM_PAGE[admin.account_type]!)
   const body = await readJson(event)
   const managedTypes = managedTypesOf(admin)
@@ -33,7 +33,7 @@ export default defineApiHandler(async (event) => {
   const meta = requestMeta(event)
 
   const userId = await sequelize.transaction(async (transaction) => {
-    // Accounts an EMPLOYEE or STAFF member creates always belong to their own office.
+    // Accounts a DEPARTMENT_HEAD or STAFF member creates always belong to their own office.
     const office = await resolveOffice(inOwnOffice ? admin.office_id : body.office_id, admin.org_id, accountType, transaction)
     const created = await User.create(
       {

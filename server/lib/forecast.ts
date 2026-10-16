@@ -117,7 +117,7 @@ export async function forecastFor(user: Actor, query: Record<string, unknown>) {
 
   // Clients see the whole organization; everyone else is held to their own office.
   let officeId = typeof query.office_id === 'string' && query.office_id ? query.office_id : null
-  if (user.account_type !== 'CLIENT') officeId = (user.office_id as string | null) ?? null
+  if (user.account_type !== 'ADMIN') officeId = (user.office_id as string | null) ?? null
 
   const offices = await Office.findAll({ where: { org_id: user.org_id, status: 'active' }, attributes: ['id', 'name', 'code'], order: [['name', 'ASC']] })
   const office = officeId ? offices.find((o) => o.id === officeId) : null

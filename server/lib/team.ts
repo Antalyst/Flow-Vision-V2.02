@@ -5,10 +5,10 @@ import { allPagesOf, canOpenPage, parsePageAccess, type PageRole } from '../../s
 
 export const officeInclude = { model: Office, as: 'office' }
 
-/** EMPLOYEE / STAFF / LIAISON must belong to an active office in the same organization. */
+/** DEPARTMENT_HEAD / STAFF / LIAISON must belong to an active office in the same organization. */
 export async function resolveOffice(officeId: unknown, orgId: string, accountType: string, transaction?: Transaction) {
   if (!officeId) {
-    if (accountType !== 'CLIENT') throw badRequest(`${accountType} accounts must be assigned to an office`, { field: 'office_id' })
+    if (accountType !== 'ADMIN') throw badRequest(`${accountType} accounts must be assigned to an office`, { field: 'office_id' })
     return null
   }
   const office = await Office.findOne({ where: { id: String(officeId), org_id: orgId, status: 'active' }, transaction })
@@ -27,32 +27,32 @@ export async function syncLiaisonProfile(user: Row, office: Row | null, transact
   if (profile.department !== office.department) await profile.update({ department: office.department ?? null }, { transaction })
 }
 
-/** Account types an EMPLOYEE can create and manage — always inside their own office. */
-export const EMPLOYEE_MANAGED_TYPES = ['STAFF', 'LIAISON'] as const
+/** Account types a DEPARTMENT_HEAD can create and manage — always inside their own office. */
+export const DEPARTMENT_HEAD_MANAGED_TYPES = ['STAFF', 'LIAISON'] as const
 /** Account types a STAFF member can create and manage — messengers of their own office. */
 export const STAFF_MANAGED_TYPES = ['LIAISON'] as const
 
-/** The account types an actor may create, or null when they manage everyone (CLIENT). */
+/** The account types an actor may create, or null when they manage everyone (ADMIN). */
 export function managedTypesOf(actor: Row): readonly string[] | null {
-  if (actor.account_type === 'CLIENT') return null
-  if (actor.account_type === 'EMPLOYEE') return EMPLOYEE_MANAGED_TYPES
+  if (actor.account_type === 'ADMIN') return null
+  if (actor.account_type === 'DEPARTMENT_HEAD') return DEPARTMENT_HEAD_MANAGED_TYPES
   if (actor.account_type === 'STAFF') return STAFF_MANAGED_TYPES
   return []
 }
 
 /** The team page each manager role works from; losing it means losing the right to manage accounts. */
-export const TEAM_PAGE: Partial<Record<string, string>> = { CLIENT: '/client/accounts', EMPLOYEE: '/employee/team', STAFF: '/staff/team' }
+export const TEAM_PAGE: Partial<Record<string, string>> = { ADMIN: '/client/accounts', DEPARTMENT_HEAD: '/employee/team', STAFF: '/staff/team' }
 
 /**
- * Who may manage an account: the CLIENT administrator manages everyone in the organization;
- * an EMPLOYEE manages the STAFF and LIAISON (messenger) accounts of their own office; a STAFF
- * member manages the messengers of their own office. A CLIENT whose own pages are limited can't
- * manage a CLIENT with unlimited pages (the owner), so access can't be taken from above.
+ * Who may manage an account: the admin manages everyone in the organization;
+ * a DEPARTMENT_HEAD manages the STAFF and LIAISON (messenger) accounts of their own office; a STAFF
+ * member manages the messengers of their own office. An ADMIN whose own pages are limited can't
+ * manage an ADMIN with unlimited pages (the owner), so access can't be taken from above.
  */
 export function canManageMember(actor: Row, member: Row) {
   if (member.org_id !== actor.org_id) return false
-  if (actor.account_type === 'CLIENT') {
-    return !(member.account_type === 'CLIENT' && member.id !== actor.id && parsePageAccess(actor.page_access) && !parsePageAccess(member.page_access))
+  if (actor.account_type === 'ADMIN') {
+    return !(member.account_type === 'ADMIN' && member.id !== actor.id && parsePageAccess(actor.page_access) && !parsePageAccess(member.page_access))
   }
   const types = managedTypesOf(actor) ?? []
   return Boolean(actor.office_id) && member.office_id === actor.office_id && types.includes(member.account_type)

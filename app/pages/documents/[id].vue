@@ -347,7 +347,7 @@ const processing = computed(() => doc.value?.processing ?? null)
               :qr="data.active_qr"
               :doc="doc"
               :files="data.files"
-              :can-regenerate="['EMPLOYEE', 'STAFF'].includes(auth.role ?? '') && auth.user?.office?.id === doc.current_office_id && ['START', 'ARRIVED_AT_OFFICE'].includes(doc.status)"
+              :can-regenerate="['DEPARTMENT_HEAD', 'STAFF'].includes(auth.role ?? '') && auth.user?.office?.id === doc.current_office_id && ['START', 'ARRIVED_AT_OFFICE'].includes(doc.status)"
               @regenerated="refresh()"
             />
           </section>

@@ -3,16 +3,16 @@
  * and its database, and prints a green ✔ for every step that works and a red ✘ for every bug.
  *
  *   npm run dev                      (in another terminal: the app must be running)
- *   npm run test:flow                (asks for the CLIENT password)
+ *   npm run test:flow                (asks for the ADMIN password)
  *   npm run test:flow -- --email=admin@example.com --password=***
  *
  * Options:
- *   --email=…  --password=…   CLIENT account that runs the test (or FV_CLIENT_EMAIL / FV_CLIENT_PASSWORD)
+ *   --email=…  --password=…   ADMIN account that runs the test (or FV_CLIENT_EMAIL / FV_CLIENT_PASSWORD)
  *   --route="Payroll"         Document Route to follow (name or id; default: the first active route)
- *   --only=client,employee,staff   Which uploader roles to run (default: all three)
+ *   --only=admin,department_head,staff   Which uploader roles to run (default: all three; client and employee still work)
  *   --base=http://localhost:3000   Where the app runs (or FV_BASE_URL)
  *
- * For every uploader (CLIENT, then EMPLOYEE, then STAFF) it uploads 4 documents (single file, single
+ * For every uploader (ADMIN, then DEPARTMENT_HEAD, then STAFF) it uploads 4 documents (single file, single
  * image, 2 files, 2 images), assigns a messenger to each, and walks each one through every office on
  * the route: messenger scans to pick up → office staff scan to receive → pass to the next staff →
  * next staff receives → release to one of THAT office's messengers … → the last office approves.
@@ -38,7 +38,9 @@ const argv: Record<string, string> = Object.fromEntries(
   }),
 )
 const BASE = (argv.base ?? process.env.FV_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '')
-const ONLY = new Set((argv.only ?? 'client,employee,staff').toLowerCase().split(',').map((s) => s.trim()))
+// The roles were called client and employee before they were renamed; both spellings select them.
+const LEGACY_ONLY: Record<string, string> = { client: 'admin', employee: 'department_head' }
+const ONLY = new Set((argv.only ?? 'admin,department_head,staff').toLowerCase().split(',').map((s) => LEGACY_ONLY[s.trim()] ?? s.trim()))
 const RUN = new Date().toLocaleString('sv-SE').slice(0, 16)
 const EMAIL_DOMAIN = 'flowvision.test'
 
@@ -275,7 +277,7 @@ async function ensureAccount(spec: { email: string; first: string; last: string;
 
 /**
  * `count` of an office's own messengers that are on duty and free right now (more test messengers
- * are created for that office when needed). `officeId` null = the organization origin of a CLIENT
+ * are created for that office when needed). `officeId` null = the organization origin of an ADMIN
  * upload, where any messenger may be used: the first office's messengers are taken.
  */
 async function freeMessengers(officeId: string | null, count: number) {
@@ -485,7 +487,7 @@ async function flagAndSendBack(doc: TestDoc, view: any, a: Session, b: Session, 
   const adminNotes = await api(client, 'GET', '/notifications?limit=100')
   check(
     adminNotes.data?.data?.some((n: any) => n.type === 'ISSUE_REPORTED' && n.document_id === doc.id),
-    'CLIENT admin is notified of the issue',
+    'The admin is notified of the issue',
     'no ISSUE_REPORTED notification',
   )
   const flaggedView = await viewDoc(client, doc.id)
@@ -554,7 +556,7 @@ async function decide(doc: TestDoc, b: Session, strict: boolean) {
       check(refused(r, 403, 404), `${outsider.name} (another office) can't approve it`, why(r, '403'))
     }
     const byClient = await api(client, 'PATCH', `/approvals/${approval.id}`, { decision: 'APPROVED' })
-    check(refused(byClient, 403), "The CLIENT admin can't approve it", why(byClient, '403'))
+    check(refused(byClient, 403), "The admin can't approve it", why(byClient, '403'))
     const noRemarks = await api(b, 'PATCH', `/approvals/${approval.id}`, { decision: 'RETURNED' })
     check(refused(noRemarks, 400), 'Returning without remarks is rejected', why(noRemarks, '400'))
     if (b.role === 'STAFF' && b.hasApprovalAuthority) {
@@ -707,9 +709,9 @@ async function runUploader(label: string, uploader: Session) {
   const first = (await viewDoc(client, docs[0]!.id)).document
   const ownView = await api(uploader, 'GET', `/documents/${first.id}`)
   check(ownView.ok, 'Uploader can open it', why(ownView))
-  if (uploader.role !== 'CLIENT') {
+  if (uploader.role !== 'ADMIN') {
     const adminView = await api(client, 'GET', `/documents/${first.id}`)
-    check(adminView.ok, 'CLIENT admin can open it', why(adminView))
+    check(adminView.ok, 'The admin can open it', why(adminView))
   }
   const outsiderOffice = [...desks.keys()].find((id) => id !== first.current_office_id && id !== uploader.officeId)
   if (outsiderOffice) {
@@ -783,14 +785,14 @@ async function runUploader(label: string, uploader: Session) {
     }
   }
 
-  if (label === 'CLIENT') await clientOriginSendBackRule()
+  if (label === 'ADMIN') await clientOriginSendBackRule()
 }
 
-/** A CLIENT upload starts at the organization: from the first office there is no office to send it back to. */
+/** An ADMIN upload starts at the organization: from the first office there is no office to send it back to. */
 async function clientOriginSendBackRule() {
-  context = 'CLIENT · send-back rule'
-  sub('A CLIENT upload cannot be sent back past the first office')
-  const r = await api(client, 'POST', '/documents', uploadForm(`[E2E ${RUN}] CLIENT · send-back rule`, UPLOADS[0]!.files, route.id))
+  context = 'ADMIN · send-back rule'
+  sub('An ADMIN upload cannot be sent back past the first office')
+  const r = await api(client, 'POST', '/documents', uploadForm(`[E2E ${RUN}] ADMIN · send-back rule`, UPLOADS[0]!.files, route.id))
   if (!check(r.status === 201, 'Upload a document for this check', why(r, '201'))) return
   const doc: TestDoc = { id: r.data.document.id, qr: r.data.document.qr_code, label: 'send-back rule', uploader: client, messenger: null }
   createdDocs.push(doc.id)
@@ -801,7 +803,7 @@ async function clientOriginSendBackRule() {
     const receiver = desks.get(first.office_id)![0]!
     const [m] = await freeMessengers(first.office_id, 1)
     const res = await api(receiver, 'POST', `/documents/${doc.id}/send-back`, { title: 'E2E: wrong form', category: 'OTHER', liaison_user_id: m!.id })
-    check(refused(res, 409) && codeOf(res) === 'NO_PREVIOUS_OFFICE', `${officeName(first.office_id)} can't send a CLIENT upload back (no office before it)`, why(res, '409 NO_PREVIOUS_OFFICE'))
+    check(refused(res, 409) && codeOf(res) === 'NO_PREVIOUS_OFFICE', `${officeName(first.office_id)} can't send an admin upload back (no office before it)`, why(res, '409 NO_PREVIOUS_OFFICE'))
     const issues = await api(client, 'GET', `/issues?document_id=${doc.id}`)
     check((issues.data?.data ?? []).length === 0, 'The refused send-back leaves no stray issue behind', `${issues.data?.data?.length} issue(s) on the document`)
   } catch (err) {
@@ -822,7 +824,7 @@ async function visibilityChecks() {
 
   const all = await api(client, 'GET', `/documents?scope=all&limit=100&q=${encodeURIComponent(`[E2E ${RUN}]`)}`)
   const seen = new Set((all.data?.data ?? []).map((d: any) => d.id))
-  check(createdDocs.every((id) => seen.has(id)), `CLIENT sees every test document of this run (${createdDocs.length})`, `sees ${createdDocs.filter((id) => seen.has(id)).length}`)
+  check(createdDocs.every((id) => seen.has(id)), `ADMIN sees every test document of this run (${createdDocs.length})`, `sees ${createdDocs.filter((id) => seen.has(id)).length}`)
 
   if (desk) {
     const mine = await api(desk, 'GET', '/documents?scope=all&limit=100')
@@ -860,7 +862,7 @@ async function visibilityChecks() {
     }
     const qr = (await viewDoc(client, anyDoc)).document.qr_code
     const r = await scan(client, qr)
-    check(refused(r, 403), "CLIENT admin can't scan QR codes", why(r, '403'))
+    check(refused(r, 403), "The admin can't scan QR codes", why(r, '403'))
   }
 
   context = 'upload validation'
@@ -879,7 +881,7 @@ async function visibilityChecks() {
 
 async function ask(question: string) {
   if (!process.stdin.isTTY) {
-    console.log(red('\n✘ Pass the CLIENT login: npm run test:flow -- --email=… --password=…  (or set FV_CLIENT_EMAIL / FV_CLIENT_PASSWORD)'))
+    console.log(red('\n✘ Pass the ADMIN login: npm run test:flow -- --email=… --password=…  (or set FV_CLIENT_EMAIL / FV_CLIENT_PASSWORD)'))
     process.exit(1)
   }
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout })
@@ -899,13 +901,13 @@ async function main() {
     process.exit(1)
   }
 
-  const email = argv.email ?? process.env.FV_CLIENT_EMAIL ?? (await ask('CLIENT email: '))
-  const password = argv.password ?? process.env.FV_CLIENT_PASSWORD ?? (await ask('CLIENT password: '))
+  const email = argv.email ?? process.env.FV_CLIENT_EMAIL ?? (await ask('ADMIN email: '))
+  const password = argv.password ?? process.env.FV_CLIENT_PASSWORD ?? (await ask('ADMIN password: '))
 
   section('Setup')
   context = 'setup'
   client = remember(await login(email, password))
-  if (!check(client.role === 'CLIENT', `Signed in as CLIENT ${client.name}`, `this account is ${client.role}`)) process.exit(1)
+  if (!check(client.role === 'ADMIN', `Signed in as ADMIN ${client.name}`, `this account is ${client.role}`)) process.exit(1)
 
   const routes = await api(client, 'GET', '/routes')
   const wanted = argv.route?.toLowerCase()
@@ -933,8 +935,8 @@ async function main() {
   const firstOffice = route.steps[0].office_id
   const employeeOffice = routeOffices.find((o) => o.id !== firstOffice)?.id ?? firstOffice
   const runs: Array<[string, () => Promise<Session>]> = [
-    ['CLIENT', async () => client],
-    ['EMPLOYEE', () => ensureAccount({ email: `e2e.employee@${EMAIL_DOMAIN}`, first: 'E2E', last: 'Employee', type: 'EMPLOYEE', officeId: employeeOffice })],
+    ['ADMIN', async () => client],
+    ['DEPARTMENT_HEAD', () => ensureAccount({ email: `e2e.employee@${EMAIL_DOMAIN}`, first: 'E2E', last: 'Department Head', type: 'DEPARTMENT_HEAD', officeId: employeeOffice })],
     ['STAFF', () => ensureAccount({ email: `e2e.uploader.staff@${EMAIL_DOMAIN}`, first: 'E2E', last: 'Uploader Staff', type: 'STAFF', officeId: firstOffice })],
   ]
 

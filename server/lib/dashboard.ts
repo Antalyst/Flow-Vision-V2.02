@@ -162,7 +162,7 @@ export async function officeDashboard(user: Actor) {
   }
 
   // The office's employees follow everything their staff upload (drafts excluded).
-  if (user.account_type === 'EMPLOYEE') {
+  if (user.account_type === 'DEPARTMENT_HEAD') {
     const staffUploads = await Document.findAll({
       where: { org_id: user.org_id, submitted_by: { [Op.ne]: user.id }, status: { [Op.notIn]: ['CREATED', 'COMPLETED'] }, [Op.and]: [submittedFromOffice(office)] },
       attributes: documentAttributes,

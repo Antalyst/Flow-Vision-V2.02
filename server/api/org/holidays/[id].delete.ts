@@ -4,9 +4,9 @@ import { notFound } from '~~/server/lib/errors.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 import { changeCalendar } from '~~/server/lib/work-calendar.ts'
 
-/** Remove a holiday (CLIENT only): that day counts as a working day again. */
+/** Remove a holiday (ADMIN only): that day counts as a working day again. */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const id = routeParam(event, 'id')
   const { result: holiday, rescheduled } = await changeCalendar(user.org_id, async (transaction) => {

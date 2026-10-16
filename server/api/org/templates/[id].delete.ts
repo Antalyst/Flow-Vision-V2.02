@@ -4,9 +4,9 @@ import { notFound } from '~~/server/lib/errors.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 import { removeImage } from '~~/server/lib/org-assets.ts'
 
-/** Delete a document template and its signature image (CLIENT only). */
+/** Delete a document template and its signature image (ADMIN only). */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const template = await DocumentTemplate.findOne({ where: { id: routeParam(event, 'id'), org_id: user.org_id } })
   if (!template) throw notFound('Template')

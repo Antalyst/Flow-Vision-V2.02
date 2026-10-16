@@ -6,12 +6,12 @@ import { changeCalendar, holidayDto } from '~~/server/lib/work-calendar.ts'
 import * as v from '~~/server/lib/validate.ts'
 
 /**
- * Mark a day as a holiday / no-work day (CLIENT only): { date: "2026-12-25", name, recurring }.
+ * Mark a day as a holiday / no-work day (ADMIN only): { date: "2026-12-25", name, recurring }.
  * `recurring` = the same month and day every year. Processing time pauses that day; deadlines of
  * documents in progress move to match.
  */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const body = await readJson(event)
   const date = v.dateOnly(body, 'date')

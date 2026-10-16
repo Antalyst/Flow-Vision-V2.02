@@ -5,7 +5,7 @@ import { memberDto, userSummary } from '~~/server/lib/serializers.ts'
 import * as v from '~~/server/lib/validate.ts'
 
 /**
- * CLIENT sees the full roster. An EMPLOYEE (or STAFF) with `managed=1` gets the STAFF and LIAISON (or LIAISON)
+ * ADMIN sees the full roster. A DEPARTMENT_HEAD (or STAFF) with `managed=1` gets the STAFF and LIAISON (or LIAISON)
  * accounts of their own office (the ones they manage). Everyone else gets a lightweight
  * directory (for messaging and liaison search) without contact details.
  */
@@ -28,7 +28,7 @@ export default defineApiHandler(async (event) => {
     where.account_type = accountType && managedTypes!.includes(accountType) ? accountType : { [Op.in]: managedTypes }
   }
 
-  const isClient = user.account_type === 'CLIENT'
+  const isClient = user.account_type === 'ADMIN'
   const fullDetails = isClient || managed
   if (!fullDetails) where.status = { [Op.ne]: 'inactive' }
 

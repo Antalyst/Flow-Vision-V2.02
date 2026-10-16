@@ -25,8 +25,8 @@ export function useDocuments() {
 
   return {
     /**
-     * `office` = where it is now (office id, CLIENT only), `staff` = uploaded or handled by this staff
-     * member of your office (EMPLOYEE only), `type` = document type name.
+     * `office` = where it is now (office id, ADMIN only), `staff` = uploaded or handled by this staff
+     * member of your office (DEPARTMENT_HEAD only), `type` = document type name.
      */
     list: (
       params: { scope?: DocumentScope; status?: string; q?: string; priority?: string; office?: string; staff?: string; type?: string; page?: number; limit?: number } = {},

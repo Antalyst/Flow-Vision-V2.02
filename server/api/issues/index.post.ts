@@ -24,8 +24,8 @@ export default defineApiHandler(async (event) => {
 
   const issue = await Issue.create({ document_id: doc.id, reported_by: user.id, title, description, issue_type: category, priority: severity })
 
-  // CLIENT accounts administer the organization, so they hear about every new issue.
-  const admins = await User.findAll({ where: { org_id: user.org_id, account_type: 'CLIENT', status: 'active' }, attributes: ['id'] })
+  // ADMIN accounts administer the organization, so they hear about every new issue.
+  const admins = await User.findAll({ where: { org_id: user.org_id, account_type: 'ADMIN', status: 'active' }, attributes: ['id'] })
   await notify(
     admins.map((a) => a.id),
     { type: 'ISSUE_REPORTED', title: `Issue reported: ${title}`, body: `${severity} · ${category.replace(/_/g, ' ').toLowerCase()}`, documentId: doc.id, link: '/issues' },

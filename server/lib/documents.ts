@@ -40,13 +40,13 @@ const docLink = (id: string) => `/documents/${id}`
 const nameOf = (u?: Row | null) => (u ? u.full_name || [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email : 'Someone')
 
 /** Account types that upload documents. */
-export const SUBMITTER_TYPES = ['CLIENT', 'EMPLOYEE', 'STAFF'] as const
+export const SUBMITTER_TYPES = ['ADMIN', 'DEPARTMENT_HEAD', 'STAFF'] as const
 /** Account types that work at an office: they receive documents there and release them onward. */
-export const OFFICE_STAFF_TYPES: AccountType[] = ['EMPLOYEE', 'STAFF']
+export const OFFICE_STAFF_TYPES: AccountType[] = ['DEPARTMENT_HEAD', 'STAFF']
 const isOfficeStaff = (actor: Actor) => OFFICE_STAFF_TYPES.includes(actor.account_type)
 
-/** Drafts and returned documents are managed by whoever uploaded them, and by the CLIENT administrator. */
-export const canManageDocument = (doc: Row, actor: Actor) => actor.account_type === 'CLIENT' || doc.submitted_by === actor.id
+/** Drafts and returned documents are managed by whoever uploaded them, and by the admin. */
+export const canManageDocument = (doc: Row, actor: Actor) => actor.account_type === 'ADMIN' || doc.submitted_by === actor.id
 
 // ---------------------------------------------------------------------------
 // Internals
@@ -91,7 +91,7 @@ function broadcast(doc: Row, transaction: Transaction) {
 
 /**
  * Who acts on the document where it is now. On the route: staff and employees of that office.
- * At step 0 (the origin, before the first office): the uploader, the CLIENT administrator, or
+ * At step 0 (the origin, before the first office): the uploader, the admin, or
  * staff of the uploader's office.
  */
 export function holdsDocument(doc: Row, actor: Actor) {
@@ -108,7 +108,7 @@ function assertHoldsDocument(doc: Row, actor: Actor) {
 /**
  * At an office, the person who scanned the document in is the one who releases it: assigns,
  * reassigns or unassigns its messenger. That keeps one accountable person per office visit.
- * (At the origin — step 0 — the uploader, the CLIENT administrator or the origin office do it.)
+ * (At the origin — step 0 — the uploader, the admin or the origin office do it.)
  */
 async function assertReceiver(doc: Row, visit: Row, actor: Actor, transaction?: Transaction, what = 'release it and assign its messenger') {
   if (doc.current_step_number === 0 || visit.handler_id === actor.id) return
@@ -116,7 +116,7 @@ async function assertReceiver(doc: Row, visit: Row, actor: Actor, transaction?: 
   throw forbidden(`Only ${receiver ? nameOf(receiver) : 'the person who received it'}, who received this document, can ${what}`)
 }
 
-/** Name of where the document is now: its office, or the organization (origin of a CLIENT upload). */
+/** Name of where the document is now: its office, or the organization (origin of an admin upload). */
 async function locationName(doc: Row, transaction?: Transaction) {
   if (doc.current_office_id) return ((await Office.findByPk(doc.current_office_id, { transaction }))?.name as string) ?? 'the office'
   return ((await Organization.findByPk(doc.org_id, { transaction }))?.name as string) ?? 'the organization'
@@ -170,7 +170,7 @@ async function uniqueRoutingCode(officeCode: string, uploadedAt: Date, transacti
 
 /**
  * Where a new document originates, as a QR prefix: the uploader's assigned office, or for
- * accounts without one (the CLIENT administrator), their organization.
+ * accounts without one (the admin), their organization.
  */
 async function originCode(actor: Actor, transaction: Transaction) {
   if (actor.office_id && actor.office?.code) return actor.office.code as string
@@ -399,7 +399,7 @@ export async function submitDocument(documentId: string, actor: Actor, meta: Req
  * A messenger can be given a document only while on duty and free: nothing waiting for them
  * to pick up and nothing in hand. Each office has its own messengers: a document released from an
  * office goes with one of that office's messengers (`officeId`; null = the organization itself, the
- * origin of a CLIENT upload, where any messenger can be used). Locks the messenger's profile so two
+ * origin of an admin upload, where any messenger can be used). Locks the messenger's profile so two
  * offices can't assign the same messenger at once (the caller's transaction must be READ COMMITTED
  * to see the other's commit).
  */
@@ -564,7 +564,7 @@ export async function sendBack(
     if (targetStep === 0) {
       originOfficeId = ((await User.findByPk(doc.submitted_by, { attributes: ['office_id'], transaction }))?.office_id as string | null) ?? null
       if (!originOfficeId) {
-        throw conflict('This document came from the organization itself (a CLIENT upload), so there is no office before this one to send it back to.', 'NO_PREVIOUS_OFFICE')
+        throw conflict('This document came from the organization itself (an admin upload), so there is no office before this one to send it back to.', 'NO_PREVIOUS_OFFICE')
       }
     }
     const target = await stepAt(doc, targetStep, originOfficeId, transaction)
@@ -714,7 +714,7 @@ async function loadQrContext(codeRaw: string, actor: Actor, transaction?: Transa
   const visit = doc.status === 'CREATED' ? null : await getCurrentVisit(doc, transaction)
   const current = doc.current_office_id ? await Office.findByPk(doc.current_office_id, { transaction }) : null
   const next = await destinationOf(doc, visit, transaction)
-  // Where it is now, by name: its office, or the organization at the origin of a CLIENT upload.
+  // Where it is now, by name: its office, or the organization at the origin of an admin upload.
   const here = (current?.name as string | undefined) ?? (await locationName(doc, transaction))
   return { qr, doc, visit, current, next, here }
 }
@@ -993,7 +993,7 @@ const AT_LAST_STEP_SQL = `documents.current_step_number > 0 AND (
 /**
  * Who may approve or return a document: employees and staff of the office it is at — when that
  * is the last office on its route and it has been received there. Nobody else, the owner and the
- * CLIENT administrator included, unless they belong to that office.
+ * admin included, unless they belong to that office.
  */
 function canDecideHere(doc: Row, actor: Actor) {
   return isOfficeStaff(actor) && Boolean(actor.office_id) && actor.office_id === doc.current_office_id && AT_OFFICE.includes(doc.status)
@@ -1150,7 +1150,7 @@ export function availableActions(doc: Row, actor: Actor, ctx: ActionContext) {
   const moving = CARRYING.includes(doc.status)
   const officeStaff = isOfficeStaff(actor) && Boolean(actor.office_id)
   const atOrigin = doc.current_step_number === 0
-  // Office staff where it is, or (at the origin) the uploader / CLIENT administrator too.
+  // Office staff where it is, or (at the origin) the uploader / admin too.
   const holds = holdsDocument(doc, actor)
   // At an office only the receiver releases; at the origin, whoever holds it there.
   const releases = holds && (atOrigin || ctx.handlerId === actor.id)

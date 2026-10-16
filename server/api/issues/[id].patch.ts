@@ -6,14 +6,14 @@ import { audit } from '~~/server/lib/audit.ts'
 import { badRequest, forbidden, notFound } from '~~/server/lib/errors.ts'
 import * as v from '~~/server/lib/validate.ts'
 
-/** CLIENT, the reporter or the assignee can move an issue through its lifecycle. */
+/** ADMIN, the reporter or the assignee can move an issue through its lifecycle. */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event)
   const issue = await Issue.findByPk(routeParam(event, 'id'), { include: issueIncludes(user.org_id) })
   if (!issue) throw notFound('Issue')
-  const isClient = user.account_type === 'CLIENT'
+  const isClient = user.account_type === 'ADMIN'
   if (!isClient && issue.reported_by !== user.id && issue.assigned_to !== user.id) {
-    throw forbidden('Only the reporter, the assignee or a CLIENT can update this issue')
+    throw forbidden('Only the reporter, the assignee or an admin can update this issue')
   }
 
   const body = await readJson(event)
@@ -23,7 +23,7 @@ export default defineApiHandler(async (event) => {
   if ('severity' in body) updates.priority = v.oneOf(body, 'severity', ISSUE_PRIORITIES, { required: true })
   if ('resolution' in body) updates.resolution_notes = v.str(body, 'resolution', { max: 5000 })
   if ('assigned_to' in body) {
-    if (!isClient) throw forbidden('Only a CLIENT can assign issues')
+    if (!isClient) throw forbidden('Only an admin can assign issues')
     if (body.assigned_to) {
       const assignee = await User.findOne({ where: { id: String(body.assigned_to), org_id: user.org_id }, attributes: ['id'] })
       if (!assignee) throw badRequest('Assignee not found')

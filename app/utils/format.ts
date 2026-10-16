@@ -18,10 +18,10 @@ export const PRIORITY_META: Record<Priority, { label: string; tone: Tone }> = {
 }
 
 export const ROLE_META: Record<AccountType, { label: string; home: string; tone: Tone; description: string }> = {
-  CLIENT: { label: 'Client', home: '/client/dashboard', tone: 'primary', description: 'Submits documents and administers the organization' },
-  EMPLOYEE: { label: 'Employee', home: '/employee/dashboard', tone: 'info', description: 'Receives and routes documents at an office' },
+  ADMIN: { label: 'Admin', home: '/client/dashboard', tone: 'primary', description: 'Administers the organization and submits documents' },
+  DEPARTMENT_HEAD: { label: 'Department Head', home: '/employee/dashboard', tone: 'info', description: 'Leads an office: receives and routes its documents' },
   STAFF: { label: 'Staff', home: '/staff/dashboard', tone: 'success', description: 'Approves at the final checkpoint; view-only elsewhere' },
-  LIAISON: { label: 'Liaison', home: '/liaison/dashboard', tone: 'warning', description: 'Carries documents between offices' },
+  LIAISON: { label: 'Messenger', home: '/liaison/dashboard', tone: 'warning', description: 'Carries documents between offices' },
 }
 
 export type Tone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info'
@@ -180,7 +180,7 @@ export function deadlineState(doc: FlowDocument): { tone: Tone; label: string; p
 
 /** Short human description of where a document is and what it is waiting for. */
 export function whereabouts(doc: FlowDocument) {
-  // At step 0 (the origin) a CLIENT upload is at the organization, not at an office.
+  // At step 0 (the origin) an admin upload is at the organization, not at an office.
   const office = doc.currentOffice?.name ?? doc.origin?.name ?? 'the office'
   switch (doc.status) {
     case 'CREATED':

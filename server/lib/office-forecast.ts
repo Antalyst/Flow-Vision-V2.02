@@ -7,14 +7,14 @@ import { DAY_MS, PH_OFFSET_MS, changePct, daysBetween, phDay, phHour, project, r
 import type { Actor } from './auth.ts'
 
 /**
- * Predictive analytics for an EMPLOYEE's office dashboard: what the office will receive and
+ * Predictive analytics for a DEPARTMENT_HEAD's office dashboard: what the office will receive and
  * clear over the coming days, where its backlog is heading, which documents are likely to
  * miss their deadline, and the same workload outlook for each staff member of the office.
  *
  * History is bucketed by Philippine day and projected with the Holt smoothing in forecast.ts.
  */
 
-const MEMBER_TYPES = ['EMPLOYEE', 'STAFF']
+const MEMBER_TYPES = ['DEPARTMENT_HEAD', 'STAFF']
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0)
 const avg = (a: number[]) => (a.length ? sum(a) / a.length : null)
@@ -67,7 +67,7 @@ function factsOf(visit: Row): VisitFacts {
 }
 
 export async function officeForecastFor(user: Actor, query: Record<string, unknown>) {
-  if (user.account_type !== 'EMPLOYEE') throw forbidden('Office forecasts are for office employees')
+  if (user.account_type !== 'DEPARTMENT_HEAD') throw forbidden('Office forecasts are for department heads')
   const officeId = user.office_id as string | null
   if (!officeId) return { office: null }
 

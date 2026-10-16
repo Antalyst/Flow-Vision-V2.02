@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1160" height="1060" viewBox="0 0 1160 1060" font-family="Arial, Helvetica, sans-serif">
+  <title>FlowVision Use Case Diagram</title>
+  <rect width="1160" height="1060" fill="#fff"/>
+  <rect x="345" y="30" width="430" height="1000" fill="#fff" stroke="#111" stroke-width="1.6"/>
+  <text x="560" y="64" font-size="18" font-weight="700" text-anchor="middle" fill="#111">FlowVision: AI-Powered Document</text>
+  <text x="560" y="86" font-size="18" font-weight="700" text-anchor="middle" fill="#111">Monitoring Framework</text>
+  <line x1="152" y1="302" x2="448" y2="132" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="132" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="132" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="782" x2="672" y2="132" stroke="#21A045" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="179.66666666666666" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="227.33333333333331" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="227.33333333333331" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="227.33333333333331" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="782" x2="672" y2="227.33333333333331" stroke="#21A045" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="275" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="322.66666666666663" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="370.3333333333333" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="370.3333333333333" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="370.3333333333333" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="418" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="418" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="418" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="465.66666666666663" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="465.66666666666663" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="465.66666666666663" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="782" x2="672" y2="465.66666666666663" stroke="#21A045" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="513.3333333333333" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="513.3333333333333" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="561" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="561" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="608.6666666666666" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="608.6666666666666" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="608.6666666666666" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="656.3333333333333" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="656.3333333333333" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="704" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="704" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="782" x2="672" y2="751.6666666666666" stroke="#21A045" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="782" x2="672" y2="799.3333333333333" stroke="#21A045" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="847" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="847" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="847" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="782" x2="672" y2="847" stroke="#21A045" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="894.6666666666666" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="894.6666666666666" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="894.6666666666666" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="782" x2="672" y2="894.6666666666666" stroke="#21A045" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="942.3333333333333" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="942.3333333333333" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="942.3333333333333" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="302" x2="448" y2="990" stroke="#E0312B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="152" y1="762" x2="448" y2="990" stroke="#F28C1B" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="382" x2="672" y2="990" stroke="#2F5FE0" stroke-width="1.3" stroke-opacity="0.85"/>
+  <line x1="968" y1="782" x2="672" y2="990" stroke="#21A045" stroke-width="1.3" stroke-opacity="0.85"/>
+  <ellipse cx="560" cy="132" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="136" font-size="11.5" text-anchor="middle" fill="#111">Log In / Log Out</text>
+  <ellipse cx="560" cy="179.66666666666666" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="183.66666666666666" font-size="11.5" text-anchor="middle" fill="#111">Register Organization</text>
+  <ellipse cx="560" cy="227.33333333333331" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="231.33333333333331" font-size="11.5" text-anchor="middle" fill="#111">View Dashboard</text>
+  <ellipse cx="560" cy="275" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="272" font-size="11.5" text-anchor="middle" fill="#111">Manage Organization</text>
+  <text x="560" y="285" font-size="11.5" text-anchor="middle" fill="#111">Settings</text>
+  <ellipse cx="560" cy="322.66666666666663" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="319.66666666666663" font-size="11.5" text-anchor="middle" fill="#111">Manage Offices &amp;</text>
+  <text x="560" y="332.66666666666663" font-size="11.5" text-anchor="middle" fill="#111">Document Routes</text>
+  <ellipse cx="560" cy="370.3333333333333" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="374.3333333333333" font-size="11.5" text-anchor="middle" fill="#111">Manage User Accounts</text>
+  <ellipse cx="560" cy="418" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="415" font-size="11.5" text-anchor="middle" fill="#111">Upload Document &amp;</text>
+  <text x="560" y="428" font-size="11.5" text-anchor="middle" fill="#111">Generate QR</text>
+  <ellipse cx="560" cy="465.66666666666663" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="469.66666666666663" font-size="11.5" text-anchor="middle" fill="#111">Track Documents</text>
+  <ellipse cx="560" cy="513.3333333333333" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="510.33333333333326" font-size="11.5" text-anchor="middle" fill="#111">Scan QR to</text>
+  <text x="560" y="523.3333333333333" font-size="11.5" text-anchor="middle" fill="#111">Receive Document</text>
+  <ellipse cx="560" cy="561" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="558" font-size="11.5" text-anchor="middle" fill="#111">Pass Document</text>
+  <text x="560" y="571" font-size="11.5" text-anchor="middle" fill="#111">Desk to Desk</text>
+  <ellipse cx="560" cy="608.6666666666666" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="605.6666666666666" font-size="11.5" text-anchor="middle" fill="#111">Release Document</text>
+  <text x="560" y="618.6666666666666" font-size="11.5" text-anchor="middle" fill="#111">to Messenger</text>
+  <ellipse cx="560" cy="656.3333333333333" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="653.3333333333333" font-size="11.5" text-anchor="middle" fill="#111">Flag Issue &amp;</text>
+  <text x="560" y="666.3333333333333" font-size="11.5" text-anchor="middle" fill="#111">Send Back</text>
+  <ellipse cx="560" cy="704" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="701" font-size="11.5" text-anchor="middle" fill="#111">Approve / Return</text>
+  <text x="560" y="714" font-size="11.5" text-anchor="middle" fill="#111">Document</text>
+  <ellipse cx="560" cy="751.6666666666666" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="748.6666666666666" font-size="11.5" text-anchor="middle" fill="#111">Pick Up &amp; Deliver</text>
+  <text x="560" y="761.6666666666666" font-size="11.5" text-anchor="middle" fill="#111">Document (QR Scan)</text>
+  <ellipse cx="560" cy="799.3333333333333" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="796.3333333333333" font-size="11.5" text-anchor="middle" fill="#111">Report Failed</text>
+  <text x="560" y="809.3333333333333" font-size="11.5" text-anchor="middle" fill="#111">Delivery</text>
+  <ellipse cx="560" cy="847" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="844" font-size="11.5" text-anchor="middle" fill="#111">Report Issues &amp;</text>
+  <text x="560" y="857" font-size="11.5" text-anchor="middle" fill="#111">Send Messages</text>
+  <ellipse cx="560" cy="894.6666666666666" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="898.6666666666666" font-size="11.5" text-anchor="middle" fill="#111">View Notifications</text>
+  <ellipse cx="560" cy="942.3333333333333" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="946.3333333333333" font-size="11.5" text-anchor="middle" fill="#111">Ask AI Assistant</text>
+  <ellipse cx="560" cy="990" rx="112" ry="21" fill="#fff" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="987" font-size="11.5" text-anchor="middle" fill="#111">View Reports &amp;</text>
+  <text x="560" y="1000" font-size="11.5" text-anchor="middle" fill="#111">Activity Logs</text>
+  <circle cx="130" cy="266" r="11" fill="#E0312B" stroke="#111" stroke-width="2"/>
+  <line x1="130" y1="277" x2="130" y2="314" stroke="#111" stroke-width="2.4"/>
+  <line x1="108" y1="302" x2="152" y2="302" stroke="#111" stroke-width="2.4"/>
+  <line x1="130" y1="314" x2="114" y2="340" stroke="#111" stroke-width="2.4"/>
+  <line x1="130" y1="314" x2="146" y2="340" stroke="#111" stroke-width="2.4"/>
+  <text x="130" y="362" font-size="14" font-weight="700" text-anchor="middle" fill="#111">Admin</text>
+  <circle cx="130" cy="726" r="11" fill="#F28C1B" stroke="#111" stroke-width="2"/>
+  <line x1="130" y1="737" x2="130" y2="774" stroke="#111" stroke-width="2.4"/>
+  <line x1="108" y1="762" x2="152" y2="762" stroke="#111" stroke-width="2.4"/>
+  <line x1="130" y1="774" x2="114" y2="800" stroke="#111" stroke-width="2.4"/>
+  <line x1="130" y1="774" x2="146" y2="800" stroke="#111" stroke-width="2.4"/>
+  <text x="130" y="822" font-size="14" font-weight="700" text-anchor="middle" fill="#111">Staff</text>
+  <circle cx="990" cy="346" r="11" fill="#2F5FE0" stroke="#111" stroke-width="2"/>
+  <line x1="990" y1="357" x2="990" y2="394" stroke="#111" stroke-width="2.4"/>
+  <line x1="968" y1="382" x2="1012" y2="382" stroke="#111" stroke-width="2.4"/>
+  <line x1="990" y1="394" x2="974" y2="420" stroke="#111" stroke-width="2.4"/>
+  <line x1="990" y1="394" x2="1006" y2="420" stroke="#111" stroke-width="2.4"/>
+  <text x="1026" y="442" font-size="14" font-weight="700" text-anchor="middle" fill="#111">Department Head</text>
+  <circle cx="990" cy="746" r="11" fill="#21A045" stroke="#111" stroke-width="2"/>
+  <line x1="990" y1="757" x2="990" y2="794" stroke="#111" stroke-width="2.4"/>
+  <line x1="968" y1="782" x2="1012" y2="782" stroke="#111" stroke-width="2.4"/>
+  <line x1="990" y1="794" x2="974" y2="820" stroke="#111" stroke-width="2.4"/>
+  <line x1="990" y1="794" x2="1006" y2="820" stroke="#111" stroke-width="2.4"/>
+  <text x="1026" y="842" font-size="14" font-weight="700" text-anchor="middle" fill="#111">Messenger</text>
+</svg>

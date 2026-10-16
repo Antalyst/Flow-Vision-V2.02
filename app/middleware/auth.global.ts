@@ -6,8 +6,8 @@ const PUBLIC_PATHS = ['/', '/login', '/register']
 
 // Each portal is reserved for one account type; shared pages (documents, messages, issues…) are open to all.
 const PORTALS: Record<string, AccountType> = {
-  '/client': 'CLIENT',
-  '/employee': 'EMPLOYEE',
+  '/client': 'ADMIN',
+  '/employee': 'DEPARTMENT_HEAD',
   '/staff': 'STAFF',
   '/liaison': 'LIAISON',
 }
@@ -38,10 +38,10 @@ export default defineNuxtRouteMiddleware(async (to) => {
     return navigateTo('/staff/view')
   }
 
-  // Scanning moves paper: messengers pick up, office staff receive. The CLIENT administrator only follows along.
-  if (to.path === '/scan' && auth.role === 'CLIENT') return navigateTo(auth.homePath)
+  // Scanning moves paper: messengers pick up, office staff receive. The admin only follows along.
+  if (to.path === '/scan' && auth.role === 'ADMIN') return navigateTo(auth.homePath)
 
-  // The AI assistant serves CLIENT, EMPLOYEE and STAFF accounts.
+  // The AI assistant serves ADMIN, DEPARTMENT_HEAD and STAFF accounts.
   if (to.path.startsWith('/ai') && auth.role === 'LIAISON') return navigateTo(auth.homePath)
 
   // Liaisons carry documents but don't upload them.

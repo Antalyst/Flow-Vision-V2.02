@@ -46,13 +46,13 @@ const tracking = [
 const activeTracking = ref(0)
 
 const roles = {
-  Client: [
+  Admin: [
     { title: 'Document Routes', body: 'Set the offices each document type moves through.', img: 'skyline' },
-    { title: 'Team accounts', body: 'Invite employees, staff and messengers to your organization.', img: 'laptop-window' },
+    { title: 'Team accounts', body: 'Invite department heads, staff and messengers to your organization.', img: 'laptop-window' },
     { title: 'Organization settings', body: 'Document types and AI knowledge files in one place.', img: 'monitors' },
     { title: 'Live overview', body: 'Every document across every office, as it moves.', img: 'building-night' },
   ],
-  Employee: [
+  'Department Head': [
     { title: 'Office queue', body: 'Documents waiting at your office, oldest first.', img: 'work-papers' },
     { title: 'Scan to receive', body: 'Camera or typed code; your name goes on the timeline.', img: 'phone-scan' },
     { title: 'Release & assign', body: 'Hand the document to a free messenger for the next office.', img: 'post-boxes' },
@@ -64,7 +64,7 @@ const roles = {
     { title: 'Read-only view', body: 'Follow documents in your office without approval authority.', img: 'macbook-dark' },
     { title: 'Full history', body: 'See who handled what, and when, at a glance.', img: 'monitors' },
   ],
-  Liaison: [
+  Messenger: [
     { title: 'Pickups', body: 'Documents assigned to you, with where they go next.', img: 'mailboxes' },
     { title: 'Scan to pick up', body: 'One scan marks the document picked up and in transit.', img: 'phone-hand' },
     { title: 'Tracking', body: 'What you are carrying and which office expects it.', img: 'phone-texting' },
@@ -72,7 +72,7 @@ const roles = {
   ],
 } as const
 type Role = keyof typeof roles
-const activeRole = ref<Role>('Client')
+const activeRole = ref<Role>('Admin')
 const roleNames = Object.keys(roles) as Role[]
 
 const steps = [

@@ -30,7 +30,7 @@ async function submit() {
 <template>
   <div class="fv-rise">
     <h1 class="text-[34px] leading-tight font-semibold tracking-[-0.04em]">Create your organization</h1>
-    <p class="mt-2 text-[15px] text-ink-body">You'll be the Client administrator: you set the Document Route and invite your team.</p>
+    <p class="mt-2 text-[15px] text-ink-body">You'll be the organization's admin: you set the Document Route and invite your team.</p>
 
     <form method="post" class="mt-8 space-y-4" @submit.prevent="submit">
       <div>

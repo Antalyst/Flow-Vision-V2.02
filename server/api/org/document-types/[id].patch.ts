@@ -7,12 +7,12 @@ import * as v from '~~/server/lib/validate.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
 /**
- * Edit a document type (CLIENT only): `name`, `description`, `processing_days` / `processing_hours`
+ * Edit a document type (ADMIN only): `name`, `description`, `processing_days` / `processing_hours`
  * (applies to documents submitted from now on), `is_active` (offered when uploading),
  * `sort_order`. Renaming also renames it on the documents that use it, so lists stay consistent.
  */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const body = await readJson(event)
   const type = await DocumentType.findOne({ where: { id: routeParam(event, 'id'), org_id: user.org_id } })

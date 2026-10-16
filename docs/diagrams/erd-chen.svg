@@ -1,0 +1,492 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="4960" height="3110" viewBox="0 0 4960 3110" font-family="Arial, Helvetica, sans-serif">
+  <title>FlowVision Entity Relationship Diagram (Chen notation)</title>
+  <rect width="4960" height="3110" fill="#fff"/>
+  <line x1="635" y1="320" x2="531.8" y2="519.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="635" y1="320" x2="358.1" y2="404.1" stroke="#111" stroke-width="3.6"/>
+  <line x1="635" y1="320" x2="358.1" y2="235.9" stroke="#111" stroke-width="3.6"/>
+  <line x1="635" y1="320" x2="531.8" y2="120.4" stroke="#111" stroke-width="3.6"/>
+  <line x1="1415" y1="260" x2="1123.7" y2="205.0" stroke="#111" stroke-width="3.6"/>
+  <line x1="1415" y1="260" x2="1242.0" y2="86.0" stroke="#111" stroke-width="3.6"/>
+  <line x1="1415" y1="260" x2="1441.3" y2="48.4" stroke="#111" stroke-width="3.6"/>
+  <line x1="1415" y1="260" x2="1628.3" y2="109.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="2315" y1="335" x2="2042.9" y2="224.4" stroke="#111" stroke-width="3.6"/>
+  <line x1="2315" y1="335" x2="2207.5" y2="127.1" stroke="#111" stroke-width="3.6"/>
+  <line x1="2315" y1="335" x2="2422.5" y2="127.1" stroke="#111" stroke-width="3.6"/>
+  <line x1="2315" y1="335" x2="2587.1" y2="224.4" stroke="#111" stroke-width="3.6"/>
+  <line x1="2315" y1="740" x2="2134.8" y2="921.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="2315" y1="740" x2="2011.5" y2="682.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="2315" y1="740" x2="2628.0" y2="759.3" stroke="#111" stroke-width="3.6"/>
+  <line x1="2315" y1="740" x2="2599.7" y2="646.5" stroke="#111" stroke-width="3.6"/>
+  <line x1="4040" y1="290" x2="3817.8" y2="133.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="4040" y1="290" x2="4012.6" y2="69.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="4040" y1="290" x2="4220.2" y2="108.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="4040" y1="290" x2="4343.5" y2="232.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="4310" y1="725" x2="4536.4" y2="469.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="4310" y1="725" x2="4324.9" y2="424.3" stroke="#111" stroke-width="3.6"/>
+  <line x1="4310" y1="725" x2="4149.9" y2="446.0" stroke="#111" stroke-width="3.6"/>
+  <line x1="4310" y1="725" x2="4013.2" y2="508.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="590" y1="860" x2="317.9" y2="970.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="590" y1="860" x2="277.0" y2="840.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="590" y1="860" x2="349.3" y2="717.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="590" y1="860" x2="508.7" y2="646.3" stroke="#111" stroke-width="3.6"/>
+  <line x1="1370" y1="1220" x2="927.0" y2="918.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="1370" y1="1220" x2="1080.9" y2="837.1" stroke="#111" stroke-width="3.6"/>
+  <line x1="1370" y1="1220" x2="1263.1" y2="792.9" stroke="#111" stroke-width="3.6"/>
+  <line x1="1370" y1="1220" x2="1455.7" y2="790.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="1370" y1="1220" x2="1639.9" y2="830.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="485" y1="1340" x2="237.9" y2="1461.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="485" y1="1340" x2="183.4" y2="1340.0" stroke="#111" stroke-width="3.6"/>
+  <line x1="485" y1="1340" x2="237.9" y2="1218.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="485" y1="1805" x2="223.8" y2="1911.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="485" y1="1805" x2="184.5" y2="1786.5" stroke="#111" stroke-width="3.6"/>
+  <line x1="485" y1="1805" x2="237.9" y2="1683.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="485" y1="1805" x2="357.5" y2="1612.5" stroke="#111" stroke-width="3.6"/>
+  <line x1="620" y1="2195" x2="425.4" y2="2390.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="620" y1="2195" x2="280.7" y2="2195.0" stroke="#111" stroke-width="3.6"/>
+  <line x1="620" y1="2195" x2="425.4" y2="1999.3" stroke="#111" stroke-width="3.6"/>
+  <line x1="620" y1="2690" x2="813.9" y2="2852.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="620" y1="2690" x2="620.0" y2="2902.4" stroke="#111" stroke-width="3.6"/>
+  <line x1="620" y1="2690" x2="426.1" y2="2852.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="620" y1="2690" x2="323.0" y2="2726.9" stroke="#111" stroke-width="3.6"/>
+  <line x1="3410" y1="980" x2="3143.4" y2="756.3" stroke="#111" stroke-width="3.6"/>
+  <line x1="3410" y1="980" x2="3302.7" y2="697.9" stroke="#111" stroke-width="3.6"/>
+  <line x1="3410" y1="980" x2="3482.0" y2="692.4" stroke="#111" stroke-width="3.6"/>
+  <line x1="3410" y1="980" x2="3647.9" y2="740.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="3410" y1="980" x2="3785.9" y2="856.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="4115" y1="1220" x2="3983.2" y2="990.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="4115" y1="1220" x2="4188.2" y2="977.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="4115" y1="1220" x2="4376.5" y2="1054.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="4115" y1="1220" x2="4464.9" y2="1194.1" stroke="#111" stroke-width="3.6"/>
+  <line x1="4220" y1="1715" x2="4570.5" y2="1693.4" stroke="#111" stroke-width="3.6"/>
+  <line x1="4220" y1="1715" x2="4538.9" y2="1819.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="4220" y1="1715" x2="4385.2" y2="1933.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="4220" y1="1715" x2="4088.2" y2="1944.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="2990" y1="1775" x2="2507.7" y2="1786.9" stroke="#111" stroke-width="3.6"/>
+  <line x1="2990" y1="1775" x2="2825.0" y2="1455.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="2990" y1="1775" x2="2990.0" y2="1435.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="2990" y1="1775" x2="3155.0" y2="1455.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="2990" y1="1775" x2="2521.8" y2="1692.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="1190" y1="2480" x2="1403.3" y2="2630.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="1190" y1="2480" x2="1198.8" y2="2692.3" stroke="#111" stroke-width="3.6"/>
+  <line x1="1190" y1="2480" x2="989.5" y2="2638.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="1190" y1="2480" x2="889.5" y2="2498.5" stroke="#111" stroke-width="3.6"/>
+  <line x1="1790" y1="2660" x2="2101.8" y2="2739.9" stroke="#111" stroke-width="3.6"/>
+  <line x1="1790" y1="2660" x2="1921.4" y2="2874.5" stroke="#111" stroke-width="3.6"/>
+  <line x1="1790" y1="2660" x2="1658.6" y2="2874.5" stroke="#111" stroke-width="3.6"/>
+  <line x1="1790" y1="2660" x2="1478.2" y2="2739.9" stroke="#111" stroke-width="3.6"/>
+  <line x1="2390" y1="2390" x2="2685.2" y2="2465.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="2390" y1="2390" x2="2570.2" y2="2571.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="2390" y1="2390" x2="2390.0" y2="2611.3" stroke="#111" stroke-width="3.6"/>
+  <line x1="2390" y1="2390" x2="2209.8" y2="2571.2" stroke="#111" stroke-width="3.6"/>
+  <line x1="2390" y1="2390" x2="2094.8" y2="2465.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="3065" y1="2570" x2="2803.0" y2="2656.0" stroke="#111" stroke-width="3.6"/>
+  <line x1="3065" y1="2570" x2="2929.3" y2="2749.7" stroke="#111" stroke-width="3.6"/>
+  <line x1="3065" y1="2570" x2="3105.2" y2="2771.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="3065" y1="2570" x2="3258.4" y2="2721.3" stroke="#111" stroke-width="3.6"/>
+  <line x1="3740" y1="2570" x2="4098.9" y2="2614.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="3740" y1="2570" x2="3997.7" y2="2751.5" stroke="#111" stroke-width="3.6"/>
+  <line x1="3740" y1="2570" x2="3803.3" y2="2822.8" stroke="#111" stroke-width="3.6"/>
+  <line x1="3740" y1="2570" x2="3603.5" y2="2808.0" stroke="#111" stroke-width="3.6"/>
+  <line x1="3740" y1="2570" x2="3460.8" y2="2735.0" stroke="#111" stroke-width="3.6"/>
+  <line x1="4070" y1="2240" x2="4220.8" y2="2056.1" stroke="#111" stroke-width="3.6"/>
+  <line x1="4070" y1="2240" x2="4353.4" y2="2167.4" stroke="#111" stroke-width="3.6"/>
+  <line x1="4070" y1="2240" x2="4353.4" y2="2312.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="4070" y1="2240" x2="4220.8" y2="2423.9" stroke="#111" stroke-width="3.6"/>
+  <line x1="4370" y1="2660" x2="4645.4" y2="2677.0" stroke="#111" stroke-width="3.6"/>
+  <line x1="4370" y1="2660" x2="4508.2" y2="2828.6" stroke="#111" stroke-width="3.6"/>
+  <line x1="4370" y1="2660" x2="4253.2" y2="2836.5" stroke="#111" stroke-width="3.6"/>
+  <polyline points="2315,335 1865,297.5 1415,260" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2315,335 1445,500 635,320" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2315,335 2315,537.5 2315,740" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2315,335 3215,272 4040,290" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2315,335 3830,650 4310,725" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2315,335 2885,725 3410,980" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2315,335 1835,777.5 1370,1220" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2315,335 4662.5,365 4662.5,1370 4220,1715" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 2015,1055 3410,980" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 980,1040 590,860" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 920,1280 485,1340" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 920,1535 485,1805" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 1040,1760 620,2195" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="620,2195 620,2442.5 620,2690" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 1280,1880 1190,2480" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 1580,1970 1790,2660" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 2210,1460 2990,1775" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 1910,1880 2390,2390" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 2285,1910 3065,2570" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1370,1220 3425,2420 3740,2570" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="3410,980 3770,1100 4115,1220" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="4220,1715 4175,1467.5 4115,1220" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2990,1775 3635,1745 4220,1715" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2990,1775 3275,1370 3410,980" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2990,1775 2630,1190 2315,740" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2390,2390 3575,1520 3410,980" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2990,1775 2570,2015 2390,2390" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2990,1775 3080,2360 3065,2570" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2990,1775 3395,2180 3740,2570" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2990,1775 3605,2015 4070,2240" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="2990,1775 3860,2450 4370,2660" fill="none" stroke="#111" stroke-width="4.6"/>
+  <polyline points="1790,2660 2030,2195 2990,1775" fill="none" stroke="#111" stroke-width="4.6"/>
+  <ellipse cx="531.8" cy="519.6" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="531.8" y="529.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">holiday_id</text>
+  <ellipse cx="358.1" cy="404.1" rx="123.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="358.1" y="413.9" font-size="28" font-weight="700" text-anchor="middle" fill="#111">holiday_date</text>
+  <ellipse cx="358.1" cy="235.9" rx="54.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="358.1" y="245.7" font-size="28" font-weight="700" text-anchor="middle" fill="#111">name</text>
+  <ellipse cx="531.8" cy="120.4" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="531.8" y="130.2" font-size="28" font-weight="700" text-anchor="middle" fill="#111">recurring</text>
+  <ellipse cx="1123.7" cy="205.0" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1123.7" y="214.8" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">org_id</text>
+  <ellipse cx="1242.0" cy="86.0" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1242.0" y="95.8" font-size="28" font-weight="700" text-anchor="middle" fill="#111">work_start</text>
+  <ellipse cx="1441.3" cy="48.4" rx="89.0" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1441.3" y="58.2" font-size="28" font-weight="700" text-anchor="middle" fill="#111">work_end</text>
+  <ellipse cx="1628.3" cy="109.8" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1628.3" y="119.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111">work_days</text>
+  <ellipse cx="2042.9" cy="224.4" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2042.9" y="234.2" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">org_id</text>
+  <ellipse cx="2207.5" cy="127.1" rx="54.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2207.5" y="136.9" font-size="28" font-weight="700" text-anchor="middle" fill="#111">name</text>
+  <ellipse cx="2422.5" cy="127.1" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2422.5" y="136.9" font-size="28" font-weight="700" text-anchor="middle" fill="#111">status</text>
+  <ellipse cx="2587.1" cy="224.4" rx="89.0" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2587.1" y="234.2" font-size="28" font-weight="700" text-anchor="middle" fill="#111">logo_url</text>
+  <ellipse cx="2134.8" cy="921.2" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2134.8" y="931.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">type_id</text>
+  <ellipse cx="2011.5" cy="682.7" rx="54.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2011.5" y="692.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">name</text>
+  <ellipse cx="2628.0" cy="759.3" rx="149.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2628.0" y="769.1" font-size="28" font-weight="700" text-anchor="middle" fill="#111">processing_days</text>
+  <ellipse cx="2599.7" cy="646.5" rx="158.0" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2599.7" y="656.3" font-size="28" font-weight="700" text-anchor="middle" fill="#111">processing_hours</text>
+  <ellipse cx="3817.8" cy="133.6" rx="123.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3817.8" y="143.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">knowledge_id</text>
+  <ellipse cx="4012.6" cy="69.6" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4012.6" y="79.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111">title</text>
+  <ellipse cx="4220.2" cy="108.8" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4220.2" y="118.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111">file_name</text>
+  <ellipse cx="4343.5" cy="232.7" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4343.5" y="242.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">status</text>
+  <ellipse cx="4536.4" cy="469.8" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4536.4" y="479.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">template_id</text>
+  <ellipse cx="4324.9" cy="424.3" rx="54.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4324.9" y="434.1" font-size="28" font-weight="700" text-anchor="middle" fill="#111">name</text>
+  <ellipse cx="4149.9" cy="446.0" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4149.9" y="455.8" font-size="28" font-weight="700" text-anchor="middle" fill="#111">header_text</text>
+  <ellipse cx="4013.2" cy="508.6" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4013.2" y="518.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111">is_default</text>
+  <ellipse cx="317.9" cy="970.6" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="317.9" y="980.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">liaison_id</text>
+  <ellipse cx="277.0" cy="840.7" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="277.0" y="850.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">available</text>
+  <ellipse cx="349.3" cy="717.8" rx="158.0" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="349.3" y="727.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111">total_deliveries</text>
+  <ellipse cx="508.7" cy="646.3" rx="123.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="508.7" y="656.1" font-size="28" font-weight="700" text-anchor="middle" fill="#111">success_rate</text>
+  <ellipse cx="927.0" cy="918.8" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="927.0" y="928.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">user_id</text>
+  <ellipse cx="1080.9" cy="837.1" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1080.9" y="846.9" font-size="28" font-weight="700" text-anchor="middle" fill="#111">full_name</text>
+  <ellipse cx="1263.1" cy="792.9" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1263.1" y="802.7" font-size="28" font-weight="700" text-anchor="middle" fill="#111">email</text>
+  <ellipse cx="1455.7" cy="790.6" rx="123.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1455.7" y="800.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111">account_type</text>
+  <ellipse cx="1639.9" cy="830.2" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1639.9" y="840.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111">status</text>
+  <ellipse cx="237.9" cy="1461.8" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="237.9" y="1471.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">session_id</text>
+  <ellipse cx="183.4" cy="1340.0" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="183.4" y="1349.8" font-size="28" font-weight="700" text-anchor="middle" fill="#111">token</text>
+  <ellipse cx="237.9" cy="1218.2" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="237.9" y="1228.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111">expires_at</text>
+  <ellipse cx="223.8" cy="1911.2" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="223.8" y="1921.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">log_id</text>
+  <ellipse cx="184.5" cy="1786.5" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="184.5" y="1796.3" font-size="28" font-weight="700" text-anchor="middle" fill="#111">action</text>
+  <ellipse cx="237.9" cy="1683.2" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="237.9" y="1693.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111">entity_type</text>
+  <ellipse cx="357.5" cy="1612.5" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="357.5" y="1622.3" font-size="28" font-weight="700" text-anchor="middle" fill="#111">created_at</text>
+  <ellipse cx="425.4" cy="2390.7" rx="149.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="425.4" y="2400.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">conversation_id</text>
+  <ellipse cx="280.7" cy="2195.0" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="280.7" y="2204.8" font-size="28" font-weight="700" text-anchor="middle" fill="#111">title</text>
+  <ellipse cx="425.4" cy="1999.3" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="425.4" y="2009.1" font-size="28" font-weight="700" text-anchor="middle" fill="#111">updated_at</text>
+  <ellipse cx="813.9" cy="2852.7" rx="132.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="813.9" y="2862.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">ai_message_id</text>
+  <ellipse cx="620.0" cy="2902.4" rx="54.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="620.0" y="2912.2" font-size="28" font-weight="700" text-anchor="middle" fill="#111">role</text>
+  <ellipse cx="426.1" cy="2852.7" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="426.1" y="2862.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">content</text>
+  <ellipse cx="323.0" cy="2726.9" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="323.0" y="2736.7" font-size="28" font-weight="700" text-anchor="middle" fill="#111">model</text>
+  <ellipse cx="3143.4" cy="756.3" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3143.4" y="766.1" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">office_id</text>
+  <ellipse cx="3302.7" cy="697.9" rx="54.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3302.7" y="707.7" font-size="28" font-weight="700" text-anchor="middle" fill="#111">name</text>
+  <ellipse cx="3482.0" cy="692.4" rx="54.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3482.0" y="702.2" font-size="28" font-weight="700" text-anchor="middle" fill="#111">code</text>
+  <ellipse cx="3647.9" cy="740.8" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3647.9" y="750.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111">department</text>
+  <ellipse cx="3785.9" cy="856.6" rx="183.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3785.9" y="866.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111">is_final_checkpoint</text>
+  <ellipse cx="3983.2" cy="990.2" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3983.2" y="1000.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">step_id</text>
+  <ellipse cx="4188.2" cy="977.6" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4188.2" y="987.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111">step_number</text>
+  <ellipse cx="4376.5" cy="1054.2" rx="175.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4376.5" y="1064.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111">action_description</text>
+  <ellipse cx="4464.9" cy="1194.1" rx="89.0" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4464.9" y="1203.9" font-size="28" font-weight="700" text-anchor="middle" fill="#111">sla_days</text>
+  <ellipse cx="4570.5" cy="1693.4" rx="89.0" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4570.5" y="1703.2" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">route_id</text>
+  <ellipse cx="4538.9" cy="1819.7" rx="54.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4538.9" y="1829.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">name</text>
+  <ellipse cx="4385.2" cy="1933.8" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4385.2" y="1943.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111">description</text>
+  <ellipse cx="4088.2" cy="1944.8" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4088.2" y="1954.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111">is_active</text>
+  <ellipse cx="2507.7" cy="1786.9" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2507.7" y="1796.7" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">document_id</text>
+  <ellipse cx="2825.0" cy="1455.7" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2825.0" y="1465.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">title</text>
+  <ellipse cx="2990.0" cy="1435.2" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2990.0" y="1445.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111">status</text>
+  <ellipse cx="3155.0" cy="1455.7" rx="89.0" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3155.0" y="1465.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">priority</text>
+  <ellipse cx="2521.8" cy="1692.8" rx="209.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2521.8" y="1702.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111">target_completion_date</text>
+  <ellipse cx="1403.3" cy="2630.2" rx="149.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1403.3" y="2640.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">notification_id</text>
+  <ellipse cx="1198.8" cy="2692.3" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1198.8" y="2702.1" font-size="28" font-weight="700" text-anchor="middle" fill="#111">title</text>
+  <ellipse cx="989.5" cy="2638.7" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="989.5" y="2648.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">message</text>
+  <ellipse cx="889.5" cy="2498.5" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="889.5" y="2508.3" font-size="28" font-weight="700" text-anchor="middle" fill="#111">is_read</text>
+  <ellipse cx="2101.8" cy="2739.9" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2101.8" y="2749.7" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">message_id</text>
+  <ellipse cx="1921.4" cy="2874.5" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1921.4" y="2884.3" font-size="28" font-weight="700" text-anchor="middle" fill="#111">content</text>
+  <ellipse cx="1658.6" cy="2874.5" rx="166.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1658.6" y="2884.3" font-size="28" font-weight="700" text-anchor="middle" fill="#111">conversation_type</text>
+  <ellipse cx="1478.2" cy="2739.9" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="1478.2" y="2749.7" font-size="28" font-weight="700" text-anchor="middle" fill="#111">is_read</text>
+  <ellipse cx="2685.2" cy="2465.7" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2685.2" y="2475.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">tracking_id</text>
+  <ellipse cx="2570.2" cy="2571.2" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2570.2" y="2581.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111">step_number</text>
+  <ellipse cx="2390.0" cy="2611.3" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2390.0" y="2621.1" font-size="28" font-weight="700" text-anchor="middle" fill="#111">status</text>
+  <ellipse cx="2209.8" cy="2571.2" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2209.8" y="2581.0" font-size="28" font-weight="700" text-anchor="middle" fill="#111">arrived_at</text>
+  <ellipse cx="2094.8" cy="2465.7" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2094.8" y="2475.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">notes</text>
+  <ellipse cx="2803.0" cy="2656.0" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2803.0" y="2665.8" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">approval_id</text>
+  <ellipse cx="2929.3" cy="2749.7" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="2929.3" y="2759.5" font-size="28" font-weight="700" text-anchor="middle" fill="#111">status</text>
+  <ellipse cx="3105.2" cy="2771.6" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3105.2" y="2781.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111">remarks</text>
+  <ellipse cx="3258.4" cy="2721.3" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3258.4" y="2731.1" font-size="28" font-weight="700" text-anchor="middle" fill="#111">approved_at</text>
+  <ellipse cx="4098.9" cy="2614.6" rx="89.0" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4098.9" y="2624.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">issue_id</text>
+  <ellipse cx="3997.7" cy="2751.5" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3997.7" y="2761.3" font-size="28" font-weight="700" text-anchor="middle" fill="#111">title</text>
+  <ellipse cx="3803.3" cy="2822.8" rx="106.2" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3803.3" y="2832.6" font-size="28" font-weight="700" text-anchor="middle" fill="#111">issue_type</text>
+  <ellipse cx="3603.5" cy="2808.0" rx="89.0" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3603.5" y="2817.8" font-size="28" font-weight="700" text-anchor="middle" fill="#111">priority</text>
+  <ellipse cx="3460.8" cy="2735.0" rx="71.7" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="3460.8" y="2744.8" font-size="28" font-weight="700" text-anchor="middle" fill="#111">status</text>
+  <ellipse cx="4220.8" cy="2056.1" rx="80.4" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4220.8" y="2065.9" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">file_id</text>
+  <ellipse cx="4353.4" cy="2167.4" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4353.4" y="2177.2" font-size="28" font-weight="700" text-anchor="middle" fill="#111">file_name</text>
+  <ellipse cx="4353.4" cy="2312.6" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4353.4" y="2322.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111">file_type</text>
+  <ellipse cx="4220.8" cy="2423.9" rx="97.6" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4220.8" y="2433.7" font-size="28" font-weight="700" text-anchor="middle" fill="#111">file_size</text>
+  <ellipse cx="4645.4" cy="2677.0" rx="63.1" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4645.4" y="2686.8" font-size="28" font-weight="700" text-anchor="middle" fill="#111" text-decoration="underline">qr_id</text>
+  <ellipse cx="4508.2" cy="2828.6" rx="123.5" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4508.2" y="2838.4" font-size="28" font-weight="700" text-anchor="middle" fill="#111">qr_code_data</text>
+  <ellipse cx="4253.2" cy="2836.5" rx="114.9" ry="28" fill="#fff" stroke="#111" stroke-width="3.6"/>
+  <text x="4253.2" y="2846.3" font-size="28" font-weight="700" text-anchor="middle" fill="#111">office_code</text>
+  <polygon points="1725.84,297.5 1865,247.5 2004.16,297.5 1865,347.5" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="1865" y="306.95" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Configures</text>
+  <polygon points="1322.472,500 1445,450 1567.528,500 1445,550" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="1445" y="509.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Observes</text>
+  <polygon points="2200.788,537.5 2315,487.5 2429.212,537.5 2315,587.5" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="2315" y="546.95" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Defines</text>
+  <polygon points="3100.788,272 3215,222 3329.212,272 3215,322" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3215" y="281.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Uploads</text>
+  <polygon points="3730,650 3830,600 3930,650 3830,700" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3830" y="659.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Uses</text>
+  <polygon points="2785,725 2885,675 2985,725 2885,775" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="2885" y="734.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Has</text>
+  <polygon points="1720.788,777.5 1835,727.5 1949.212,777.5 1835,827.5" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="1835" y="786.95" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Employs</text>
+  <polygon points="4548.288,1370 4662.5,1320 4776.712,1370 4662.5,1420" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="4662.5" y="1379.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Creates</text>
+  <polygon points="1875.84,1055 2015,1005 2154.16,1055 2015,1105" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="2015" y="1064.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Belongs to</text>
+  <polygon points="880,1040 980,990 1080,1040 980,1090" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="980" y="1049.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Has</text>
+  <polygon points="755.8919999999999,1280 920,1230 1084.108,1280 920,1330" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="920" y="1289.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Signs in with</text>
+  <polygon points="797.472,1535 920,1485 1042.528,1535 920,1585" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="920" y="1544.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Performs</text>
+  <polygon points="934.104,1760 1040,1710 1145.896,1760 1040,1810" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="1040" y="1769.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Starts</text>
+  <polygon points="497.472,2442.5 620,2392.5 742.528,2442.5 620,2492.5" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="620" y="2451.95" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Contains</text>
+  <polygon points="1157.472,1880 1280,1830 1402.528,1880 1280,1930" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="1280" y="1889.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Receives</text>
+  <polygon points="1480,1970 1580,1920 1680,1970 1580,2020" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="1580" y="1979.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Sends</text>
+  <polygon points="2095.788,1460 2210,1410 2324.212,1460 2210,1510" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="2210" y="1469.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Submits</text>
+  <polygon points="1712.628,1880 1910,1830 2107.372,1880 1910,1930" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="1910" y="1889.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Handles / Carries</text>
+  <polygon points="2170.788,1910 2285,1860 2399.212,1910 2285,1960" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="2285" y="1919.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Decides</text>
+  <polygon points="3310.788,2420 3425,2370 3539.212,2420 3425,2470" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3425" y="2429.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Reports</text>
+  <polygon points="3639.156,1100 3770,1050 3900.844,1100 3770,1150" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3770" y="1109.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Serves as</text>
+  <polygon points="4027.524,1467.5 4175,1417.5 4322.476,1467.5 4175,1517.5" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="4175" y="1476.95" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Consists of</text>
+  <polygon points="3520.788,1745 3635,1695 3749.212,1745 3635,1795" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3635" y="1754.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Follows</text>
+  <polygon points="3135.84,1370 3275,1320 3414.16,1370 3275,1420" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3275" y="1379.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Located at</text>
+  <polygon points="2465.892,1190 2630,1140 2794.108,1190 2630,1240" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="2630" y="1199.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Classified as</text>
+  <polygon points="3402.576,1520 3575,1470 3747.424,1520 3575,1570" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3575" y="1529.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Takes place at</text>
+  <polygon points="2455.788,2015 2570,1965 2684.212,2015 2570,2065" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="2570" y="2024.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Records</text>
+  <polygon points="2957.472,2360 3080,2310 3202.528,2360 3080,2410" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3080" y="2369.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Requires</text>
+  <polygon points="3239.208,2180 3395,2130 3550.792,2180 3395,2230" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3395" y="2189.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Flagged with</text>
+  <polygon points="3474.156,2015 3605,1965 3735.844,2015 3605,2065" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3605" y="2024.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Stored as</text>
+  <polygon points="3704.208,2450 3860,2400 4015.792,2450 3860,2500" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="3860" y="2459.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Labeled with</text>
+  <polygon points="1899.156,2195 2030,2145 2160.844,2195 2030,2245" fill="#fff" stroke="#111" stroke-width="4.6"/>
+  <text x="2030" y="2204.45" font-size="27" font-weight="700" text-anchor="middle" fill="#111">Discusses</text>
+  <rect x="520" y="282" width="230" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="635" y="331.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Holiday</text>
+  <rect x="1171.0864" y="222" width="487.82720000000006" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="1415" y="271.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Organization Settings</text>
+  <rect x="2163.6208" y="297" width="302.75840000000005" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="2315" y="346.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Organization</text>
+  <rect x="2153.3392" y="702" width="323.32160000000005" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="2315" y="751.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Document Type</text>
+  <rect x="3868.0576" y="252" width="343.88480000000004" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="4040" y="301.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Knowledge File</text>
+  <rect x="4107.2128" y="687" width="405.5744" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="4310" y="736.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Document Template</text>
+  <rect x="407.77599999999995" y="822" width="364.44800000000004" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="590" y="871.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Liaison Profile</text>
+  <rect x="1255" y="1182" width="230" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="1370" y="1231.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">User</text>
+  <rect x="333.6208" y="1302" width="302.75840000000005" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="485" y="1351.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Auth Session</text>
+  <rect x="364.4656" y="1767" width="241.06880000000004" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="485" y="1816.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Audit Log</text>
+  <rect x="437.77599999999995" y="2157" width="364.44800000000004" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="620" y="2206.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">AI Conversation</text>
+  <rect x="489.18399999999997" y="2652" width="261.63200000000006" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="620" y="2701.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">AI Message</text>
+  <rect x="3295" y="942" width="230" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="3410" y="991.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Office</text>
+  <rect x="3984.184" y="1182" width="261.63200000000006" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="4115" y="1231.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Route Step</text>
+  <rect x="4048.0576" y="1677" width="343.88480000000004" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="4220" y="1726.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Document Route</text>
+  <rect x="2875" y="1737" width="230" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="2990" y="1786.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Document</text>
+  <rect x="1038.6208" y="2442" width="302.75840000000005" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="1190" y="2491.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Notification</text>
+  <rect x="1675" y="2622" width="230" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="1790" y="2671.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Message</text>
+  <rect x="2218.0576" y="2352" width="343.88480000000004" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="2390" y="2401.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Tracking Visit</text>
+  <rect x="2950" y="2532" width="230" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="3065" y="2581.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Approval</text>
+  <rect x="3625" y="2532" width="230" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="3740" y="2581.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Issue</text>
+  <rect x="3908.3392" y="2202" width="323.32160000000005" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="4070" y="2251.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">Document File</text>
+  <rect x="4255" y="2622" width="230" height="76" fill="#fff" stroke="#111" stroke-width="5.5"/>
+  <text x="4370" y="2671.9" font-size="34" font-weight="700" text-anchor="middle" fill="#111">QR Code</text>
+  <text x="2135.6" y="309.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="1615.5" y="314.1" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="2129.1" y="359.1" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="774.8" y="389.0" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="2291.0" y="414.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="2339.0" y="687.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="2498.1" y="359.5" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="3838.6" y="274.9" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="2491.5" y="409.5" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="4097.7" y="680.8" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="2397.9" y="434.1" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="3284.6" y="905.7" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="2227.1" y="396.7" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="1455.9" y="1184.7" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="2496.1" y="374.6" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="4319.4" y="1681.2" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="1520.9" y="1219.5" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="3263.7" y="977.1" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="1237.1" y="1145.5" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="722.9" y="961.1" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="1221.8" y="1228.8" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="669.7" y="1352.1" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="1262.0" y="1279.6" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="604.0" y="1772.7" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="1309.2" y="1286.8" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="701.0" y="2159.0" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="596.0" y="2274.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="644.0" y="2637.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="1337.2" y="1296.1" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="1223.6" y="2430.9" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="1365.4" y="1305.8" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="1792.9" y="2600.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="1508.4" y="1297.8" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="2854.0" y="1707.5" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="1405.4" y="1314.5" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="2345.4" y="2320.9" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="1443.1" y="1318.5" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="3002.5" y="2499.0" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="1470.9" y="1320.0" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="3611.7" y="2495.6" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="3547.4" y="1064.4" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="3967.6" y="1156.6" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="4231.6" y="1658.0" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="4107.7" y="1305.0" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="3136.1" y="1805.5" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="4016.8" y="1714.7" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="3056.1" y="1736.1" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="3364.5" y="1051.4" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="2969.8" y="1709.7" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="2341.5" y="833.1" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="2494.1" y="2356.6" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="3407.2" y="1066.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="2862.6" y="1833.5" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="2443.3" y="2347.7" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="2976.4" y="1857.9" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="3093.7" y="2519.0" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="3039.0" y="1871.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="3699.6" y="2501.4" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="3126.3" y="1867.2" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="3944.1" y="2165.7" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="3060.4" y="1873.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="4234.1" y="2591.4" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+  <text x="1845.4" y="2618.3" font-size="38" font-weight="700" text-anchor="middle" fill="#111">N</text>
+  <text x="2835.4" y="1829.7" font-size="38" font-weight="700" text-anchor="middle" fill="#111">1</text>
+</svg>

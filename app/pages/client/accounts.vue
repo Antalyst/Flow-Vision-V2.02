@@ -46,18 +46,18 @@ const counts = computed(() => {
 })
 
 // A client whose own pages are limited can't manage a client with every page (the owner).
-const canManage = (m: TeamMember) => !(auth.user?.page_access && m.account_type === 'CLIENT' && !m.page_access && m.id !== auth.user.id)
+const canManage = (m: TeamMember) => !(auth.user?.page_access && m.account_type === 'ADMIN' && !m.page_access && m.id !== auth.user.id)
 
 // Invite / edit
 const formOpen = ref(false)
 const editing = ref<TeamMember | null>(null)
-const form = reactive({ account_type: 'EMPLOYEE' as AccountType, first_name: '', last_name: '', email: '', phone: '', office_id: '', status: 'ACTIVE', page_access: null as string[] | null })
-const needsOffice = computed(() => form.account_type !== 'CLIENT')
+const form = reactive({ account_type: 'DEPARTMENT_HEAD' as AccountType, first_name: '', last_name: '', email: '', phone: '', office_id: '', status: 'ACTIVE', page_access: null as string[] | null })
+const needsOffice = computed(() => form.account_type !== 'ADMIN')
 
 function openForm(member?: TeamMember) {
   editing.value = member ?? null
   Object.assign(form, {
-    account_type: member?.account_type ?? 'EMPLOYEE',
+    account_type: member?.account_type ?? 'DEPARTMENT_HEAD',
     first_name: member?.first_name ?? '',
     last_name: member?.last_name ?? '',
     email: member?.email ?? '',
@@ -114,7 +114,7 @@ async function copyCredentials() {
 
 <template>
   <div class="fv-rise">
-    <PageHeader eyebrow="A4 · Team" title="Team accounts" description="Invite people and give each one a role. Employees, staff and liaisons work from a specific office.">
+    <PageHeader eyebrow="A4 · Team" title="Team accounts" description="Invite people and give each one a role. Department heads, staff and messengers work from a specific office.">
       <template #actions>
         <button class="btn btn-primary" @click="openForm()"><FIcon name="user-plus" :size="16" /> Invite member</button>
       </template>
@@ -212,7 +212,7 @@ async function copyCredentials() {
             <option v-for="o in offices" :key="o.id" :value="o.id">{{ o.name }} ({{ o.code }}){{ o.is_final_checkpoint ? ' · final checkpoint' : '' }}</option>
           </select>
           <p v-if="form.account_type === 'STAFF'" class="field-hint">Staff only have approval authority at the final checkpoint office.</p>
-          <p v-if="form.account_type === 'LIAISON'" class="field-hint">Liaisons can pick up from every office in this office's department.</p>
+          <p v-if="form.account_type === 'LIAISON'" class="field-hint">Messengers carry the documents released from this office.</p>
         </div>
         <div v-if="editing && editing.id !== auth.user?.id">
           <label class="field-label" for="m-status">Status</label>

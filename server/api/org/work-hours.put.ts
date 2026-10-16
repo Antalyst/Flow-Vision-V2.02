@@ -6,12 +6,12 @@ import { changeCalendar, workCalendarDto } from '~~/server/lib/work-calendar.ts'
 import { formatClock, parseClock } from '../../../shared/work-calendar.ts'
 
 /**
- * Set the organization's working hours and days (CLIENT only): { work_start: "08:00",
+ * Set the organization's working hours and days (ADMIN only): { work_start: "08:00",
  * work_end: "17:00", work_days: [1, 2, 3, 4, 5] } (0 = Sunday … 6 = Saturday, Philippine time).
  * Processing time only runs inside them; deadlines of documents in progress move to match.
  */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const body = await readJson(event)
   const start = parseClock(body.work_start)

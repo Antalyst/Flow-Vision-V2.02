@@ -75,7 +75,7 @@ export async function routeForNewDocument(orgId: string, routeId: string | null,
 }
 
 // ---------------------------------------------------------------------------
-// Commands (CLIENT)
+// Commands (ADMIN)
 // ---------------------------------------------------------------------------
 
 export interface StepInput {

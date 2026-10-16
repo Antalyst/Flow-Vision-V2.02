@@ -4,9 +4,9 @@ import { requirePage } from '~~/server/lib/team.ts'
 import { starterTemplates, templateDto } from '~~/server/lib/templates.ts'
 import { isMissingTable, settingsTablesMissing } from '~~/server/lib/work-calendar.ts'
 
-/** Add the ready-made templates (Memorandum, Official Letter, Report) the organization doesn't have yet (CLIENT only). */
+/** Add the ready-made templates (Memorandum, Official Letter, Report) the organization doesn't have yet (ADMIN only). */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const org = (await Organization.findByPk(user.org_id, { attributes: ['name'] }))!
   try {

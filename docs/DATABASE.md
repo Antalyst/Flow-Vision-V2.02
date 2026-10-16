@@ -10,7 +10,7 @@ FlowVision runs on the project's own schema: **20 tables + 3 views**, MariaDB 11
 
 | Table | What the app stores there |
 | ----- | ------------------------- |
-| `organizations` | One per LGU. `created_by` = the CLIENT who registered it. |
+| `organizations` | One per LGU. `created_by` = the ADMIN who registered it. |
 | `offices` | `code` is the **full QR prefix** `{ORGCODE}-{DEPT}-{OFFICE}` (e.g. `BAG-HR-HRMSO`, globally unique). `department` is the liaison pickup scope. `is_final_checkpoint` is kept in sync with the last step of the active route. `status` active/inactive. |
 | `users` | `status`: `active`; `pending` = signed in with a temporary password (must change it); `inactive` = suspended. `full_name` is kept in sync with first/last name (the views use it). `department` copies the office's department. |
 | `organization_routes` | Any number of **Document Routes** per org. `is_active = 1`: offered for new documents (names unique among these). `is_active = 0`: retired, or a snapshot of an edited route's earlier steps — editing keeps the route's id, and documents in flight/completed on the old steps move to that snapshot first. |
@@ -19,7 +19,7 @@ FlowVision runs on the project's own schema: **20 tables + 3 views**, MariaDB 11
 | `document_tracking` | **One row per office visit** — see below. |
 | `approvals` | One row per (document, STAFF, office) at the final checkpoint. Every STAFF there gets a `PENDING` row when the document is received. The one who decides gets `APPROVED`/`RETURNED` + `approved_at`, and the other `PENDING` rows are removed. |
 | `liaisons` | `available` = on/off duty. "Busy" is derived: a document is released to them (current visit `liaison_id`) or in their hands. Only free messengers can be given a document. Each delivery updates `total_deliveries`, `success_rate`, `average_delivery_time` (minutes), `deliveries_today` (resets per Manila day) and `last_delivery`. A failed delivery counts as a total without a success. |
-| `qr_codes` | **One row per document, for its whole life.** `qr_code_data` = `{office code}{MMDDYY upload date}{6 random digits}` (e.g. `BCC100726123456`), unique; older rows keep `{office code}-{8 digits}`. It is created on upload, printed as the QR label, and scanned at every hand-off. `office_code` is the origin: the uploader's assigned office code, or the organization's code for CLIENT accounts (the first segment its office codes share, else its name's initials). Replacing a lost label keeps the office and date and changes the random digits, so the old label stops working. |
+| `qr_codes` | **One row per document, for its whole life.** `qr_code_data` = `{office code}{MMDDYY upload date}{6 random digits}` (e.g. `BCC100726123456`), unique; older rows keep `{office code}-{8 digits}`. It is created on upload, printed as the QR label, and scanned at every hand-off. `office_code` is the origin: the uploader's assigned office code, or the organization's code for ADMIN accounts (the first segment its office codes share, else its name's initials). Replacing a lost label keeps the office and date and changes the random digits, so the old label stops working. |
 | `issues` | Always about a document (`document_id` is required). `issue_type` = category, `priority` = severity, `resolution_notes`. |
 | `messages` | `conversation_type`: `DIRECT` (recipient_id), `GROUP` (a document's thread, document_id), `OFFICE` (everyone in the sender's office). `content`, `is_read`. |
 | `notifications` | `title`, `message`, `action_url` (where clicking goes), `is_read`. |
@@ -67,7 +67,7 @@ The *current visit* is the latest row for the document's `current_step_number`. 
 | yes | no  | Received (by `handler_id`) and being processed |
 | yes | yes | Released to that messenger, waiting for them to scan it at pickup |
 
-**Step 0 is the origin**: the uploader's office, or `office_id` NULL for a CLIENT upload (the organization). Its `handler_id` is the uploader, so a messenger can be assigned right away; `documents.current_step_number` is 0 until the first office receives it.
+**Step 0 is the origin**: the uploader's office, or `office_id` NULL for an ADMIN upload (the organization). Its `handler_id` is the uploader, so a messenger can be assigned right away; `documents.current_step_number` is 0 until the first office receives it.
 
 While it is carried (`PICKED_UP` / `IN_TRANSIT`), `liaison_id` is the messenger carrying it. Staff of the next office scan the QR to receive it: that closes this visit and opens theirs, with `handler_id` = the person who scanned it.
 

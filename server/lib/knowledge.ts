@@ -19,7 +19,7 @@ import { deleteFile, getFile, putFile } from './file-store.ts'
 
 /**
  * Offered to a new organization (and backfilled for existing ones by db:migrate), each with a
- * starting processing time the CLIENT can change in Organization Settings.
+ * starting processing time the ADMIN can change in Organization Settings.
  */
 export const DEFAULT_DOCUMENT_TYPES = [
   { name: 'Purchase Request', days: 3 },

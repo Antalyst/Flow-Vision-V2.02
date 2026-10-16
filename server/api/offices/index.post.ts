@@ -5,7 +5,7 @@ import { officeDto } from '~~/server/lib/serializers.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/offices')
   const office = await Office.create({ ...readOffice(await readJson(event), false), org_id: user.org_id })
   await audit(requestMeta(event), { action: 'OFFICE_CREATE', entityType: 'office', entityId: office.id, after: office.toJSON() })

@@ -48,7 +48,7 @@ The AI automatically has access to:
 - Liaison assignments and availability
 - Route steps and final checkpoints
 
-#### B. Knowledge Files (Uploaded by CLIENT)
+#### B. Knowledge Files (Uploaded by ADMIN)
 - PDFs, Word documents, markdown files
 - CSV data
 - Text knowledge bases
@@ -464,9 +464,9 @@ Flow:
 ### Example Permission Logic:
 ```typescript
 // In executeTool()
-if (user.role === 'CLIENT') {
+if (user.role === 'ADMIN') {
   // Can see all org data
-} else if (user.role === 'STAFF' || 'EMPLOYEE') {
+} else if (user.role === 'STAFF' || 'DEPARTMENT_HEAD') {
   // Can only see their office + shared documents
 } else if (user.role === 'LIAISON') {
   // Can see assigned routes + messages

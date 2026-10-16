@@ -14,9 +14,9 @@ export default defineApiHandler(async (event) => {
 
   // A scope narrows what the account may see; it never widens it.
   const and: WhereOptions[] = [{ org_id: user.org_id }, visibleWhere(user), scopeWhere(scope, user)]
-  // Once approved, a document leaves everyone's lists except its owner's (and the CLIENT
+  // Once approved, a document leaves everyone's lists except its owner's (and the ADMIN
   // administrator's, who oversees the organization). It stays reachable from the activity log.
-  if (user.account_type !== 'CLIENT') and.push({ [Op.or]: [{ status: { [Op.ne]: 'COMPLETED' } }, { submitted_by: user.id }] })
+  if (user.account_type !== 'ADMIN') and.push({ [Op.or]: [{ status: { [Op.ne]: 'COMPLETED' } }, { submitted_by: user.id }] })
 
   const statuses = v.q(query, 'status', 200).split(',').map((s) => s.trim().toUpperCase()).filter((s) => (DOCUMENT_STATUSES as readonly string[]).includes(s))
   if (statuses.length) and.push({ status: { [Op.in]: statuses } })
@@ -24,12 +24,12 @@ export default defineApiHandler(async (event) => {
   const priority = v.q(query, 'priority').toUpperCase()
   if ((PRIORITIES as readonly string[]).includes(priority)) and.push({ priority })
 
-  // Filters by role: CLIENT — the office the document is at now; EMPLOYEE — a staff member of
+  // Filters by role: ADMIN — the office the document is at now; DEPARTMENT_HEAD — a staff member of
   // their own office (what that staff member uploaded or handled); everyone — the document type.
   const office = v.q(query, 'office', 36)
-  if (office && user.account_type === 'CLIENT') and.push({ current_office_id: office })
+  if (office && user.account_type === 'ADMIN') and.push({ current_office_id: office })
   const staffId = v.q(query, 'staff', 36)
-  if (staffId && user.account_type === 'EMPLOYEE') {
+  if (staffId && user.account_type === 'DEPARTMENT_HEAD') {
     const staff = await User.findOne({ where: { id: staffId, org_id: user.org_id, office_id: user.office_id ?? null, account_type: 'STAFF' }, attributes: ['id'] })
     if (!staff) throw badRequest('That staff member is not in your office', { field: 'staff' })
     const id = sequelize.escape(staff.id)

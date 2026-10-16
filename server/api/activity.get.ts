@@ -13,7 +13,7 @@ function pick<T extends string>(raw: string, allowed: readonly T[], fallback: T,
 /**
  * The activity log (who did what, when). Query: `scope` (mine · office · organization — what the
  * account may see, see activity.ts), `category` (all · documents · messengers · approvals · admin),
- * `days` (1–365, default 30), `q` (document, code, person, office), `office` (CLIENT only: one
+ * `days` (1–365, default 30), `q` (document, code, person, office), `office` (ADMIN only: one
  * office — what happened there or was done by its people), `before` (cursor), `limit`.
  */
 export default defineApiHandler(async (event) => {

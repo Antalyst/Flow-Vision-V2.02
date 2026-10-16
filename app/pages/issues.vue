@@ -51,7 +51,7 @@ async function report() {
 // Update
 const resolving = ref<Issue | null>(null)
 const resolution = ref('')
-const canManage = (i: Issue) => auth.role === 'CLIENT' || i.reported_by === auth.user?.id || i.assigned_to === auth.user?.id
+const canManage = (i: Issue) => auth.role === 'ADMIN' || i.reported_by === auth.user?.id || i.assigned_to === auth.user?.id
 
 async function setStatus(i: Issue, next: Issue['status'], extra: Record<string, unknown> = {}) {
   const ok = await run(`status-${i.id}`, () => api.patch(`/issues/${i.id}`, { status: next, ...extra }), `Issue marked ${label(next).toLowerCase()}`)

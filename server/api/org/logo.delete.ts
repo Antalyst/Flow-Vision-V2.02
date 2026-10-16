@@ -3,9 +3,9 @@ import { audit } from '~~/server/lib/audit.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 import { imageKey, removeImage } from '~~/server/lib/org-assets.ts'
 
-/** Remove the organization logo (CLIENT only). */
+/** Remove the organization logo (ADMIN only). */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const org = (await Organization.findByPk(user.org_id))!
   const previous = org.logo_url

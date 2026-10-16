@@ -16,9 +16,9 @@ const showPassword = ref(false)
 
 // Seeded by scripts/db-seed.ts — handy for demos, hidden when showDemoAccounts is off.
 const demoAccounts = [
-  { email: 'client@bago.gov.ph', role: 'CLIENT', note: 'Org admin · submits' },
-  { email: 'records@bago.gov.ph', role: 'EMPLOYEE', note: 'Records Section' },
-  { email: 'hr@bago.gov.ph', role: 'EMPLOYEE', note: 'HRMSO' },
+  { email: 'client@bago.gov.ph', role: 'ADMIN', note: 'Org admin · submits' },
+  { email: 'records@bago.gov.ph', role: 'DEPARTMENT_HEAD', note: 'Records Section' },
+  { email: 'hr@bago.gov.ph', role: 'DEPARTMENT_HEAD', note: 'HRMSO' },
   { email: 'mayor.staff@bago.gov.ph', role: 'STAFF', note: 'Final checkpoint' },
   { email: 'hr.staff@bago.gov.ph', role: 'STAFF', note: 'View-only' },
   { email: 'liaison.adm@bago.gov.ph', role: 'LIAISON', note: 'Admin dept' },

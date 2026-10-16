@@ -30,7 +30,7 @@ const pickupDoc = ref<FlowDocument | null>(null)
     </PageHeader>
 
     <div v-if="!data?.office" class="card">
-      <EmptyState icon="alert-circle" title="No office assigned" description="Ask your organization's Client administrator to assign you to an office." />
+      <EmptyState icon="alert-circle" title="No office assigned" description="Ask your organization's admin to assign you to an office." />
     </div>
 
     <template v-else>

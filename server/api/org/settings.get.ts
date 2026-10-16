@@ -9,11 +9,11 @@ import { listTemplates, templateDto } from '~~/server/lib/templates.ts'
 import { holidayDto, isMissingTable, settingsUnavailable, workCalendarDto } from '~~/server/lib/work-calendar.ts'
 
 /**
- * Organization Settings (CLIENT only): profile and logo, working hours and holidays, document
+ * Organization Settings (ADMIN only): profile and logo, working hours and holidays, document
  * types (with how many documents use each), document templates, AI knowledge files.
  */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const [org, types, usage, files, calendar, templates] = await Promise.all([
     Organization.findByPk(user.org_id),

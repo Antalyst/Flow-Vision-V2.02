@@ -4,11 +4,11 @@ import { requirePage } from '~~/server/lib/team.ts'
 import { imageVersion, readImagePart, removeImage, saveImage } from '~~/server/lib/org-assets.ts'
 
 /**
- * Upload the organization logo (CLIENT only). multipart/form-data: file (PNG or JPG, up to 2 MB).
+ * Upload the organization logo (ADMIN only). multipart/form-data: file (PNG or JPG, up to 2 MB).
  * It goes on every QR label and on the letterhead of document templates.
  */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const part = await readImagePart(event)
   const key = await saveImage('org', 'logo', part.data)

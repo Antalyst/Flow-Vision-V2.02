@@ -10,7 +10,7 @@ type FlowStep = Pick<RouteStep, 'step_number' | 'action_label' | 'is_final_check
 /**
  * Visual office-to-office route. With `currentStep`/`status` it doubles as a progress tracker
  * for a single document, and with `origin` it starts at where the document came from: the
- * uploader's office, or their organization for CLIENT accounts.
+ * uploader's office, or their organization for ADMIN accounts.
  */
 const props = withDefaults(
   defineProps<{

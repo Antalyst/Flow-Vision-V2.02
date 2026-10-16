@@ -4,9 +4,9 @@ import { audit } from '~~/server/lib/audit.ts'
 import { notFound } from '~~/server/lib/errors.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
-/** Delete a knowledge file and its stored copy (CLIENT only). The AI stops using it at once. */
+/** Delete a knowledge file and its stored copy (ADMIN only). The AI stops using it at once. */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const file = await KnowledgeFile.findOne({ where: { id: routeParam(event, 'id'), org_id: user.org_id }, attributes: ['id', 'title', 'file_url'] })
   if (!file) throw notFound('Knowledge file')

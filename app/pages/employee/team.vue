@@ -21,7 +21,7 @@ interface TeamMember {
 
 type ManagedType = 'STAFF' | 'LIAISON'
 
-// An employee creates and manages the STAFF and LIAISON (messenger) accounts of their own office.
+// A department head creates and manages the STAFF and LIAISON (messenger) accounts of their own office.
 const ROLES: Record<ManagedType, { label: string; description: string }> = {
   STAFF: { label: 'Staff', description: 'Uploads and tracks their own documents; approves at the final checkpoint' },
   LIAISON: { label: 'Messenger', description: 'Picks up and delivers documents between offices' },
@@ -70,7 +70,7 @@ function openForm(member?: TeamMember) {
 const credentials = ref<{ email: string; password: string } | null>(null)
 
 async function save() {
-  // The server places the account in this employee's office.
+  // The server places the account in this department head's office.
   const body = { ...form }
   if (editing.value) {
     const ok = await run('save', () => api.patch(`/users/${editing.value!.id}`, body), 'Account updated')

@@ -6,7 +6,7 @@ import { conflict, tooMany } from '~~/server/lib/errors.ts'
 import { isBlocked, recordFailure } from '~~/server/lib/rate-limit.ts'
 import * as v from '~~/server/lib/validate.ts'
 
-/** Public sign-up creates a new organization with its first CLIENT (administrator) account. */
+/** Public sign-up creates a new organization with its first ADMIN (administrator) account. */
 export default defineApiHandler(async (event) => {
   const meta = requestMeta(event)
   const key = `register:${meta.ip}`
@@ -28,7 +28,7 @@ export default defineApiHandler(async (event) => {
       const user = await User.create(
         {
           org_id: org.id,
-          account_type: 'CLIENT',
+          account_type: 'ADMIN',
           email,
           password_hash: passwordHash,
           first_name: firstName,
@@ -39,7 +39,7 @@ export default defineApiHandler(async (event) => {
         { transaction },
       )
       await org.update({ created_by: user.id }, { transaction })
-      // A starting set of document types; the CLIENT edits them in Organization Settings.
+      // A starting set of document types; the ADMIN edits them in Organization Settings.
       await createDefaultDocumentTypes(org.id, user.id, transaction)
       await audit(meta, { action: 'ORG_REGISTER', entityType: 'organization', entityId: org.id, userId: user.id }, transaction)
       return user.id as string

@@ -5,7 +5,7 @@ import * as v from '~~/server/lib/validate.ts'
 
 /**
  * decision: APPROVED (→ COMPLETED) or RETURNED (→ RETURNED, remarks required).
- * Employees and staff may call it; decideApproval only lets the last office on the document's route decide.
+ * Department heads and staff may call it; decideApproval only lets the last office on the document's route decide.
  */
 export default defineApiHandler(async (event) => {
   const user = await requireOfficeUser(event, ...OFFICE_STAFF_TYPES)

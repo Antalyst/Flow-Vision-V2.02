@@ -5,9 +5,9 @@ import { requirePage } from '~~/server/lib/team.ts'
 import { removeImage } from '~~/server/lib/org-assets.ts'
 import { templateDto } from '~~/server/lib/templates.ts'
 
-/** Remove a template's signature image (CLIENT only); the signature block keeps the name and position. */
+/** Remove a template's signature image (ADMIN only); the signature block keeps the name and position. */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const template = await DocumentTemplate.findOne({ where: { id: routeParam(event, 'id'), org_id: user.org_id } })
   if (!template) throw notFound('Template')

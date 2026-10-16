@@ -3,10 +3,10 @@ import type { DocumentScope } from '~/composables/useDocuments'
 import type { DocumentTypeItem, UserSummary } from '~/types'
 
 const auth = useAuthStore()
-// The CLIENT administrator sees every document. An EMPLOYEE sees its own uploads, its office staff's
+// The admin sees every document. A DEPARTMENT_HEAD sees its own uploads, its office staff's
 // uploads and everything that reaches its office. STAFF see only their own uploads (enforced on the server).
-const everyone = auth.role === 'CLIENT'
-const isEmployee = auth.role === 'EMPLOYEE'
+const everyone = auth.role === 'ADMIN'
+const isEmployee = auth.role === 'DEPARTMENT_HEAD'
 const pageTitle = everyone ? 'Documents' : isEmployee ? 'Office documents' : 'My uploads'
 useHead({ title: `${pageTitle} · FlowVision` })
 
@@ -33,7 +33,7 @@ const tab = ref(typeof route.query.status === 'string' ? route.query.status : ''
 const q = ref('')
 const page = ref(1)
 const debouncedQ = refDebounced(q, 300)
-// Filters by role: CLIENT — the office the document is at now; EMPLOYEE — a staff member of their
+// Filters by role: ADMIN — the office the document is at now; DEPARTMENT_HEAD — a staff member of their
 // office (what they uploaded or handled); everyone — the document type. The server enforces the same.
 const officeId = ref('')
 const staffId = ref('')

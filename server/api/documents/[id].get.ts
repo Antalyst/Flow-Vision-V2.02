@@ -55,10 +55,10 @@ export default defineApiHandler(async (event) => {
   const anyPending = approvals.find((a) => a.status === 'PENDING')
 
   // The QR label matters to whoever holds or moves the paper: the uploader, the office it is at
-  // or heading to, messengers, and the CLIENT administrator.
+  // or heading to, messengers, and the admin.
   const canSeeQr =
     doc.submitted_by === user.id ||
-    ['LIAISON', 'CLIENT'].includes(user.account_type) ||
+    ['LIAISON', 'ADMIN'].includes(user.account_type) ||
     (Boolean(user.office_id) && [doc.current_office_id, nextStep?.office_id].includes(user.office_id))
 
   return {

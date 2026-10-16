@@ -4,7 +4,7 @@ import * as v from '~~/server/lib/validate.ts'
 
 /**
  * Assign the free messenger who carries the document to the next office: from its origin (the
- * uploader or CLIENT administrator assigns), or from an office once received there (its staff
+ * uploader or admin assigns), or from an office once received there (its staff
  * assign). Calling it again before pickup reassigns. The messenger and the next office are notified.
  */
 export default defineApiHandler(async (event) => {

@@ -6,9 +6,9 @@ import { requirePage } from '~~/server/lib/team.ts'
 import { readTemplateInput, templateDto } from '~~/server/lib/templates.ts'
 import { isMissingTable, settingsTablesMissing } from '~~/server/lib/work-calendar.ts'
 
-/** Edit a document template (CLIENT only): any field of the add form, plus is_active and sort_order. */
+/** Edit a document template (ADMIN only): any field of the add form, plus is_active and sort_order. */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const input = readTemplateInput(await readJson(event), true)
   try {

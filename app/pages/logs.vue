@@ -41,13 +41,13 @@ const SCOPE_META: Record<Scope, { label: string; hint: string }> = {
   office: { label: 'My office', hint: 'Everything that happened at your office, and everything done by your office’s staff and the messengers you created.' },
   mine: { label: 'My actions', hint: 'Everything you did, with the time you did it.' },
 }
-const scopes = computed<Scope[]>(() => (auth.role === 'CLIENT' ? ['organization', 'mine'] : auth.role === 'EMPLOYEE' && auth.user?.office ? ['office', 'mine'] : ['mine']))
+const scopes = computed<Scope[]>(() => (auth.role === 'ADMIN' ? ['organization', 'mine'] : auth.role === 'DEPARTMENT_HEAD' && auth.user?.office ? ['office', 'mine'] : ['mine']))
 const scope = ref<Scope>(scopes.value[0]!)
 const category = ref<Category>('all')
 const days = ref(30)
-// CLIENT only: narrow the organization's log to one office (what happened there or was done by its people).
+// ADMIN only: narrow the organization's log to one office (what happened there or was done by its people).
 const officeId = ref('')
-const isClient = computed(() => auth.role === 'CLIENT')
+const isClient = computed(() => auth.role === 'ADMIN')
 const { data: officeData } = await useAsyncData('activity-offices', () => (isClient.value ? useRoutes().offices() : Promise.resolve(null)))
 const officeOptions = computed(() => officeData.value?.data ?? [])
 const showOfficeFilter = computed(() => isClient.value && scope.value === 'organization' && officeOptions.value.length > 0)

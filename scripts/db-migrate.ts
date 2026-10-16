@@ -34,7 +34,7 @@ async function hasIndex(table: string, index: string) {
 /**
  * Every document carries one permanent routing code ({ORIGIN_CODE}{MMDDYY}{6 digits}) from upload on.
  * The origin is the uploader's assigned office, or their organization for accounts without one
- * (CLIENT). Documents without a code in that format get one now, and documents uploaded by an
+ * (ADMIN). Documents without a code in that format get one now, and documents uploaded by an
  * account without an office get the organization prefix if they carry an office's.
  */
 async function backfillRoutingCodes() {
@@ -94,13 +94,13 @@ try {
     console.log('[migrate] users.page_access already present')
   }
 
-  // Step 0 (the origin) of a CLIENT upload is the organization itself, not an office.
+  // Step 0 (the origin) of an admin upload is the organization itself, not an office.
   const [trackingOffice] = await connection.query(
     "SELECT IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'document_tracking' AND COLUMN_NAME = 'office_id'",
     [env.db.name],
   )
   if ((trackingOffice as Array<{ IS_NULLABLE: string }>)[0]?.IS_NULLABLE === 'NO') {
-    await connection.query("ALTER TABLE `document_tracking` MODIFY `office_id` char(36) DEFAULT NULL COMMENT 'Office location (NULL = the organization itself, for step 0 of a CLIENT upload)'")
+    await connection.query("ALTER TABLE `document_tracking` MODIFY `office_id` char(36) DEFAULT NULL COMMENT 'Office location (NULL = the organization itself, for step 0 of an admin upload)'")
     console.log('[migrate] document_tracking.office_id made nullable')
   } else {
     console.log('[migrate] document_tracking.office_id already nullable')
@@ -140,7 +140,7 @@ try {
       "ALTER TABLE `document_types` ADD COLUMN `processing_days` int(11) NOT NULL DEFAULT 0 COMMENT 'How long a document of this type may take: days' AFTER `description`, " +
         "ADD COLUMN `processing_hours` int(11) NOT NULL DEFAULT 0 COMMENT '… plus hours (0–23); 0 + 0 = no deadline' AFTER `processing_days`",
     )
-    // Give the starter types their starting times (the CLIENT can change them in Organization Settings).
+    // Give the starter types their starting times (the ADMIN can change them in Organization Settings).
     for (const t of DEFAULT_DOCUMENT_TYPES) {
       await connection.query('UPDATE document_types SET processing_days = ? WHERE name = ? AND processing_days = 0 AND processing_hours = 0', [t.days, t.name])
     }

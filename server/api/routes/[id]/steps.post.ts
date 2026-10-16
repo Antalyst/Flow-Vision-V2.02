@@ -7,7 +7,7 @@ import { requirePage } from '~~/server/lib/team.ts'
 
 /** Append steps to a Document Route (an edit: documents in flight keep their current steps). */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/routes')
   const routeId = routeParam(event, 'id')
   const body = await readJson(event)

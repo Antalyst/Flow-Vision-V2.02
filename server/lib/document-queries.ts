@@ -36,7 +36,7 @@ export const documentAttributes: any = {
     [sequelize.literal(currentVisit('updated_at')), 'visit_updated_at'],
     [sequelize.literal('(SELECT q.qr_code_data FROM qr_codes q WHERE q.document_id = documents.id)'), 'qr_code'],
     [sequelize.literal('(SELECT COUNT(*) FROM document_files f WHERE f.document_id = documents.id)'), 'file_count'],
-    // Origin = where the uploader belongs: their assigned office, or (CLIENT, no office) the organization.
+    // Origin = where the uploader belongs: their assigned office, or (ADMIN, no office) the organization.
     [sequelize.literal('(SELECT o.id FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office_id'],
     [sequelize.literal('(SELECT o.name FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office_name'],
     [sequelize.literal('(SELECT g.name FROM organizations g WHERE g.id = documents.org_id)'), 'org_name'],
@@ -90,7 +90,7 @@ export const liaisonWorkloadSql = (userIdSql: string) =>
   `(SELECT COUNT(*) FROM documents d WHERE d.status IN (${[...AT_OFFICE, ...CARRYING].map((s) => `'${s}'`).join(',')}) AND ${currentVisit('liaison_id', 'd')} = ${userIdSql})`
 
 export const DOCUMENT_SCOPES = ['all', 'mine', 'team', 'visited', 'office', 'incoming', 'carrying', 'pickups'] as const
-export const defaultScope: Record<AccountType, (typeof DOCUMENT_SCOPES)[number]> = { CLIENT: 'all', EMPLOYEE: 'office', STAFF: 'mine', LIAISON: 'carrying' }
+export const defaultScope: Record<AccountType, (typeof DOCUMENT_SCOPES)[number]> = { ADMIN: 'all', DEPARTMENT_HEAD: 'office', STAFF: 'mine', LIAISON: 'carrying' }
 
 export function scopeWhere(scope: string, actor: Actor): WhereOptions {
   switch (scope) {
@@ -128,15 +128,15 @@ export const visitedOffice = (officeId: string) => lit(`EXISTS (SELECT 1 FROM do
 
 /**
  * Which documents an account can see (lists, search, tracking):
- *   CLIENT    every document in the organization
- *   EMPLOYEE  its own uploads, uploads by its office's staff, and every document that is
+ *   ADMIN    every document in the organization
+ *   DEPARTMENT_HEAD  its own uploads, uploads by its office's staff, and every document that is
  *             at, arrived at, or is heading to its office
  *   STAFF     only its own uploads
  *   LIAISON   only the documents released to it or in its hands right now
  */
 export function visibleWhere(actor: Actor): WhereOptions {
   switch (actor.account_type) {
-    case 'EMPLOYEE': {
+    case 'DEPARTMENT_HEAD': {
       if (!actor.office_id) return { submitted_by: actor.id }
       const office = actor.office_id as string
       return {
@@ -153,8 +153,11 @@ export function visibleWhere(actor: Actor): WhereOptions {
       return { submitted_by: actor.id }
     case 'LIAISON':
       return { status: { [Op.in]: [...AT_OFFICE, ...CARRYING] }, [Op.and]: [carriedBy(actor.id)] }
-    default:
+    case 'ADMIN':
       return {}
+    default:
+      // An unknown role sees nothing (loadActor already refuses such accounts).
+      return { id: null }
   }
 }
 

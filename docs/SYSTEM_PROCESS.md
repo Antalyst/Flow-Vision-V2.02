@@ -16,8 +16,8 @@ FlowVision tracks paper documents for Bago City LGU. Someone uploads a document 
 
 | Account | Who it is | Main job | What it sees |
 |---|---|---|---|
-| **CLIENT** | Organization admin | Sets up offices, routes and accounts, and oversees everything | **Every** document in the organization |
-| **EMPLOYEE** | Office worker | Receives, processes and releases documents at their office | Their own uploads, their office's uploads, and documents that are at, have visited or are heading to their office |
+| **ADMIN** | Organization admin | Sets up offices, routes and accounts, and oversees everything | **Every** document in the organization |
+| **DEPARTMENT_HEAD** | Office worker | Receives, processes and releases documents at their office | Their own uploads, their office's uploads, and documents that are at, have visited or are heading to their office |
 | **STAFF** | Office staff / reviewer | Receives documents. At the final office, approves or returns them | **Only their own uploads** in lists, plus documents waiting at their office (opened from approvals or a scan) |
 | **LIAISON** | Messenger of one office | Picks up and carries paper from their own office | Only documents released to them or in their hands (plus ones they delivered before, when opened directly) |
 
@@ -32,11 +32,11 @@ FlowVision tracks paper documents for Bago City LGU. Someone uploads a document 
 ## 3. Document tracking: the flow
 
 ```
-[UPLOAD]  CLIENT / EMPLOYEE / STAFF uploads the file, picks a route → QR label is created
+[UPLOAD]  ADMIN / DEPARTMENT_HEAD / STAFF uploads the file, picks a route → QR label is created
    │      (Draft = CREATED; it can still be edited or deleted)
    ▼
 [SUBMIT]  Document enters its route at the ORIGIN (step 0) → status START
-   │      Origin = the uploader's office (or the organization, for a CLIENT)
+   │      Origin = the uploader's office (or the organization, for an ADMIN)
    ▼
 [ASSIGN MESSENGER]  The uploader or origin office picks a FREE messenger
    │                → the messenger and the next office are notified
@@ -73,12 +73,12 @@ FlowVision tracks paper documents for Bago City LGU. Someone uploads a document 
 - **One QR per document**, used at every hand-off. Replacing a lost label makes the old one stop working.
 - **Receiving always needs a QR scan** (camera, or typing the code).
 - **Only the person who scanned the document in** at an office can release it, assign its messenger, or pass it to a colleague.
-- **Each office has its own messengers.** A document released from an office can only go with one of that office's messengers. A CLIENT upload starts at the organization (no office), so any messenger can carry it to the first office.
+- **Each office has its own messengers.** A document released from an office can only go with one of that office's messengers. An ADMIN upload starts at the organization (no office), so any messenger can carry it to the first office.
 - **Only free messengers** can be assigned: on duty, with nothing waiting for pickup and nothing in hand. A messenger can be reassigned until they pick the document up.
-- **Flag & send back:** the person who received the document at an office can flag an issue on it and send it back to the previous office on the route (from the first office: back to the uploader's office). It goes with one of the flagging office's messengers. The issue moves from Open to **In progress**, and the document shows "Flagged, going back to <office>". A CLIENT upload can't be sent back from the first office, because there is no office before it.
-- **Only the last office on the route** can approve or return. The owner and the CLIENT can't, unless they belong to that office.
+- **Flag & send back:** the person who received the document at an office can flag an issue on it and send it back to the previous office on the route (from the first office: back to the uploader's office). It goes with one of the flagging office's messengers. The issue moves from Open to **In progress**, and the document shows "Flagged, going back to <office>". An ADMIN upload can't be sent back from the first office, because there is no office before it.
+- **Only the last office on the route** can approve or return. The owner and the ADMIN can't, unless they belong to that office.
 - A **failed delivery** (reported by the messenger) sends the document back to the office it came from, which has to scan it in again.
-- Once a document is **COMPLETED**, it leaves everyone's lists except the uploader's and the CLIENT's. It is still reachable from the activity log.
+- Once a document is **COMPLETED**, it leaves everyone's lists except the uploader's and the ADMIN's. It is still reachable from the activity log.
 - A **completed document's QR label is retired**: scanning it shows "This document is already complete" (who approved it, where and when) and offers nothing to pick up or receive. Its page shows the label struck through, and the **Report an issue** button and the **Discussion** thread are gone.
 - **Processing time counts working time only.** A document type's processing time (days + hours) runs only inside the organization's working hours and working days, and never on its holidays (Organization Settings › Working hours). With 8:00–17:00, Monday–Friday, a document still in progress at 17:00 on Friday pauses and picks up again at 8:00 on Monday; 1 day of processing time = one working day. The deadline is set this way on submission, and moves when the working hours or holidays change. Until working hours are set, the clock runs around the clock (holidays still pause it).
 
@@ -86,24 +86,24 @@ FlowVision tracks paper documents for Bago City LGU. Someone uploads a document 
 
 ## 4. Document tracking per account
 
-### 4.1 CLIENT (organization admin)
+### 4.1 ADMIN (organization admin)
 
 | | |
 |---|---|
 | **Scope** | The whole organization: every document, office, route and account |
 | **Can do** | Upload, edit, delete or submit drafts · resubmit returned documents · assign or reassign a messenger **at the origin** for any document · follow every document's timeline · filter by office, status, priority or type · add timeline notes |
 | **Setup powers** | Create and edit **offices** · create, edit and retire **Document Routes** and their steps · create, suspend and edit **any account** and its page access · set **document types** and **AI knowledge files** (Organization Settings) |
-| **Can't do** | **Scan QR codes** (the scanner page is blocked: the CLIENT follows along, it doesn't move paper) · approve or return documents (unless the CLIENT belongs to the final office, which CLIENT accounts normally don't) |
+| **Can't do** | **Scan QR codes** (the scanner page is blocked: the ADMIN follows along, it doesn't move paper) · approve or return documents (unless the ADMIN belongs to the final office, which ADMIN accounts normally don't) |
 | **Gets notified about** | Every new issue reported in the organization |
 
-### 4.2 EMPLOYEE (office worker)
+### 4.2 DEPARTMENT_HEAD (office worker)
 
 | | |
 |---|---|
 | **Scope** | Their office: documents at, heading to, or that have visited their office, plus uploads by its members |
 | **Can do** | Upload and submit documents · **scan to receive** documents arriving at their office · **pass desk to desk** to a colleague · **release to one of their office's messengers** (only if they scanned it in) · **flag an issue and send it back** to the previous office · reassign or cancel the messenger before pickup · replace a lost QR label · **approve or return** if their office is the last one on the route · see the office queue · filter by a STAFF member of their office |
 | **Team powers** | Create and manage **STAFF and LIAISON accounts for their own office only** |
-| **Can't do** | Receive documents meant for another office · release a document someone else scanned in · move people to another office · manage CLIENT or other EMPLOYEE accounts · edit routes or offices |
+| **Can't do** | Receive documents meant for another office · release a document someone else scanned in · move people to another office · manage ADMIN or other DEPARTMENT_HEAD accounts · edit routes or offices |
 
 ### 4.3 STAFF (office staff / reviewer)
 
@@ -124,7 +124,7 @@ FlowVision tracks paper documents for Bago City LGU. Someone uploads a document 
 
 ### 4.5 Who can do which action
 
-| Action | CLIENT | EMPLOYEE | STAFF | LIAISON |
+| Action | ADMIN | DEPARTMENT_HEAD | STAFF | LIAISON |
 |---|:-:|:-:|:-:|:-:|
 | Upload / edit / delete a draft (own) | ✅ (any) | ✅ | ✅ | ❌ |
 | Submit / resubmit (own) | ✅ (any) | ✅ | ✅ | ❌ |
@@ -162,7 +162,7 @@ Used to flag delays, missing paperwork, damage or routing mistakes. **Every issu
 Anyone reports ──► OPEN ──► IN PROGRESS ──► RESOLVED (with resolution notes) ──► CLOSED
      │                ▲
      │                └── automatically when the document is flagged & sent back to the previous office
-     └─► every CLIENT account is notified ("Issue reported")
+     └─► every ADMIN account is notified ("Issue reported")
 ```
 
 **Flag & send back (issue on a document in the middle of its route)**
@@ -173,32 +173,32 @@ Anyone reports ──► OPEN ──► IN PROGRESS ──► RESOLVED (with res
 
 **Who can do what**
 
-| Action | CLIENT | Reporter | Assignee | Others |
+| Action | ADMIN | Reporter | Assignee | Others |
 |---|:-:|:-:|:-:|:-:|
 | Report an issue | ✅ | | | ✅ (all accounts) |
 | See the issue list | ✅ | ✅ | ✅ | ✅ (every issue in the organization) |
 | Change status / severity / resolution | ✅ | ✅ | ✅ | ❌ |
 | Assign to someone | ✅ (API only, no button yet) | ❌ | ❌ | ❌ |
 
-**Notifications:** the CLIENT is notified when an issue is reported. The assignee is notified when one is assigned to them.
+**Notifications:** the ADMIN is notified when an issue is reported. The assignee is notified when one is assigned to them.
 
 ### 5.2 Activity log (who did what, when)
 
-The `/logs` page is the system's audit report. You can filter it by category (Documents · Messengers · Approvals · Administration), by date range (today to 365 days) and by a search term. The CLIENT can also filter the organization log by **office** (what happened at that office or was done by its people). Every entry shows its full date and time.
+The `/logs` page is the system's audit report. You can filter it by category (Documents · Messengers · Approvals · Administration), by date range (today to 365 days) and by a search term. The ADMIN can also filter the organization log by **office** (what happened at that office or was done by its people). Every entry shows its full date and time.
 
 | Account | Scopes it can view |
 |---|---|
-| CLIENT | **Organization** (everything) · My actions |
-| EMPLOYEE | **My office** (everything at the office, its staff and its messengers) · My actions |
+| ADMIN | **Organization** (everything) · My actions |
+| DEPARTMENT_HEAD | **My office** (everything at the office, its staff and its messengers) · My actions |
 | STAFF | My actions only |
 | LIAISON | My actions only |
 
 ### 5.3 Other reporting views
-- **Dashboards**: each role has its own (CLIENT gets organization KPI cards, overdue count, open issues and pending approvals).
+- **Dashboards**: each role has its own (ADMIN gets organization KPI cards, overdue count, open issues and pending approvals).
 - **Document timeline / routing**: an office-by-office breakdown of each visit: who received it, how long it waited, who carried it.
 - **Forecast**: estimated processing times per office.
-- **AI Assistant** (CLIENT, EMPLOYEE, STAFF): answers questions such as "which documents are overdue?" using only the documents that account can see.
-  - **Find documents**: "find the payroll memo from last week" searches titles and descriptions and/or the submission dates and shows the matches as cards that open each document. CLIENT finds every document of the organization; EMPLOYEE finds documents uploaded by the people of their office; STAFF finds only their own uploads.
+- **AI Assistant** (ADMIN, DEPARTMENT_HEAD, STAFF): answers questions such as "which documents are overdue?" using only the documents that account can see.
+  - **Find documents**: "find the payroll memo from last week" searches titles and descriptions and/or the submission dates and shows the matches as cards that open each document. ADMIN finds every document of the organization; DEPARTMENT_HEAD finds documents uploaded by the people of their office; STAFF finds only their own uploads.
   - **Canvases on templates**: a formal document the assistant drafts is laid out on the document template it chooses (letterhead with the organization logo, header lines, signature block, footer). The user can switch the template, print, or export to Word, Excel or PDF, and every canvas notes that it was created with FlowVision.
 
 ---
@@ -207,14 +207,14 @@ The `/logs` page is the system's audit report. You can filter it by category (Do
 
 | Module | Who | What it does | Limits |
 |---|---|---|---|
-| **Auth** | All | Login, register (creates the organization and its first CLIENT), change password | Login is rate-limited · sessions slide (renewed hourly) |
-| **Team accounts** | CLIENT (all) · EMPLOYEE (STAFF + LIAISON in own office) · STAFF (LIAISON in own office) | Invite, edit, suspend, reset password, set page access | Can't suspend or demote yourself, or change your own page access |
-| **Offices** | CLIENT | Add and edit offices | Others can only view them |
-| **Document Routes** | CLIENT | Build routes (office steps, processing time, final checkpoint) | Documents already in flight keep their original steps |
-| **Org Settings** | CLIENT | Organization profile and **logo** (printed on QR labels and letterheads), **working hours, working days and holidays** (processing time pauses outside them), document types and their processing time, **document templates** for AI canvases (several, one default), AI knowledge files | Knowledge files up to `KNOWLEDGE_MAX_MB` (200 MB default) · logo and signature images: PNG/JPG up to 2 MB · working hours, holidays and templates need `npm run db:add-settings` once |
+| **Auth** | All | Login, register (creates the organization and its first ADMIN), change password | Login is rate-limited · sessions slide (renewed hourly) |
+| **Team accounts** | ADMIN (all) · DEPARTMENT_HEAD (STAFF + LIAISON in own office) · STAFF (LIAISON in own office) | Invite, edit, suspend, reset password, set page access | Can't suspend or demote yourself, or change your own page access |
+| **Offices** | ADMIN | Add and edit offices | Others can only view them |
+| **Document Routes** | ADMIN | Build routes (office steps, processing time, final checkpoint) | Documents already in flight keep their original steps |
+| **Org Settings** | ADMIN | Organization profile and **logo** (printed on QR labels and letterheads), **working hours, working days and holidays** (processing time pauses outside them), document types and their processing time, **document templates** for AI canvases (several, one default), AI knowledge files | Knowledge files up to `KNOWLEDGE_MAX_MB` (200 MB default) · logo and signature images: PNG/JPG up to 2 MB · working hours, holidays and templates need `npm run db:add-settings` once |
 | **Messages** | All | Direct messages, per-document threads, office channel | Office channel needs an office |
 | **Notifications** | All | Realtime alerts (pickup, incoming, received, approved, returned, failed delivery, issues) | Stored in memory for realtime; single server instance |
-| **QR / Scan** | EMPLOYEE, STAFF, LIAISON | Verify (preview what the scan will do), then confirm | Not available to CLIENT |
+| **QR / Scan** | DEPARTMENT_HEAD, STAFF, LIAISON | Verify (preview what the scan will do), then confirm | Not available to ADMIN |
 
 ---
 
@@ -229,7 +229,7 @@ Ranked by priority. Each one was confirmed in the code.
 | 3 | ~~Issues~~ **Fixed** | An issue could be filed against any document in the organization. Now only against documents the reporter can open. | `server/api/issues/index.post.ts` |
 | 4 | ~~Tracking / timeline~~ **Fixed** | Any account could add a timeline note to any document. Now only to documents they can open. | `server/api/documents/[id]/notes.post.ts` |
 | 5 | ~~Messages~~ **Fixed** | Any account could post in any document's thread. Now only in threads of documents they can open. | `server/api/messages/index.post.ts` |
-| 6 | **Issues** | **No "Assign" button** in the UI. Only a CLIENT can assign, and only through the API, so the "assignee" feature isn't usable. | `app/pages/issues.vue` |
+| 6 | **Issues** | **No "Assign" button** in the UI. Only an ADMIN can assign, and only through the API, so the "assignee" feature isn't usable. | `app/pages/issues.vue` |
 | 7 | **Issues** | The **reporter isn't notified** when their issue is resolved or closed. | `server/api/issues/[id].patch.ts` |
 | 8 | **Issues** | Status can jump to **any value** (for example, Closed → Open); there's no transition rule. The list is capped at 200 with no paging. | `server/api/issues/[id].patch.ts`, `index.get.ts` |
 | 9 | **Tracking** | **No automatic overdue alerts.** Overdue documents show on dashboards and in the AI assistant, but nobody gets a notification and no issue is created when a step passes its processing time. | `server/lib/` (no scheduler) |
@@ -246,4 +246,4 @@ npm run dev                                                     # terminal 1
 npm run test:flow -- --email=admin@example.com --password=…    # terminal 2
 ```
 
-For CLIENT, EMPLOYEE and STAFF uploaders, it uploads 4 documents (single file, single image, 2 files, 2 images) and walks each one through every office: pickup, receive, desk-to-desk pass, release with the office's own messenger, and final approval. One document per uploader is flagged and sent back on the way. Every run also checks the routing cards, the timeline, the activity log, notifications, and the visibility rules.
+For ADMIN, DEPARTMENT_HEAD and STAFF uploaders, it uploads 4 documents (single file, single image, 2 files, 2 images) and walks each one through every office: pickup, receive, desk-to-desk pass, release with the office's own messenger, and final approval. One document per uploader is flagged and sent back on the way. Every run also checks the routing cards, the timeline, the activity log, notifications, and the visibility rules.

@@ -12,10 +12,10 @@ const workloadAttr: any = [sequelize.literal(liaisonWorkloadSql('liaisons.user_i
  * on duty with nothing to pick up or deliver. Same-department, free messengers are listed first.
  * Each office has its own messengers: `?office_id=` lists one office's, and `?document_id=` the
  * ones that can carry that document from where it is now (its office's; any at the organization
- * origin of a CLIENT upload).
+ * origin of an admin upload).
  */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT', 'EMPLOYEE', 'STAFF')
+  const user = await requireUser(event, 'ADMIN', 'DEPARTMENT_HEAD', 'STAFF')
   const query = getQuery(event)
   const where: Record<string, unknown> = { org_id: user.org_id }
   const department = v.q(query, 'department')

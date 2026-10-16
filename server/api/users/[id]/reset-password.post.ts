@@ -5,7 +5,7 @@ import { notFound } from '~~/server/lib/errors.ts'
 import { canManageMember, requirePage, TEAM_PAGE } from '~~/server/lib/team.ts'
 
 export default defineApiHandler(async (event) => {
-  const admin = await requireUser(event, 'CLIENT', 'EMPLOYEE', 'STAFF')
+  const admin = await requireUser(event, 'ADMIN', 'DEPARTMENT_HEAD', 'STAFF')
   requirePage(admin, TEAM_PAGE[admin.account_type]!)
   const user = await User.findOne({ where: { id: routeParam(event, 'id'), org_id: admin.org_id } })
   if (!user || !canManageMember(admin, user)) throw notFound('User')

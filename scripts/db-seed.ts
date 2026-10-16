@@ -36,12 +36,12 @@ const OFFICES = [
 ]
 
 const USERS = [
-  { email: 'client@bago.gov.ph', type: 'CLIENT', first: 'Maria', last: 'Santos', office: null },
-  { email: 'records@bago.gov.ph', type: 'EMPLOYEE', first: 'Jose', last: 'Reyes', office: 'RECORDS' },
-  { email: 'hr@bago.gov.ph', type: 'EMPLOYEE', first: 'Ana', last: 'Villanueva', office: 'HRMSO' },
-  { email: 'budget@bago.gov.ph', type: 'EMPLOYEE', first: 'Ramon', last: 'Garcia', office: 'CBO' },
-  { email: 'accounting@bago.gov.ph', type: 'EMPLOYEE', first: 'Liza', last: 'Mendoza', office: 'CACCO' },
-  { email: 'ocm@bago.gov.ph', type: 'EMPLOYEE', first: 'Carlo', last: 'Bautista', office: 'OCM' },
+  { email: 'client@bago.gov.ph', type: 'ADMIN', first: 'Maria', last: 'Santos', office: null },
+  { email: 'records@bago.gov.ph', type: 'DEPARTMENT_HEAD', first: 'Jose', last: 'Reyes', office: 'RECORDS' },
+  { email: 'hr@bago.gov.ph', type: 'DEPARTMENT_HEAD', first: 'Ana', last: 'Villanueva', office: 'HRMSO' },
+  { email: 'budget@bago.gov.ph', type: 'DEPARTMENT_HEAD', first: 'Ramon', last: 'Garcia', office: 'CBO' },
+  { email: 'accounting@bago.gov.ph', type: 'DEPARTMENT_HEAD', first: 'Liza', last: 'Mendoza', office: 'CACCO' },
+  { email: 'ocm@bago.gov.ph', type: 'DEPARTMENT_HEAD', first: 'Carlo', last: 'Bautista', office: 'OCM' },
   { email: 'mayor.staff@bago.gov.ph', type: 'STAFF', first: 'Teresa', last: 'Aquino', office: 'OCM' },
   { email: 'hr.staff@bago.gov.ph', type: 'STAFF', first: 'Paolo', last: 'Ramos', office: 'HRMSO' },
   { email: 'liaison.adm@bago.gov.ph', type: 'LIAISON', first: 'Dante', last: 'Flores', office: 'RECORDS' },
@@ -146,7 +146,7 @@ async function main() {
     await workflow.startTransit(docId, liaison)
     await scan(docId, 'RECEIVE', receiver)
   }
-  // Uploaded by the CLIENT, so it starts at its origin (the organization): a messenger brings it to Records.
+  // Uploaded by the ADMIN, so it starts at its origin (the organization): a messenger brings it to Records.
   const fullRoute = async (docId: string) => {
     await hop(docId, p.client, p.liaisonAdm, p.records)
     await hop(docId, p.records, p.liaisonAdm, p.hr)

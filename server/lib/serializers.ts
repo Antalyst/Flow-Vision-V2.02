@@ -205,7 +205,7 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
     submitter: userSummary(d.submitter),
     liaison: liaisonId ? userSummary(usersById.get(liaisonId)) : null,
     received_by: handler ? userSummary(usersById.get(handler)) : null,
-    // Where the document comes from: the uploader's office, or their organization (CLIENT accounts).
+    // Where the document comes from: the uploader's office, or their organization (ADMIN accounts).
     origin: val(d, 'origin_office_id')
       ? { kind: 'OFFICE' as const, office_id: val(d, 'origin_office_id') as string, name: val(d, 'origin_office_name') as string }
       : { kind: 'ORGANIZATION' as const, office_id: null, name: (val(d, 'org_name') as string | null) ?? 'Organization' },
@@ -451,7 +451,7 @@ export function issueDto(i: Row) {
   }
 }
 
-/** Full roster entry (CLIENT only). */
+/** Full roster entry (ADMIN only). */
 export function memberDto(u: Row) {
   const { first, last } = splitName(u)
   return {

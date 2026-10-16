@@ -330,9 +330,9 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
     <div v-if="!routes.length" class="mb-6 flex items-center gap-3 rounded-2xl border border-amber/40 bg-amber/12 p-4 text-sm text-amber-ink">
       <FIcon name="alert-triangle" :size="18" />
       <span class="flex-1">
-        There's no Document Route yet, so documents can't be uploaded.<template v-if="auth.role !== 'CLIENT'"> Ask your administrator to create one.</template>
+        There's no Document Route yet, so documents can't be uploaded.<template v-if="auth.role !== 'ADMIN'"> Ask your administrator to create one.</template>
       </span>
-      <NuxtLink v-if="auth.role === 'CLIENT'" to="/client/routes" class="font-semibold underline">Create route</NuxtLink>
+      <NuxtLink v-if="auth.role === 'ADMIN'" to="/client/routes" class="font-semibold underline">Create route</NuxtLink>
     </div>
 
     <!-- Stepper -->
@@ -497,7 +497,7 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
           <p v-if="selectedType" class="mt-1 flex items-center gap-1 text-xs text-ink-2">
             <FIcon name="clock" :size="12" /> {{ selectedType.total_hours ? `Should be processed within ${formatSla(selectedType.total_hours)} of submission` : 'No time limit for this type' }}
           </p>
-          <p v-if="!docTypes.length && auth.role === 'CLIENT'" class="mt-1 text-xs text-ink-2">
+          <p v-if="!docTypes.length && auth.role === 'ADMIN'" class="mt-1 text-xs text-ink-2">
             Set up your document types in <NuxtLink to="/client/settings?tab=types" class="underline">Organization Settings</NuxtLink>.
           </p>
         </div>

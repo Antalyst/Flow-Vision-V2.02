@@ -22,7 +22,7 @@ const route = useRoute()
 
 /** Each role's sidebar, grouped by what the role does. */
 const ROLE_NAV: Record<AccountType, NavGroup[]> = {
-  CLIENT: [
+  ADMIN: [
     { id: 'overview', title: null, items: [{ to: '/client/dashboard', label: 'Dashboard', icon: 'home' }, { to: '/ai/chat', label: 'AI Assistant', icon: 'zap' }] },
     {
       id: 'documents',
@@ -43,7 +43,7 @@ const ROLE_NAV: Record<AccountType, NavGroup[]> = {
       ],
     },
   ],
-  EMPLOYEE: [
+  DEPARTMENT_HEAD: [
     { id: 'overview', title: null, items: [{ to: '/employee/dashboard', label: 'Dashboard', icon: 'home' }, { to: '/ai/chat', label: 'AI Assistant', icon: 'zap' }] },
     {
       id: 'office',

@@ -14,7 +14,7 @@ const define = (name: string, attributes: ModelAttributes<Row>, options?: ModelO
 const uuidPk = { type: DataTypes.CHAR(36), primaryKey: true, defaultValue: DataTypes.UUIDV4 }
 const createdOnly = { updatedAt: false } as const
 
-export const ACCOUNT_TYPES = ['CLIENT', 'EMPLOYEE', 'STAFF', 'LIAISON'] as const
+export const ACCOUNT_TYPES = ['ADMIN', 'DEPARTMENT_HEAD', 'STAFF', 'LIAISON'] as const
 export type AccountType = (typeof ACCOUNT_TYPES)[number]
 export const DOCUMENT_STATUSES = ['CREATED', 'START', 'PICKED_UP', 'IN_TRANSIT', 'ARRIVED_AT_OFFICE', 'COMPLETED', 'RETURNED'] as const
 export const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'] as const
@@ -146,7 +146,7 @@ export const DocumentTracking = define('document_tracking', {
   id: uuidPk,
   document_id: { type: DataTypes.CHAR(36), allowNull: false },
   step_number: { type: DataTypes.INTEGER, allowNull: false },
-  // Step 0 is the document's origin; NULL there means the organization itself (a CLIENT upload).
+  // Step 0 is the document's origin; NULL there means the organization itself (an admin upload).
   office_id: DataTypes.CHAR(36),
   status: { type: DataTypes.ENUM(...DOCUMENT_STATUSES), allowNull: false },
   handler_id: DataTypes.CHAR(36),

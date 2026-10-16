@@ -1,7 +1,7 @@
 import crypto from 'node:crypto'
 import bcrypt from 'bcryptjs'
 import { Op } from 'sequelize'
-import { AuthSession, Liaison, Office, Organization, User, type Row } from './models.ts'
+import { ACCOUNT_TYPES, AuthSession, Liaison, Office, Organization, User, type Row } from './models.ts'
 import { liaisonDto, officeDto } from './serializers.ts'
 import { env } from './env.ts'
 import { parsePageAccess } from '../../shared/page-access.ts'
@@ -47,6 +47,8 @@ export const fullNameOf = (first?: string | null, last?: string | null) => [firs
  * Loads a user with office + organization. Role, office and status always come
  * from the database row, so admin changes apply on the very next request.
  * users.status: active · pending (temporary password) may sign in; inactive may not.
+ * An account whose stored role isn't one of ACCOUNT_TYPES (e.g. a blank enum value) gets no
+ * session at all: every permission is decided by role, so an unknown one must never pass.
  */
 export async function loadActor(userId: string): Promise<Actor | null> {
   const user = await User.findByPk(userId, {
@@ -55,9 +57,11 @@ export async function loadActor(userId: string): Promise<Actor | null> {
       { model: Organization, as: 'organization', attributes: ['id', 'name', 'status', 'logo_url'] },
     ],
   })
-  if (!user || user.status === 'inactive') return null
+  if (!user || user.status === 'inactive' || !hasKnownRole(user)) return null
   return user
 }
+
+export const hasKnownRole = (user: Row) => (ACCOUNT_TYPES as readonly string[]).includes(user.account_type)
 
 export function hasApprovalAuthority(user: Actor) {
   return user.account_type === 'STAFF' && Boolean(user.office?.is_final_checkpoint) && user.office?.status !== 'inactive'

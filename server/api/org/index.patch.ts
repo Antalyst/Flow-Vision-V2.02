@@ -4,9 +4,9 @@ import { badRequest } from '~~/server/lib/errors.ts'
 import * as v from '~~/server/lib/validate.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
-/** Organization profile (CLIENT only): name, description, website. */
+/** Organization profile (ADMIN only): name, description, website. */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const body = await readJson(event)
   const org = (await Organization.findByPk(user.org_id))!

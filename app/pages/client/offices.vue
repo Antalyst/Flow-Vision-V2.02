@@ -53,7 +53,7 @@ async function toggleActive(o: Office) {
 
 <template>
   <div class="fv-rise">
-    <PageHeader eyebrow="Organization" title="Offices" description="Offices are grouped by department. Liaisons pick up from any office in their department; codes appear on QR labels.">
+    <PageHeader eyebrow="Organization" title="Offices" description="Offices are grouped by department. Each office has its own messengers; office codes appear on QR labels.">
       <template #actions>
         <button class="btn btn-primary" @click="openForm()"><FIcon name="plus" :size="16" /> Add office</button>
       </template>
@@ -114,7 +114,7 @@ async function toggleActive(o: Office) {
           <label class="field-label" for="o-dept">Department</label>
           <input id="o-dept" v-model="form.department" class="input" required maxlength="100" list="departments" placeholder="Administrative Services" />
           <datalist id="departments"><option v-for="d in departments" :key="d" :value="d" /></datalist>
-          <p class="field-hint">Liaisons pick up from every office in their department.</p>
+          <p class="field-hint">Groups offices on this page. Each office has its own messengers.</p>
         </div>
         <div>
           <label class="field-label" for="o-loc">Address</label>

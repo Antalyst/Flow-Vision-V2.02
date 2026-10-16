@@ -4,7 +4,7 @@ import { clientDashboard, liaisonDashboard, officeDashboard } from '~~/server/li
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event)
   const data =
-    user.account_type === 'CLIENT'
+    user.account_type === 'ADMIN'
       ? await clientDashboard(user)
       : user.account_type === 'LIAISON'
         ? await liaisonDashboard(user)

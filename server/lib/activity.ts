@@ -13,8 +13,8 @@ import type { Actor } from './auth.ts'
  *
  * What an account sees:
  *   everyone   `mine`          their own actions
- *   CLIENT     `organization`  everything in the organization
- *   EMPLOYEE   `office`        everything that happened at their office, everything done by the
+ *   ADMIN     `organization`  everything in the organization
+ *   DEPARTMENT_HEAD   `office`        everything that happened at their office, everything done by the
  *                              people of their office (its staff and messengers), and by the
  *                              messengers they created
  */
@@ -31,8 +31,8 @@ const SKIPPED_AUDIT = new Set(['LOGIN', 'DOCUMENT_CREATE', 'DOCUMENT_SUBMIT', 'A
 const MAX_VISITS = 3000
 
 export function scopesFor(actor: Actor): ActivityScope[] {
-  if (actor.account_type === 'CLIENT') return ['organization', 'mine']
-  if (actor.account_type === 'EMPLOYEE' && actor.office_id) return ['office', 'mine']
+  if (actor.account_type === 'ADMIN') return ['organization', 'mine']
+  if (actor.account_type === 'DEPARTMENT_HEAD' && actor.office_id) return ['office', 'mine']
   return ['mine']
 }
 
@@ -44,7 +44,7 @@ export interface ActivityQuery {
   before: string | null
   q: string
   limit: number
-  /** CLIENT, organization scope: only what happened at this office or was done by its people. */
+  /** ADMIN, organization scope: only what happened at this office or was done by its people. */
   officeId?: string | null
 }
 
@@ -65,7 +65,7 @@ interface RawEvent {
 
 const categoryOf = (type: string): RawEvent['category'] => (MESSENGER_EVENTS.has(type) ? 'messengers' : APPROVAL_EVENTS.has(type) ? 'approvals' : 'documents')
 
-/** The people whose actions an EMPLOYEE follows: their office's members, and the messengers they created. */
+/** The people whose actions a DEPARTMENT_HEAD follows: their office's members, and the messengers they created. */
 async function officePeople(actor: Actor) {
   const [members, invited] = await Promise.all([
     User.findAll({ where: { org_id: actor.org_id, office_id: actor.office_id }, attributes: ['id'] }),
@@ -85,7 +85,7 @@ function auditSummary(a: Row) {
   return name ? `${name}${extra}` : null
 }
 
-/** The people of an office (its employees, staff and messengers), for the CLIENT's office filter. */
+/** The people of an office (its employees, staff and messengers), for the ADMIN's office filter. */
 async function membersOf(orgId: string, officeId: string) {
   const members = await User.findAll({ where: { org_id: orgId, office_id: officeId }, attributes: ['id'] })
   return new Set<string>(members.map((u) => u.id as string))
@@ -94,9 +94,9 @@ async function membersOf(orgId: string, officeId: string) {
 export async function activityLog(actor: Actor, query: ActivityQuery) {
   if (!scopesFor(actor).includes(query.scope)) throw badRequest('You can’t view that activity log')
   const { since } = query
-  // The CLIENT can narrow the organization's log to one office: it reads like that office's own log.
+  // The ADMIN can narrow the organization's log to one office: it reads like that office's own log.
   let filterOffice: string | null = null
-  if (query.officeId && actor.account_type === 'CLIENT' && query.scope === 'organization') {
+  if (query.officeId && actor.account_type === 'ADMIN' && query.scope === 'organization') {
     const office = await Office.findOne({ where: { id: query.officeId, org_id: actor.org_id }, attributes: ['id'] })
     if (!office) throw badRequest('That office is not in your organization', { field: 'office' })
     filterOffice = office.id as string

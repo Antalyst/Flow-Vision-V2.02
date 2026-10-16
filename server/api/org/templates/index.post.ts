@@ -6,11 +6,11 @@ import { readTemplateInput, templateDto } from '~~/server/lib/templates.ts'
 import { isMissingTable, settingsTablesMissing } from '~~/server/lib/work-calendar.ts'
 
 /**
- * Add a document template (CLIENT only): name, description (when the AI should use it),
+ * Add a document template (ADMIN only): name, description (when the AI should use it),
  * show_logo, header_text, body_guide, signatory_name, signatory_title, footer_text, is_default.
  */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
   const input = readTemplateInput(await readJson(event), false)
   try {

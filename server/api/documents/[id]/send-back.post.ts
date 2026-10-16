@@ -49,7 +49,7 @@ export default defineApiHandler(async (event) => {
 
   const issue = (await Issue.findByPk(issueId, { include: issueIncludes(user.org_id) }))!
   if (flagged) {
-    const admins = await User.findAll({ where: { org_id: user.org_id, account_type: 'CLIENT', status: 'active' }, attributes: ['id'] })
+    const admins = await User.findAll({ where: { org_id: user.org_id, account_type: 'ADMIN', status: 'active' }, attributes: ['id'] })
     await notify(
       admins.map((a) => a.id),
       { type: 'ISSUE_REPORTED', title: `Issue reported: ${issue.title}`, body: 'Document sent back to the previous office', documentId, link: '/issues' },

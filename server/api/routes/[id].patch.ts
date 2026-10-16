@@ -11,7 +11,7 @@ const stepSummary = (steps: any[]) => steps.map((s) => ({ step: s.step_number, o
  * documents already in flight finish on the steps they started with.
  */
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/routes')
   const body = await readJson(event)
   const { route, before, stepsChanged, movedDocuments } = await updateRoute(user.org_id, routeParam(event, 'id'), {

@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1110" viewBox="0 0 1400 1110" font-family="Arial, Helvetica, sans-serif">
+  <title>FlowVision Level 0 Data Flow Diagram</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#111"/>
+    </marker>
+  </defs>
+  <rect width="1400" height="1110" fill="#fff"/>
+  <text x="700" y="48" font-size="26" font-weight="700" text-anchor="middle" fill="#111">Level 0 Data Flow Diagram</text>
+  <polyline points="250,115 690,115 690,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="112" font-size="11" text-anchor="start" fill="#111">Login credentials</text>
+  <polyline points="250,130 675,130 675,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="127" font-size="11" text-anchor="start" fill="#111">Organization registration &amp; profile</text>
+  <polyline points="250,145 660,145 660,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="142" font-size="11" text-anchor="start" fill="#111">Offices &amp; document routes</text>
+  <polyline points="250,160 645,160 645,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="157" font-size="11" text-anchor="start" fill="#111">Team accounts &amp; page access</text>
+  <polyline points="250,175 630,175 630,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="172" font-size="11" text-anchor="start" fill="#111">Document types &amp; processing times</text>
+  <polyline points="250,190 615,190 615,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="187" font-size="11" text-anchor="start" fill="#111">Working hours &amp; holidays</text>
+  <polyline points="250,205 600,205 600,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="202" font-size="11" text-anchor="start" fill="#111">Document templates &amp; knowledge files</text>
+  <polyline points="250,220 585,220 585,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="217" font-size="11" text-anchor="start" fill="#111">Document uploads</text>
+  <polyline points="250,235 570,235 570,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="232" font-size="11" text-anchor="start" fill="#111">AI questions &amp; issue reports</text>
+  <polyline points="540,350 235,350 235,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="347" font-size="11" text-anchor="end" fill="#111">Organization dashboard &amp; KPIs</text>
+  <polyline points="540,365 220,365 220,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="362" font-size="11" text-anchor="end" fill="#111">Workload forecasts</text>
+  <polyline points="540,380 205,380 205,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="377" font-size="11" text-anchor="end" fill="#111">Document status &amp; timelines</text>
+  <polyline points="540,395 190,395 190,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="392" font-size="11" text-anchor="end" fill="#111">QR code labels</text>
+  <polyline points="540,410 175,410 175,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="407" font-size="11" text-anchor="end" fill="#111">Activity logs</text>
+  <polyline points="540,425 160,425 160,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="422" font-size="11" text-anchor="end" fill="#111">Issue alerts</text>
+  <polyline points="540,440 145,440 145,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="437" font-size="11" text-anchor="end" fill="#111">Notifications</text>
+  <polyline points="540,455 130,455 130,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="452" font-size="11" text-anchor="end" fill="#111">AI answers &amp; reports</text>
+  <polyline points="1150,150 710,150 710,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="1142" y="147" font-size="11" text-anchor="end" fill="#111">Data lookup requests</text>
+  <polyline points="1150,175 725,175 725,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="1142" y="172" font-size="11" text-anchor="end" fill="#111">Answers, reports &amp; drafts</text>
+  <polyline points="1150,200 740,200 740,330" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="1142" y="197" font-size="11" text-anchor="end" fill="#111">Suggested title, description &amp; type</text>
+  <polyline points="860,350 1165,350 1165,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="868" y="347" font-size="11" text-anchor="start" fill="#111">User questions &amp; live data</text>
+  <polyline points="860,365 1180,365 1180,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="868" y="362" font-size="11" text-anchor="start" fill="#111">Document text for auto-fill</text>
+  <polyline points="860,380 1195,380 1195,260" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="868" y="377" font-size="11" text-anchor="start" fill="#111">Organization context &amp; knowledge</text>
+  <polyline points="250,492 540,492" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="489" font-size="11" text-anchor="start" fill="#111">Login credentials</text>
+  <polyline points="250,507 540,507" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="504" font-size="11" text-anchor="start" fill="#111">Document uploads</text>
+  <polyline points="250,522 540,522" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="519" font-size="11" text-anchor="start" fill="#111">QR scan to receive</text>
+  <polyline points="250,537 540,537" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="534" font-size="11" text-anchor="start" fill="#111">Desk-to-desk pass</text>
+  <polyline points="250,552 540,552" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="549" font-size="11" text-anchor="start" fill="#111">Release to messenger</text>
+  <polyline points="250,567 540,567" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="564" font-size="11" text-anchor="start" fill="#111">Issue flags &amp; send-back</text>
+  <polyline points="250,582 540,582" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="579" font-size="11" text-anchor="start" fill="#111">Approve / return decisions</text>
+  <polyline points="250,597 540,597" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="594" font-size="11" text-anchor="start" fill="#111">Messenger accounts</text>
+  <polyline points="250,612 540,612" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="609" font-size="11" text-anchor="start" fill="#111">Messages &amp; AI questions</text>
+  <polyline points="540,627 250,627" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="624" font-size="11" text-anchor="end" fill="#111">Pending approvals</text>
+  <polyline points="540,642 250,642" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="639" font-size="11" text-anchor="end" fill="#111">Status of own uploads</text>
+  <polyline points="540,657 250,657" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="654" font-size="11" text-anchor="end" fill="#111">Incoming document alerts</text>
+  <polyline points="540,672 250,672" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="669" font-size="11" text-anchor="end" fill="#111">Notifications</text>
+  <polyline points="540,687 250,687" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="684" font-size="11" text-anchor="end" fill="#111">Messages &amp; AI answers</text>
+  <polyline points="540,722 130,722 130,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="719" font-size="11" text-anchor="end" fill="#111">Office queue &amp; incoming alerts</text>
+  <polyline points="540,737 145,737 145,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="734" font-size="11" text-anchor="end" fill="#111">Office dashboard &amp; forecast</text>
+  <polyline points="540,752 160,752 160,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="749" font-size="11" text-anchor="end" fill="#111">Document status &amp; timelines</text>
+  <polyline points="540,767 175,767 175,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="764" font-size="11" text-anchor="end" fill="#111">Approval requests</text>
+  <polyline points="540,782 190,782 190,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="779" font-size="11" text-anchor="end" fill="#111">Office activity logs</text>
+  <polyline points="540,797 205,797 205,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="794" font-size="11" text-anchor="end" fill="#111">Notifications</text>
+  <polyline points="540,812 220,812 220,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="532" y="809" font-size="11" text-anchor="end" fill="#111">Messages &amp; AI answers</text>
+  <polyline points="250,1045 690,1045 690,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="1042" font-size="11" text-anchor="start" fill="#111">Login credentials</text>
+  <polyline points="250,1030 675,1030 675,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="1027" font-size="11" text-anchor="start" fill="#111">Document uploads</text>
+  <polyline points="250,1015 660,1015 660,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="1012" font-size="11" text-anchor="start" fill="#111">QR scan to receive</text>
+  <polyline points="250,1000 645,1000 645,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="997" font-size="11" text-anchor="start" fill="#111">Desk-to-desk pass</text>
+  <polyline points="250,985 630,985 630,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="982" font-size="11" text-anchor="start" fill="#111">Release to messenger</text>
+  <polyline points="250,970 615,970 615,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="967" font-size="11" text-anchor="start" fill="#111">Issue flags &amp; send-back</text>
+  <polyline points="250,955 600,955 600,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="952" font-size="11" text-anchor="start" fill="#111">Approve / return decisions</text>
+  <polyline points="250,940 585,940 585,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="937" font-size="11" text-anchor="start" fill="#111">Staff &amp; messenger accounts</text>
+  <polyline points="250,925 570,925 570,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="258" y="922" font-size="11" text-anchor="start" fill="#111">Messages &amp; AI questions</text>
+  <polyline points="860,722 1270,722 1270,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="868" y="719" font-size="11" text-anchor="start" fill="#111">Pickup assignments</text>
+  <polyline points="860,737 1255,737 1255,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="868" y="734" font-size="11" text-anchor="start" fill="#111">Delivery destinations</text>
+  <polyline points="860,752 1240,752 1240,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="868" y="749" font-size="11" text-anchor="start" fill="#111">Delivery confirmations</text>
+  <polyline points="860,767 1225,767 1225,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="868" y="764" font-size="11" text-anchor="start" fill="#111">Delivery history &amp; stats</text>
+  <polyline points="860,782 1210,782 1210,900" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="868" y="779" font-size="11" text-anchor="start" fill="#111">Notifications</text>
+  <polyline points="1150,1045 710,1045 710,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="1142" y="1042" font-size="11" text-anchor="end" fill="#111">Login credentials</text>
+  <polyline points="1150,1030 725,1030 725,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="1142" y="1027" font-size="11" text-anchor="end" fill="#111">Duty status (on / off)</text>
+  <polyline points="1150,1015 740,1015 740,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="1142" y="1012" font-size="11" text-anchor="end" fill="#111">Pickup QR scan</text>
+  <polyline points="1150,1000 755,1000 755,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="1142" y="997" font-size="11" text-anchor="end" fill="#111">In-transit updates</text>
+  <polyline points="1150,985 770,985 770,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="1142" y="982" font-size="11" text-anchor="end" fill="#111">Failed delivery reports</text>
+  <polyline points="1150,970 785,970 785,840" fill="none" stroke="#111" stroke-width="1.1" marker-end="url(#a)"/>
+  <text x="1142" y="967" font-size="11" text-anchor="end" fill="#111">Messages &amp; issue reports</text>
+  <rect x="40" y="100" width="210" height="160" rx="16" fill="#fff" stroke="#111" stroke-width="2"/>
+  <text x="145" y="178" font-size="20" font-weight="700" text-anchor="middle" fill="#111">Admin</text>
+  <text x="145" y="196" font-size="11" text-anchor="middle" fill="#333">(Organization Administrator)</text>
+  <rect x="1150" y="100" width="210" height="160" rx="16" fill="#fff" stroke="#111" stroke-width="2"/>
+  <text x="1255" y="178" font-size="20" font-weight="700" text-anchor="middle" fill="#111">AI</text>
+  <text x="1255" y="196" font-size="11" text-anchor="middle" fill="#333">(Groq LLM)</text>
+  <rect x="40" y="478" width="210" height="222" rx="16" fill="#fff" stroke="#111" stroke-width="2"/>
+  <text x="145" y="587" font-size="20" font-weight="700" text-anchor="middle" fill="#111">Staff</text>
+  <text x="145" y="605" font-size="11" text-anchor="middle" fill="#333">(Office Staff)</text>
+  <rect x="40" y="900" width="210" height="160" rx="16" fill="#fff" stroke="#111" stroke-width="2"/>
+  <text x="145" y="978" font-size="20" font-weight="700" text-anchor="middle" fill="#111">Department Head</text>
+  <text x="145" y="996" font-size="11" text-anchor="middle" fill="#333">(Office Head)</text>
+  <rect x="1150" y="900" width="210" height="160" rx="16" fill="#fff" stroke="#111" stroke-width="2"/>
+  <text x="1255" y="978" font-size="20" font-weight="700" text-anchor="middle" fill="#111">Messenger</text>
+  <text x="1255" y="996" font-size="11" text-anchor="middle" fill="#333">(Liaison)</text>
+  <rect x="540" y="330" width="320" height="510" rx="22" fill="#fff" stroke="#111" stroke-width="2.5"/>
+  <text x="700" y="555" font-size="23" font-weight="700" text-anchor="middle" fill="#111">FlowVision:</text>
+  <text x="700" y="585" font-size="23" font-weight="700" text-anchor="middle" fill="#111">AI-Powered Document</text>
+  <text x="700" y="615" font-size="23" font-weight="700" text-anchor="middle" fill="#111">Monitoring Framework</text>
+</svg>

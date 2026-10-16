@@ -1,4 +1,4 @@
-export type AccountType = 'CLIENT' | 'EMPLOYEE' | 'STAFF' | 'LIAISON'
+export type AccountType = 'ADMIN' | 'DEPARTMENT_HEAD' | 'STAFF' | 'LIAISON'
 export type DocumentStatus =
   | 'CREATED'
   | 'START'
@@ -108,7 +108,7 @@ export interface FlowDocument {
   liaison?: UserSummary | null
   /** Who scanned it in at the office it is at now. */
   received_by?: UserSummary | null
-  /** Where it comes from: the uploader's assigned office, or their organization for CLIENT accounts. */
+  /** Where it comes from: the uploader's assigned office, or their organization for ADMIN accounts. */
   origin?: DocumentOrigin
   /** Processing time on the organization's working calendar (null for drafts). */
   processing?: DocumentProcessing | null

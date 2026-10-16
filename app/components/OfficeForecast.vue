@@ -7,7 +7,7 @@ interface StaffForecast {
   id: string
   first_name: string
   last_name: string
-  account_type: 'EMPLOYEE' | 'STAFF'
+  account_type: 'DEPARTMENT_HEAD' | 'STAFF'
   position: string | null
   holding: number
   received_total: number

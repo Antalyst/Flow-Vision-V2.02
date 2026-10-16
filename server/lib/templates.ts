@@ -68,7 +68,7 @@ export function readTemplateInput(body: Record<string, unknown>, partial: boolea
   return out
 }
 
-/** Ready-made templates a CLIENT can start from (Organization Settings › Templates). */
+/** Ready-made templates an ADMIN can start from (Organization Settings › Templates). */
 export function starterTemplates(orgName: string) {
   const header = `Republic of the Philippines\n${orgName}`
   return [

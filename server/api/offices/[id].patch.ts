@@ -6,7 +6,7 @@ import { officeDto } from '~~/server/lib/serializers.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
 export default defineApiHandler(async (event) => {
-  const user = await requireUser(event, 'CLIENT')
+  const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/offices')
   const office = await Office.findOne({ where: { id: routeParam(event, 'id'), org_id: user.org_id } })
   if (!office) throw notFound('Office')

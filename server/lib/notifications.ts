@@ -39,7 +39,7 @@ export async function notify(
 }
 
 /** Active users at an office, optionally limited to some account types. */
-export async function officeMemberIds(officeId: string | null | undefined, accountTypes: AccountType[] = ['EMPLOYEE', 'STAFF'], transaction?: Transaction) {
+export async function officeMemberIds(officeId: string | null | undefined, accountTypes: AccountType[] = ['DEPARTMENT_HEAD', 'STAFF'], transaction?: Transaction) {
   if (!officeId) return []
   const users = await User.findAll({
     where: { office_id: officeId, status: { [Op.ne]: 'inactive' }, account_type: { [Op.in]: accountTypes } },

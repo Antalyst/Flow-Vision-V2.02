@@ -13,13 +13,13 @@ const assistant = useAssistantStore()
 const sidebarOpen = ref(false)
 
 const SUGGESTIONS: Partial<Record<AccountType, Array<{ icon: string; text: string }>>> = {
-  CLIENT: [
+  ADMIN: [
     { icon: 'sun', text: 'Brief me on what needs my attention today' },
     { icon: 'alert-triangle', text: 'Which documents are overdue, and where are they stuck?' },
     { icon: 'grid', text: 'Make a report of all pending approvals by office' },
     { icon: 'search', text: 'Find documents about payroll submitted this month' },
   ],
-  EMPLOYEE: [
+  DEPARTMENT_HEAD: [
     { icon: 'inbox', text: 'What documents are at my office right now?' },
     { icon: 'alert-triangle', text: 'Which of our documents are overdue?' },
     { icon: 'search', text: 'Find our office’s documents uploaded last week' },
@@ -35,8 +35,8 @@ const SUGGESTIONS: Partial<Record<AccountType, Array<{ icon: string; text: strin
 const suggestions = computed(() => (auth.role ? (SUGGESTIONS[auth.role] ?? []) : []))
 
 const SCOPE_HINT: Partial<Record<AccountType, string>> = {
-  CLIENT: 'Sees the whole organization',
-  EMPLOYEE: 'Sees your office only',
+  ADMIN: 'Sees the whole organization',
+  DEPARTMENT_HEAD: 'Sees your office only',
   STAFF: 'Sees your documents and approvals',
 }
 

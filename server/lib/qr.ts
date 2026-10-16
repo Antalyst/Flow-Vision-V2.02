@@ -44,7 +44,7 @@ export function parseRoutingDate(value: string) {
 }
 
 /**
- * QR prefix for documents uploaded by accounts without an office (the CLIENT administrator):
+ * QR prefix for documents uploaded by accounts without an office (the admin):
  * the organization's own code. Organizations have no code column, so it is the first segment
  * all its office codes share ({ORGCODE}-{DEPT}-{OFFICE}, e.g. BAG), or else the initials of
  * its name ("Bago City LGU" → BCL).

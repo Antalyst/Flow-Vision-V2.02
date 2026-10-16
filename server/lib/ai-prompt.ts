@@ -7,8 +7,8 @@ import { templateCatalog } from './templates.ts'
 const nowFmt = new Intl.DateTimeFormat('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: 'Asia/Manila' })
 
 const ROLE_BRIEF: Record<string, string> = {
-  CLIENT: 'Organization administrator (CLIENT). Sees the whole organization: every office, person, document, route and approval.',
-  EMPLOYEE: 'Office employee (EMPLOYEE). Sees only their own office: documents at, uploaded from, or routed through it, the approvals at it, and its personnel.',
+  ADMIN: 'Organization administrator (ADMIN). Sees the whole organization: every office, person, document, route and approval.',
+  DEPARTMENT_HEAD: 'Department head (DEPARTMENT_HEAD) of an office. Sees only their own office: documents at, uploaded from, or routed through it, the approvals at it, and its personnel.',
   STAFF: 'Staff member (STAFF). Sees only their own uploads, the approvals assigned to them, and their own profile — not other personnel.',
 }
 
@@ -21,7 +21,7 @@ const hoursLabel = (days: number, hours: number) => {
  * The organization as it is right now — read fresh on every message, so new offices, routes,
  * document types and knowledge files reach the assistant without anyone updating a prompt.
  * Only structure every uploader already sees in the app (routes and types are offered on upload);
- * the office directory is listed for the CLIENT only.
+ * the office directory is listed for the ADMIN only.
  */
 async function organizationContext(actor: Actor) {
   const [types, routes, offices, knowledge] = await Promise.all([
@@ -32,7 +32,7 @@ async function organizationContext(actor: Actor) {
       include: [{ model: RouteStep, as: 'steps', attributes: ['step_number', 'is_final_checkpoint', 'action_description'], include: [{ model: Office, as: 'office', attributes: ['name'] }] }],
       order: [['name', 'ASC']],
     }),
-    actor.account_type === 'CLIENT'
+    actor.account_type === 'ADMIN'
       ? Office.findAll({ where: { org_id: actor.org_id }, attributes: ['name', 'code', 'department', 'is_final_checkpoint', 'status'], order: [['name', 'ASC']], limit: 60 })
       : Promise.resolve([]),
     knowledgeCatalog(actor.org_id),
@@ -72,7 +72,7 @@ async function organizationContext(actor: Actor) {
 async function templatesSection(actor: Actor) {
   const templates = await templateCatalog(actor.org_id)
   if (!templates.length) {
-    return '- No document templates are set up yet. Formal documents still get the FlowVision note; a CLIENT can add templates in Organization Settings › Templates.'
+    return '- No document templates are set up yet. Formal documents still get the FlowVision note; an admin can add templates in Organization Settings › Templates.'
   }
   const list = templates
     .map((t) => `- "${t.name}"${t.is_default ? ' (default)' : ''}${t.description ? ` — ${t.description}` : ''}${t.guide ? `\n  Body guide: ${t.guide}` : ''}`)

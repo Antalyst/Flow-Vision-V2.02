@@ -374,7 +374,7 @@ CREATE TABLE `users` (
   `first_name` varchar(100) DEFAULT NULL COMMENT 'First name',
   `last_name` varchar(100) DEFAULT NULL COMMENT 'Last name',
   `full_name` varchar(255) DEFAULT NULL COMMENT 'Full name',
-  `account_type` enum('CLIENT','EMPLOYEE','STAFF','LIAISON') NOT NULL COMMENT 'User role type',
+  `account_type` enum('ADMIN','DEPARTMENT_HEAD','STAFF','LIAISON') NOT NULL COMMENT 'User role type',
   `office_id` char(36) DEFAULT NULL COMMENT 'Assigned office',
   `avatar_url` varchar(500) DEFAULT NULL COMMENT 'Profile picture URL',
   `phone` varchar(20) DEFAULT NULL COMMENT 'Contact phone',
