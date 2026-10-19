@@ -180,7 +180,6 @@ export const Liaison = define('liaisons', {
   success_rate: DataTypes.DECIMAL(5, 2),
   last_delivery: DataTypes.DATE,
   phone: DataTypes.STRING(20),
-  vehicle_type: DataTypes.STRING(50),
 })
 
 /** One row per document: its permanent routing code ({OFFICE_CODE}{MMDDYY}{6 digits}, older ones {OFFICE_CODE}-{8 digits}), issued on upload and scanned at every hand-off. */
@@ -303,11 +302,16 @@ export const DocumentType = define('document_types', {
 export const KNOWLEDGE_STATUSES = ['READY', 'NO_TEXT', 'FAILED'] as const
 
 /** Organization Settings: uploaded files whose extracted text is the AI's organization knowledge. */
+export const KNOWLEDGE_KINDS = ['GENERAL', 'CITIZENS_CHARTER'] as const
+
 export const KnowledgeFile = define('knowledge_files', {
   id: uuidPk,
   org_id: { type: DataTypes.CHAR(36), allowNull: false },
+  // NULL = organization-wide; set = only that office's accounts (and the ADMIN) may read it.
+  office_id: DataTypes.CHAR(36),
   title: { type: DataTypes.STRING(255), allowNull: false },
   description: DataTypes.TEXT,
+  kind: { type: DataTypes.ENUM(...KNOWLEDGE_KINDS), allowNull: false, defaultValue: 'GENERAL' },
   // "knowledge/<uuid>/<original name>" under UPLOAD_DIR
   file_url: { type: DataTypes.STRING(500), allowNull: false },
   file_name: { type: DataTypes.STRING(255), allowNull: false },
@@ -315,6 +319,8 @@ export const KnowledgeFile = define('knowledge_files', {
   file_size: { type: DataTypes.BIGINT, allowNull: false },
   content: DataTypes.TEXT('long'),
   char_count: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  // 0 = text stored flattened (no pages or lines; re-read to fix), 1 = lines and \f page breaks kept.
+  index_version: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   status: { type: DataTypes.ENUM(...KNOWLEDGE_STATUSES), allowNull: false, defaultValue: 'READY' },
   error: DataTypes.STRING(500),
   is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
@@ -434,6 +440,7 @@ Message.belongsTo(User, { foreignKey: 'sender_id', as: 'sender' })
 Message.belongsTo(User, { foreignKey: 'recipient_id', as: 'recipient' })
 
 KnowledgeFile.belongsTo(User, { foreignKey: 'uploaded_by', as: 'uploader' })
+KnowledgeFile.belongsTo(Office, { foreignKey: 'office_id', as: 'office' })
 
 AiConversation.hasMany(AiMessage, { foreignKey: 'conversation_id', as: 'messages' })
 AiMessage.belongsTo(AiConversation, { foreignKey: 'conversation_id', as: 'conversation' })

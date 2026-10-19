@@ -16,6 +16,28 @@ export interface StoredTool {
   ok?: boolean
   /** findDocuments: the matches, shown under the answer as cards that open each document. */
   documents?: FoundDocument[]
+  /** Knowledge tools: the files and pages the answer draws on, shown as source chips. */
+  sources?: KnowledgeSourceRef[]
+}
+
+/** A knowledge file an answer cites: title, scope (office name or "Organization-wide"), page, section. */
+export interface KnowledgeSourceRef {
+  title: string
+  scope: string
+  page: number | null
+  section: string | null
+}
+
+/** Only the fields the chat shows, from untrusted JSON (an import, or an older row). */
+function cleanSources(list: unknown): KnowledgeSourceRef[] | undefined {
+  if (!Array.isArray(list)) return undefined
+  const str = (v: unknown, max: number) => (typeof v === 'string' && v.trim() ? v.slice(0, max) : null)
+  const sources = list
+    .filter((s) => s && typeof s === 'object' && typeof s.title === 'string')
+    .slice(0, 10)
+    .map((s) => ({ title: str(s.title, 255)!, scope: str(s.scope, 255) ?? 'Organization-wide', page: Number.isInteger(s.page) && s.page > 0 ? s.page : null, section: str(s.section, 150) }))
+    .filter((s) => s.title)
+  return sources.length ? sources : undefined
 }
 
 /** A document the assistant found for the user (findDocuments), as the chat shows it. */
@@ -49,7 +71,7 @@ function parseTools(raw: string | null): StoredTool[] | undefined {
   if (!raw) return undefined
   try {
     const list = JSON.parse(raw)
-    return Array.isArray(list) ? list.map((t) => ({ ...t, documents: cleanDocuments(t?.documents) })) : undefined
+    return Array.isArray(list) ? list.map((t) => ({ ...t, documents: cleanDocuments(t?.documents), sources: cleanSources(t?.sources) })) : undefined
   } catch {
     return undefined
   }
@@ -114,7 +136,7 @@ export async function addMessage(
     role: m.role,
     content: m.content,
     model: m.model ?? null,
-    tools: m.tools?.length ? JSON.stringify(m.tools.map(({ name, label, summary, ok, documents }) => ({ name, label, summary, ok, documents: cleanDocuments(documents) }))) : null,
+    tools: m.tools?.length ? JSON.stringify(m.tools.map(({ name, label, summary, ok, documents, sources }) => ({ name, label, summary, ok, documents: cleanDocuments(documents), sources: cleanSources(sources) }))) : null,
     is_error: Boolean(m.isError),
     created_at: m.at ?? new Date(),
   })

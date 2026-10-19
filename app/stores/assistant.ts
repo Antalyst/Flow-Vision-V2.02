@@ -10,6 +10,27 @@ export interface AssistantTool {
   done: boolean
   /** findDocuments: what it found, shown as cards that open each document. */
   documents?: FoundDocument[]
+  /** Knowledge tools: the files and pages the answer draws on. */
+  sources?: KnowledgeSource[]
+}
+
+/** A knowledge file an answer cites (searchOrgKnowledge / listCharterServices). */
+export interface KnowledgeSource {
+  title: string
+  /** The office the file belongs to, or "Organization-wide". */
+  scope: string
+  page: number | null
+  section: string | null
+}
+
+/** What the assistant's knowledge searches cover for the signed-in user (GET /api/ai/context). */
+export interface AiKnowledgeContext {
+  office: { name: string; code: string | null } | null
+  office_issue: 'NO_OFFICE' | 'OFFICE_INACTIVE' | 'OFFICE_OTHER_ORG' | null
+  all_offices: boolean
+  scope: string
+  knowledge_files: number
+  charter_files: number
 }
 
 /** A document the assistant found (findDocuments). */
@@ -59,7 +80,7 @@ type ConversationSummary = Omit<Conversation, 'messages' | 'loaded' | 'draft'>
 type StreamEvent =
   | { type: 'saved'; conversation: ConversationSummary; question: { id: string; at: string } }
   | { type: 'tool_start'; id: string; name: string; label: string }
-  | { type: 'tool_done'; id: string; name: string; label: string; summary: string; ok: boolean; documents?: FoundDocument[] }
+  | { type: 'tool_done'; id: string; name: string; label: string; summary: string; ok: boolean; documents?: FoundDocument[]; sources?: KnowledgeSource[] }
   | { type: 'reply'; id: string; at: string; content: string; model: string | null; tools: AssistantTool[] }
   | { type: 'error'; id?: string; at?: string; message: string }
 
@@ -230,7 +251,7 @@ export const useAssistantStore = defineStore('assistant', () => {
     } else if (e.type === 'tool_start') liveTools.value.push({ id: e.id, name: e.name, label: e.label, done: false })
     else if (e.type === 'tool_done') {
       const t = liveTools.value.find((x) => x.id === e.id)
-      if (t) Object.assign(t, { summary: e.summary, ok: e.ok, done: true, documents: e.documents })
+      if (t) Object.assign(t, { summary: e.summary, ok: e.ok, done: true, documents: e.documents, sources: e.sources })
     } else if (e.type === 'reply') {
       const msg: AssistantMessage = { id: e.id, role: 'assistant', content: e.content, at: e.at, model: e.model, tools: e.tools.map((t) => ({ ...t, done: true })) }
       convo.messages.push(msg)

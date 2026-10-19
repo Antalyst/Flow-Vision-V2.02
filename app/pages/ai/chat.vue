@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { AccountType, DocumentStatus } from '~/types'
 import type { CanvasDoc } from '~/utils/markdown'
-import type { AssistantMessage, Conversation, FoundDocument } from '~/stores/assistant'
+import type { AiKnowledgeContext, AssistantMessage, Conversation, FoundDocument, KnowledgeSource } from '~/stores/assistant'
 import CanvasPanel from './components/CanvasPanel.vue'
 
 // A full-screen workspace of its own: no app navigation, just a way back.
@@ -22,17 +22,33 @@ const SUGGESTIONS: Partial<Record<AccountType, Array<{ icon: string; text: strin
   DEPARTMENT_HEAD: [
     { icon: 'inbox', text: 'What documents are at my office right now?' },
     { icon: 'alert-triangle', text: 'Which of our documents are overdue?' },
-    { icon: 'search', text: 'Find our office’s documents uploaded last week' },
+    { icon: 'book-open', text: 'What are the internal and external services of our office?' },
     { icon: 'file-text', text: 'Draft a memo reminding staff to submit their reports' },
   ],
   STAFF: [
     { icon: 'check-square', text: 'What approvals are waiting for me?' },
     { icon: 'search', text: 'Find the documents I uploaded this month' },
-    { icon: 'file-text', text: 'Summarize my returned documents and their remarks' },
+    { icon: 'book-open', text: 'What services does our office offer, according to our Citizen’s Charter?' },
     { icon: 'book-open', text: 'What do our policies say about travel orders?' },
   ],
 }
 const suggestions = computed(() => (auth.role ? (SUGGESTIONS[auth.role] ?? []) : []))
+
+// What the knowledge searches cover, as the server resolves it from the account (never from the chat).
+const api = useApi()
+const { data: knowledge } = useLazyAsyncData('ai-knowledge-context', () => api.get<AiKnowledgeContext>('/ai/context').catch(() => null), { server: false })
+const knowledgeLine = computed(() => {
+  const k = knowledge.value
+  if (!k) return null
+  const where = k.all_offices ? 'all offices and organization-wide files' : k.office ? `${k.office.name} + organization-wide files` : 'organization-wide files only'
+  const charters = k.charter_files ? ` · ${k.charter_files} Citizen’s Charter file${k.charter_files === 1 ? '' : 's'}` : ''
+  return `Searching knowledge for: ${where}${charters}`
+})
+const OFFICE_ISSUE_TEXT: Record<NonNullable<AiKnowledgeContext['office_issue']>, string> = {
+  NO_OFFICE: 'Your account has no office assigned, so “our office” questions can’t be answered. Ask an administrator to assign your office.',
+  OFFICE_INACTIVE: 'Your office is marked inactive, so its knowledge isn’t used. Ask an administrator to check your office assignment.',
+  OFFICE_OTHER_ORG: 'Your office assignment could not be verified. Ask an administrator to check it.',
+}
 
 const SCOPE_HINT: Partial<Record<AccountType, string>> = {
   ADMIN: 'Sees the whole organization',
@@ -102,6 +118,17 @@ function foundIn(m: AssistantMessage): FoundDocument[] {
   return (m.tools ?? []).flatMap((t) => t.documents ?? []).filter((d) => !seen.has(d.id) && seen.add(d.id))
 }
 const isStatus = (s: string): s is DocumentStatus => s in STATUS_META
+
+/** Knowledge files (and pages) this answer draws on, each listed once. */
+function sourcesIn(m: AssistantMessage): KnowledgeSource[] {
+  const seen = new Set<string>()
+  return (m.tools ?? [])
+    .flatMap((t) => t.sources ?? [])
+    .filter((s) => {
+      const key = `${s.title}|${s.page ?? ''}`
+      return !seen.has(key) && seen.add(key)
+    })
+}
 
 function canvasMeta(c: CanvasDoc) {
   const rows = parseMarkdown(c.content).reduce((n, b) => n + (b.type === 'table' ? b.rows.length : 0), 0)
@@ -338,6 +365,15 @@ onMounted(() => {
             <p class="mt-2 max-w-xl text-[15px] text-ink-body">
               I'm your organization's assistant. I read live FlowVision data — documents, routes, approvals, people and your knowledge files — and can turn it into reports you can export to Word, Excel or PDF.
             </p>
+            <p v-if="knowledgeLine" class="mt-3 flex items-start gap-2 text-[13px] text-ink-2">
+              <FIcon name="book-open" :size="14" class="mt-0.5 shrink-0" /> <span>{{ knowledgeLine }}</span>
+            </p>
+            <p v-if="knowledge && !knowledge.knowledge_files" class="mt-2 text-[13px] text-ink-2">
+              No knowledge files are available to you yet. Ask an administrator to upload your office’s Citizen’s Charter in Organization Settings › AI knowledge.
+            </p>
+            <p v-if="knowledge?.office_issue" class="mt-2 flex items-start gap-2 rounded-xl bg-amber/12 px-3 py-2 text-[13px] text-amber-ink">
+              <FIcon name="alert-triangle" :size="14" class="mt-0.5 shrink-0" /> <span>{{ OFFICE_ISSUE_TEXT[knowledge.office_issue] }}</span>
+            </p>
             <div class="mt-7 grid gap-2 sm:grid-cols-2">
               <button
                 v-for="s in suggestions"
@@ -426,6 +462,15 @@ onMounted(() => {
                         <FIcon name="chevron-right" :size="16" class="text-ink-2" />
                       </button>
                     </template>
+
+                    <!-- Knowledge the answer is grounded in -->
+                    <div v-if="sourcesIn(m).length" class="flex flex-wrap items-center gap-1.5" aria-label="Sources">
+                      <span class="text-xs font-medium text-ink-2"><FIcon name="book-open" :size="12" /> Sources:</span>
+                      <span v-for="(s, si) in sourcesIn(m)" :key="si" class="badge bg-ink/[0.05] font-medium text-ink-2" :title="s.section ?? undefined">
+                        {{ s.title }}<template v-if="s.page"> · p. {{ s.page }}</template><template v-else-if="s.section"> · {{ s.section }}</template>
+                        <span class="text-ink-3">· {{ s.scope }}</span>
+                      </span>
+                    </div>
                   </template>
                 </div>
               </div>

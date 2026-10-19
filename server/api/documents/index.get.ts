@@ -14,6 +14,7 @@ export default defineApiHandler(async (event) => {
 
   // A scope narrows what the account may see; it never widens it.
   const and: WhereOptions[] = [{ org_id: user.org_id }, visibleWhere(user), scopeWhere(scope, user)]
+
   // Once approved, a document leaves everyone's lists except its owner's (and the ADMIN
   // administrator's, who oversees the organization). It stays reachable from the activity log.
   if (user.account_type !== 'ADMIN') and.push({ [Op.or]: [{ status: { [Op.ne]: 'COMPLETED' } }, { submitted_by: user.id }] })
@@ -27,6 +28,7 @@ export default defineApiHandler(async (event) => {
   // Filters by role: ADMIN — the office the document is at now; DEPARTMENT_HEAD — a staff member of
   // their own office (what that staff member uploaded or handled); everyone — the document type.
   const office = v.q(query, 'office', 36)
+
   if (office && user.account_type === 'ADMIN') and.push({ current_office_id: office })
   const staffId = v.q(query, 'staff', 36)
   if (staffId && user.account_type === 'DEPARTMENT_HEAD') {

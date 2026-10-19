@@ -122,7 +122,10 @@ async function removeType(t: DocumentTypeItem) {
 const files = computed(() => data.value?.knowledge_files ?? [])
 const maxBytes = computed(() => data.value?.limits.knowledge_max_bytes ?? 200 * 1024 * 1024)
 const ACCEPT = '.pdf,.docx,.txt,.md,.csv'
-const upload = reactive({ title: '', description: '' })
+// office_id '' = organization-wide. The scope is chosen here, never taken from the uploader's office.
+const upload = reactive({ title: '', description: '', office_id: '', charter: false })
+const { data: officeData } = useLazyAsyncData('knowledge-offices', () => api.get<{ data: Array<{ id: string; name: string; code: string }> }>('/offices'), { server: false })
+const offices = computed(() => officeData.value?.data ?? [])
 const picked = ref<File | null>(null)
 const dragging = ref(false)
 const progress = ref<number | null>(null)
@@ -144,6 +147,8 @@ function sendKnowledge() {
   fd.append('file', picked.value)
   if (upload.title.trim()) fd.append('title', upload.title.trim())
   if (upload.description.trim()) fd.append('description', upload.description.trim())
+  if (upload.office_id) fd.append('office_id', upload.office_id)
+  fd.append('kind', upload.charter ? 'CITIZENS_CHARTER' : 'GENERAL')
 
   const xhr = new XMLHttpRequest()
   xhr.open('POST', '/api/org/knowledge')
@@ -165,7 +170,7 @@ function sendKnowledge() {
       if (f?.status === 'READY') ui.success('Knowledge added', `${f.title} · ${f.char_count.toLocaleString()} characters the AI can use`)
       else ui.error('Uploaded, but no text was found', f?.error ?? 'The AI can’t use this file.')
       picked.value = null
-      Object.assign(upload, { title: '', description: '' })
+      Object.assign(upload, { title: '', description: '', office_id: '', charter: false })
       refresh()
     } else {
       ui.error('Upload failed', body?.message ?? `The server answered ${xhr.status}.`)
@@ -182,6 +187,26 @@ async function toggleFile(f: KnowledgeFileItem) {
   const ok = await run(`kf-${f.id}`, () => api.patch(`/org/knowledge/${f.id}`, { is_active: !f.is_active }), f.is_active ? 'The AI no longer uses this file' : 'The AI uses this file again')
   if (ok) refresh()
 }
+/** Who the AI may use this file for: '' = the whole organization, else one office (and admins). */
+async function setFileScope(f: KnowledgeFileItem, officeId: string) {
+  if ((f.office?.id ?? '') === officeId) return
+  const name = offices.value.find((o) => o.id === officeId)?.name
+  const ok = await run(`kfscope-${f.id}`, () => api.patch(`/org/knowledge/${f.id}`, { office_id: officeId || null }), name ? `Only ${name} (and admins) can use this file now` : 'The whole organization can use this file now')
+  if (ok) refresh()
+}
+
+async function toggleCharter(f: KnowledgeFileItem) {
+  const charter = f.kind !== 'CITIZENS_CHARTER'
+  const ok = await run(`kfkind-${f.id}`, () => api.patch(`/org/knowledge/${f.id}`, { kind: charter ? 'CITIZENS_CHARTER' : 'GENERAL' }), charter ? 'Marked as Citizen’s Charter' : 'No longer marked as Citizen’s Charter')
+  if (ok) refresh()
+}
+
+/** Files uploaded before pages and headings were kept: read the stored copy again. */
+async function rereadFile(f: KnowledgeFileItem) {
+  const ok = await run(`kfre-${f.id}`, () => api.post(`/org/knowledge/${f.id}/reindex`), 'File re-read — pages and headings are kept now')
+  if (ok) refresh()
+}
+
 async function removeFile(f: KnowledgeFileItem) {
   await ui.confirm({
     title: `Delete “${f.title}”?`,
@@ -372,6 +397,17 @@ const STATUS = {
               <label class="field-label" for="kf-desc">Description <span class="font-normal text-ink-2">(optional)</span></label>
               <textarea id="kf-desc" v-model="upload.description" class="input" rows="3" maxlength="2000" placeholder="What this file covers" />
             </div>
+            <div>
+              <label class="field-label" for="kf-office">Who the AI may use it for</label>
+              <select id="kf-office" v-model="upload.office_id" class="input">
+                <option value="">The whole organization</option>
+                <option v-for="o in offices" :key="o.id" :value="o.id">Only {{ o.name }} (and admins)</option>
+              </select>
+              <p class="field-hint">An office’s own Citizen’s Charter can be limited to that office.</p>
+            </div>
+            <label class="flex items-center gap-2 text-sm">
+              <input v-model="upload.charter" type="checkbox" class="size-4" /> This is a Citizen’s Charter (services, requirements, fees, processing times)
+            </label>
             <div v-if="progress !== null" class="space-y-1">
               <div class="h-2 overflow-hidden rounded-full bg-ink/[0.06]"><div class="h-full rounded-full bg-terracotta transition-all" :style="{ width: `${progress}%` }" /></div>
               <p class="text-xs text-ink-2">{{ progress < 100 ? `Uploading… ${progress}%` : 'Reading the text…' }}</p>
@@ -399,6 +435,8 @@ const STATUS = {
                 {{ f.title }}
                 <ToneBadge :tone="STATUS[f.status].tone" dot>{{ STATUS[f.status].label }}</ToneBadge>
                 <ToneBadge v-if="f.status === 'READY' && !f.is_active" tone="neutral">Not used</ToneBadge>
+                <ToneBadge v-if="f.kind === 'CITIZENS_CHARTER'" tone="info">Citizen’s Charter</ToneBadge>
+                <ToneBadge :tone="f.office ? 'warning' : 'neutral'">{{ f.office ? `Only ${f.office.name}` : 'Whole organization' }}</ToneBadge>
               </p>
               <p v-if="f.description" class="mt-0.5 text-[13px] text-ink-body">{{ f.description }}</p>
               <p class="mt-1 text-xs text-ink-2">
@@ -406,6 +444,26 @@ const STATUS = {
                 · {{ formatDate(f.created_at) }}<template v-if="f.uploader"> · {{ fullName(f.uploader) }}</template>
               </p>
               <p v-if="f.error" class="mt-1 text-xs text-danger-ink">{{ f.error }}</p>
+              <p v-if="f.needs_reread" class="mt-1 text-xs text-amber-ink">Read before pages and headings were kept — re-read it so answers can cite pages.</p>
+              <div class="mt-2 flex flex-wrap items-center gap-2">
+                <label class="sr-only" :for="`kf-scope-${f.id}`">Who the AI may use {{ f.title }} for</label>
+                <select
+                  :id="`kf-scope-${f.id}`"
+                  class="input h-8 w-auto py-0 text-xs"
+                  :value="f.office?.id ?? ''"
+                  :disabled="busy === `kfscope-${f.id}`"
+                  @change="setFileScope(f, ($event.target as HTMLSelectElement).value)"
+                >
+                  <option value="">Whole organization</option>
+                  <option v-for="o in offices" :key="o.id" :value="o.id">Only {{ o.name }}</option>
+                </select>
+                <button class="btn btn-sm btn-ghost" :disabled="busy === `kfkind-${f.id}`" :aria-busy="busy === `kfkind-${f.id}`" @click="toggleCharter(f)">
+                  <FIcon name="book-open" :size="14" /> {{ f.kind === 'CITIZENS_CHARTER' ? 'Unmark charter' : 'Mark as Citizen’s Charter' }}
+                </button>
+                <button v-if="f.needs_reread" class="btn btn-sm btn-ghost" :disabled="busy === `kfre-${f.id}`" :aria-busy="busy === `kfre-${f.id}`" @click="rereadFile(f)">
+                  <FIcon name="refresh-cw" :size="14" /> Re-read
+                </button>
+              </div>
             </div>
             <div class="flex shrink-0 gap-1">
               <button v-if="f.status === 'READY'" class="btn btn-sm btn-ghost" :disabled="busy === `kf-${f.id}`" :aria-busy="busy === `kf-${f.id}`" @click="toggleFile(f)">

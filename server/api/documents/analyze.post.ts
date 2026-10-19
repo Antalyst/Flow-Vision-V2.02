@@ -2,6 +2,7 @@ import { Organization } from '~~/server/lib/models.ts'
 import { SUBMITTER_TYPES } from '~~/server/lib/documents.ts'
 import { extractText, suggestDocumentDetails } from '~~/server/lib/ai.ts'
 import { activeDocumentTypes, knowledgeContext } from '~~/server/lib/knowledge.ts'
+import { resolveAiContext } from '~~/server/lib/ai-context.ts'
 import { badRequest, httpError } from '~~/server/lib/errors.ts'
 import { env } from '~~/server/lib/env.ts'
 import { readStagedUpload } from '~~/server/lib/uploads.ts'
@@ -33,7 +34,8 @@ export default defineApiHandler(async (event) => {
   const [org, types, knowledge] = await Promise.all([
     Organization.findByPk(user.org_id, { attributes: ['name'] }),
     activeDocumentTypes(user.org_id),
-    knowledgeContext(user.org_id, text),
+    // The uploader's own knowledge scope: organization-wide files plus their office's (ai-context.ts).
+    knowledgeContext(resolveAiContext(user), text),
   ])
   const suggestion = await suggestDocumentDetails(text, {
     organization: (org?.name as string) || 'a Philippine city government',

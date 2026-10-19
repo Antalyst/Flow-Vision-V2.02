@@ -16,6 +16,7 @@
     "db:reset": "node scripts/db-schema.ts && node scripts/db-seed.ts",
     "test:flow": "node tests/flow.test.ts",
     "test:roles": "node --test tests/roles.test.ts",
+    "test:office-ai": "node --test tests/office-ai.test.ts",
     "test:roles-api": "node tests/roles-api.test.ts"
   },
   "dependencies": {

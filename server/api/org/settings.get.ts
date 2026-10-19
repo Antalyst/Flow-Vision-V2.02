@@ -1,5 +1,5 @@
 import { fn, col } from 'sequelize'
-import { Document, DocumentType, KnowledgeFile, Organization, OrganizationHoliday, OrganizationSettings, User } from '~~/server/lib/models.ts'
+import { Document, DocumentType, KnowledgeFile, Office, Organization, OrganizationHoliday, OrganizationSettings, User } from '~~/server/lib/models.ts'
 import { documentTypeDto, knowledgeDto } from '~~/server/lib/knowledge.ts'
 import { userAttrs } from '~~/server/lib/document-queries.ts'
 import { env } from '~~/server/lib/env.ts'
@@ -25,7 +25,10 @@ export default defineApiHandler(async (event) => {
     KnowledgeFile.findAll({
       where: { org_id: user.org_id },
       attributes: { exclude: ['content'] },
-      include: [{ model: User, as: 'uploader', attributes: userAttrs }],
+      include: [
+        { model: User, as: 'uploader', attributes: userAttrs },
+        { model: Office, as: 'office', attributes: ['id', 'name'] },
+      ],
       order: [['created_at', 'DESC']],
     }),
     // Working hours and holidays; their tables may not exist yet (npm run db:add-settings).

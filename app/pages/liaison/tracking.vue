@@ -45,7 +45,6 @@ const rangeLabel = computed(() => ({ today: 'Today', '7d': 'Last 7 days', '30d':
 
     <template v-if="data">
       <section class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Success rate" :value="`${data.profile.success_rate}%`" icon="target" :tone="data.profile.success_rate >= 95 ? 'success' : data.profile.success_rate >= 80 ? 'warning' : 'danger'" />
         <StatCard label="Avg delivery time" :value="formatDuration(data.profile.avg_delivery_minutes)" icon="clock" tone="info" hint="Pickup → delivery" />
         <StatCard label="Total trips" :value="data.profile.total_deliveries" icon="truck" tone="primary" :hint="`${data.profile.successful_deliveries} delivered`" />
         <StatCard label="Failed" :value="data.profile.failed_deliveries" icon="alert-triangle" :tone="data.profile.failed_deliveries ? 'danger' : 'neutral'" />

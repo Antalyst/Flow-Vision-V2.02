@@ -379,6 +379,12 @@ export interface KnowledgeFileItem {
   status: 'READY' | 'NO_TEXT' | 'FAILED'
   error: string | null
   is_active: boolean
+  /** CITIZENS_CHARTER files get service-aware answers (internal/external services, requirements, fees). */
+  kind: 'GENERAL' | 'CITIZENS_CHARTER'
+  /** null = organization-wide; set = only that office's accounts (and admins) can use it. */
+  office: { id: string; name: string } | null
+  /** Uploaded before pages and headings were kept; "Re-read" fixes it without uploading again. */
+  needs_reread: boolean
   created_at: string
   uploader?: UserSummary | null
 }

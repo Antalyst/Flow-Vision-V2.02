@@ -210,7 +210,7 @@ onMounted(() => connectRealtime())
       <div v-if="!rail" class="glass-dark mx-4 mb-4 rounded-xl px-3.5 py-3">
         <p class="truncate text-[13px] font-medium">{{ auth.user?.organization?.name }}</p>
         <!-- Role and office: shown for messengers only. -->
-        <p v-if="auth.role === 'LIAISON'" class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-night-text-2">
+        <p class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-night-text-2">
           <span class="size-1.5 rounded-full" :class="auth.role ? TONE_DOT[ROLE_META[auth.role].tone] : ''" />
           {{ auth.role && ROLE_META[auth.role].label }}<template v-if="auth.user?.office"> · {{ auth.user.office.name }}</template>
         </p>

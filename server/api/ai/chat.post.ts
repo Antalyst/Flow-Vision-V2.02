@@ -127,7 +127,15 @@ export default defineApiHandler(async (event) => {
             const outcome = await runAssistantTool(name, call.function.arguments, actor)
             messages.push({ role: 'tool', tool_call_id: call.id, content: outcome.content })
             // Documents it found go to the page as cards (with links), not into the AI's text.
-            const done: StoredTool = { name, label, summary: outcome.summary, ok: outcome.ok, ...(outcome.documents && { documents: outcome.documents }) }
+            const done: StoredTool = {
+              name,
+              label,
+              summary: outcome.summary,
+              ok: outcome.ok,
+              ...(outcome.documents && { documents: outcome.documents }),
+              // Knowledge files (and pages) the answer draws on, shown as source chips.
+              ...(outcome.sources && { sources: outcome.sources }),
+            }
             used.push(done)
             send({ type: 'tool_done', id: call.id, ...done })
           }

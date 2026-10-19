@@ -738,14 +738,17 @@ CREATE TABLE `file_blobs` (
 CREATE TABLE `knowledge_files` (
   `id` char(36) NOT NULL,
   `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `office_id` char(36) DEFAULT NULL COMMENT 'NULL = organization-wide; set = only this office (and ADMIN)',
   `title` varchar(255) NOT NULL COMMENT 'Name shown in settings',
   `description` text DEFAULT NULL COMMENT 'What the file is about',
+  `kind` enum('GENERAL','CITIZENS_CHARTER') NOT NULL DEFAULT 'GENERAL' COMMENT 'Citizen''s Charter files get service-aware answers',
   `file_url` varchar(500) NOT NULL COMMENT '"knowledge/<uuid>/<original name>" under UPLOAD_DIR',
   `file_name` varchar(255) NOT NULL COMMENT 'Original file name',
   `file_type` varchar(100) DEFAULT NULL COMMENT 'MIME type',
   `file_size` bigint(20) NOT NULL COMMENT 'Bytes',
   `content` longtext DEFAULT NULL COMMENT 'Text extracted from the file, used as AI knowledge',
   `char_count` int(11) NOT NULL DEFAULT 0 COMMENT 'Length of content',
+  `index_version` tinyint(4) NOT NULL DEFAULT 0 COMMENT '0 = flattened text (re-read to keep pages), 1 = lines and pages kept',
   `status` enum('READY','NO_TEXT','FAILED') NOT NULL DEFAULT 'READY' COMMENT 'Whether text could be extracted',
   `error` varchar(500) DEFAULT NULL COMMENT 'Why extraction failed',
   `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Used by the AI',
@@ -754,7 +757,9 @@ CREATE TABLE `knowledge_files` (
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
   KEY `idx_knowledge_files_org` (`org_id`,`is_active`),
+  KEY `idx_knowledge_files_scope` (`org_id`,`office_id`,`is_active`),
   CONSTRAINT `fk_knowledge_files_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_knowledge_files_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`),
   CONSTRAINT `fk_knowledge_files_uploader` FOREIGN KEY (`uploaded_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Files whose text the AI uses as organization knowledge';
 

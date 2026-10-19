@@ -133,6 +133,44 @@ try {
     await connection.query(ddl)
     console.log(`[migrate] ${table} created`)
   }
+  // Office-aware AI knowledge (database/migrations/2026-10-19-knowledge-office-scope.sql).
+  // Every existing file stays organization-wide and GENERAL; nothing widens.
+  if (!(await hasColumn('knowledge_files', 'office_id'))) {
+    await connection.query("ALTER TABLE `knowledge_files` ADD COLUMN `office_id` char(36) DEFAULT NULL COMMENT 'NULL = organization-wide; set = only this office (and ADMIN)' AFTER `org_id`")
+    console.log('[migrate] knowledge_files.office_id added')
+  } else {
+    console.log('[migrate] knowledge_files.office_id already present')
+  }
+  if (!(await hasColumn('knowledge_files', 'kind'))) {
+    await connection.query(
+      "ALTER TABLE `knowledge_files` ADD COLUMN `kind` enum('GENERAL','CITIZENS_CHARTER') NOT NULL DEFAULT 'GENERAL' COMMENT 'Citizen''s Charter files get service-aware answers' AFTER `description`",
+    )
+    console.log('[migrate] knowledge_files.kind added')
+  } else {
+    console.log('[migrate] knowledge_files.kind already present')
+  }
+  if (!(await hasColumn('knowledge_files', 'index_version'))) {
+    await connection.query(
+      "ALTER TABLE `knowledge_files` ADD COLUMN `index_version` tinyint(4) NOT NULL DEFAULT 0 COMMENT '0 = flattened text (re-read to keep pages), 1 = lines and pages kept' AFTER `char_count`",
+    )
+    console.log('[migrate] knowledge_files.index_version added')
+  } else {
+    console.log('[migrate] knowledge_files.index_version already present')
+  }
+  if (!(await hasIndex('knowledge_files', 'idx_knowledge_files_scope'))) {
+    await connection.query('CREATE INDEX `idx_knowledge_files_scope` ON `knowledge_files` (`org_id`, `office_id`, `is_active`)')
+    console.log('[migrate] knowledge_files scope index added')
+  }
+  const [officeFk] = await connection.query(
+    "SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'knowledge_files' AND CONSTRAINT_NAME = 'fk_knowledge_files_office'",
+    [env.db.name],
+  )
+  if (!(officeFk as unknown[]).length) {
+    // No ON DELETE SET NULL: that would turn an office's private file into an organization-wide one.
+    await connection.query('ALTER TABLE `knowledge_files` ADD CONSTRAINT `fk_knowledge_files_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`)')
+    console.log('[migrate] knowledge_files office foreign key added')
+  }
+
   // Document types carry the processing time (it used to be set per office on each route).
   const { DEFAULT_DOCUMENT_TYPES } = await import('../server/lib/knowledge.ts')
   if (!(await hasColumn('document_types', 'processing_days'))) {

@@ -32,6 +32,49 @@ export async function extractText(data: Buffer, filename: string | undefined, mi
   return text.replace(/\s+/g, ' ').trim().slice(0, maxChars)
 }
 
+/** Page break inside layout text: knowledge passages count these to know their page. */
+export const PAGE_BREAK = '\f'
+
+/**
+ * Tidy extracted pages without losing their structure: spaces collapse inside a line, lines are
+ * trimmed, at most one blank line remains, and pages are joined by PAGE_BREAK. Headings, table
+ * rows ("Fees to be paid …") and list items stay on their own lines.
+ */
+export function normalizeLayout(pages: string[]) {
+  return pages
+    .map((page) =>
+      page
+        .replace(/\r\n?/g, '\n')
+        .replaceAll(PAGE_BREAK, '\n')
+        .split('\n')
+        .map((line) => line.replace(/[ \t ]+/g, ' ').trim())
+        .join('\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim(),
+    )
+    .join(PAGE_BREAK)
+}
+
+/**
+ * Text for the AI's knowledge library, keeping lines and pages (see normalizeLayout): PDFs page by
+ * page, Word paragraphs, text files as they are. '' when the format can't be read.
+ */
+export async function extractKnowledgeText(data: Buffer, filename: string | undefined, mime: string | undefined, { maxChars }: { maxChars: number }): Promise<string> {
+  const ext = path.extname(filename ?? '').toLowerCase()
+  let pages: string[] = []
+  if (mime === 'application/pdf' || ext === '.pdf') {
+    const { extractText: pdfText, getDocumentProxy } = await import('unpdf')
+    const pdf = await getDocumentProxy(new Uint8Array(data))
+    pages = (await pdfText(pdf, { mergePages: false })).text
+  } else if (ext === '.docx') {
+    const mammoth = await import('mammoth')
+    pages = [(await mammoth.extractRawText({ buffer: data })).value]
+  } else if (mime?.startsWith('text/') || TEXT_EXTS.has(ext)) {
+    pages = [data.toString('utf8')]
+  }
+  return normalizeLayout(pages).slice(0, maxChars)
+}
+
 /** Ask Groq for a title, description and document type based on the document's text. */
 export interface AiContext {
   /** The organization's name, so the AI knows whose paperwork it reads. */

@@ -1,10 +1,11 @@
 import path from 'node:path'
 import crypto from 'node:crypto'
 import { Op, type Transaction } from 'sequelize'
-import { DocumentType, KnowledgeFile, type Row } from './models.ts'
+import { DocumentType, KNOWLEDGE_KINDS, KnowledgeFile, Office, type Row } from './models.ts'
 import { env } from './env.ts'
 import { badRequest, httpError } from './errors.ts'
-import { extractText } from './ai.ts'
+import { extractKnowledgeText } from './ai.ts'
+import { canReadKnowledge, knowledgeWhere, type AiUserContext } from './ai-context.ts'
 import { userSummary } from './serializers.ts'
 import { deleteFile, getFile, putFile } from './file-store.ts'
 
@@ -114,24 +115,62 @@ const safeName = (original: string | undefined) => {
   return (base || 'knowledge').slice(-120)
 }
 
+/**
+ * The office a knowledge file is scoped to, as chosen by the ADMIN: null = organization-wide.
+ * It must be an active office of the same organization. Never taken from the uploader's own office.
+ */
+export async function resolveKnowledgeOffice(orgId: string, officeId: unknown) {
+  if (officeId == null || officeId === '') return null
+  const office = await Office.findOne({ where: { id: String(officeId), org_id: orgId, status: 'active' }, attributes: ['id', 'name'] })
+  if (!office) throw badRequest('Office not found', { field: 'office_id' })
+  return office
+}
+
+export const readKnowledgeKind = (value: unknown) => {
+  if (value == null || value === '') return null
+  const kind = String(value).toUpperCase()
+  if (!(KNOWLEDGE_KINDS as readonly string[]).includes(kind)) throw badRequest('Kind must be GENERAL or CITIZENS_CHARTER', { field: 'kind' })
+  return kind as (typeof KNOWLEDGE_KINDS)[number]
+}
+
+const UNREADABLE = 'The file could not be read. If it is a scanned PDF, upload a version with selectable text.'
+
+/** Extract a knowledge file's text with its lines and pages kept (index_version 1). */
+async function extractForKnowledge(data: Buffer, name: string, mime: string | undefined) {
+  try {
+    const content = await extractKnowledgeText(data, name, mime, { maxChars: MAX_KNOWLEDGE_CHARS })
+    if (content.replace(/\s/g, '').length < 20) {
+      return { content: null, char_count: 0, status: 'NO_TEXT' as const, error: 'No readable text found. Scanned PDFs need a version with selectable text.', index_version: 1 }
+    }
+    return { content, char_count: content.length, status: 'READY' as const, error: null, index_version: 1 }
+  } catch (err) {
+    console.error('[knowledge] text extraction failed', err)
+    return { content: null, char_count: 0, status: 'FAILED' as const, error: UNREADABLE, index_version: 1 }
+  }
+}
+
+/**
+ * Read a stored knowledge file again with the current extractor, so files uploaded before pages
+ * and headings were kept get them — without uploading them again. Scope and kind don't change.
+ */
+export async function reindexKnowledgeFile(file: Row) {
+  const data = await readKnowledgeFile(file.file_url)
+  if (!data) throw httpError(404, 'The stored copy of this file is missing. Upload it again.', 'FILE_MISSING')
+  await file.update(await extractForKnowledge(data, String(file.file_name), (file.file_type as string | null) ?? undefined))
+  return file
+}
+
 /** Save the file as knowledge/<uuid>/<name> (see file-store.ts) and extract its text for the AI. */
-export async function saveKnowledgeFile(part: UploadPart, input: { orgId: string; userId: string; title: string | null; description: string | null }) {
+export async function saveKnowledgeFile(
+  part: UploadPart,
+  input: { orgId: string; userId: string; title: string | null; description: string | null; officeId?: string | null; kind?: (typeof KNOWLEDGE_KINDS)[number] | null },
+) {
   if (part.data.length > env.maxKnowledgeBytes) throw httpError(413, `Knowledge files can be up to ${Math.round(env.maxKnowledgeBytes / 1024 / 1024)} MB`, 'PAYLOAD_TOO_LARGE')
   const name = safeName(part.filename)
   const ext = path.extname(name).toLowerCase()
   if (!KNOWLEDGE_EXTS.has(ext)) throw badRequest('Knowledge files can be PDF, Word (.docx), text (.txt), Markdown (.md) or CSV')
 
-  let content = ''
-  let status: 'READY' | 'NO_TEXT' | 'FAILED' = 'READY'
-  let error: string | null = null
-  try {
-    content = await extractText(part.data, name, part.type, { maxChars: MAX_KNOWLEDGE_CHARS })
-    if (content.length < 20) status = 'NO_TEXT'
-  } catch (err) {
-    console.error('[knowledge] text extraction failed', err)
-    status = 'FAILED'
-    error = 'The file could not be read. If it is a scanned PDF, upload a version with selectable text.'
-  }
+  const extracted = await extractForKnowledge(part.data, name, part.type)
 
   const folder = crypto.randomUUID()
   const fileUrl = `knowledge/${folder}/${name}`
@@ -139,16 +178,15 @@ export async function saveKnowledgeFile(part: UploadPart, input: { orgId: string
   try {
     return await KnowledgeFile.create({
       org_id: input.orgId,
+      office_id: input.officeId ?? null,
       title: (input.title || path.basename(name, ext)).slice(0, 255),
       description: input.description,
+      kind: input.kind ?? 'GENERAL',
       file_url: fileUrl,
       file_name: name,
       file_type: (part.type || '').slice(0, 100) || null,
       file_size: part.data.length,
-      content: status === 'READY' ? content : null,
-      char_count: status === 'READY' ? content.length : 0,
-      status,
-      error: status === 'NO_TEXT' ? 'No readable text found. Scanned PDFs need a version with selectable text.' : error,
+      ...extracted,
       uploaded_by: input.userId,
     })
   } catch (err) {
@@ -184,6 +222,10 @@ export function knowledgeDto(k: Row) {
     status: k.status,
     error: k.error ?? null,
     is_active: Boolean(k.is_active),
+    kind: (k.kind as string) ?? 'GENERAL',
+    office: k.office ? { id: k.office.id as string, name: String(k.office.name) } : null,
+    // Uploaded before pages and headings were kept: "Re-read" in settings fixes it.
+    needs_reread: k.status === 'READY' && Number(k.index_version ?? 0) < 1,
     created_at: new Date(k.created_at).toISOString(),
     uploader: k.uploader !== undefined ? userSummary(k.uploader) : undefined,
   }
@@ -200,8 +242,10 @@ export const wordsOf = (s: string) => (s.toLowerCase().match(/[a-z0-9ñ]{3,}/g) 
  * chunk scored by how many of the document's distinctive words it contains, and the best chunks
  * are returned up to the budget. Simple keyword retrieval — no extra service needed.
  */
-export async function knowledgeContext(orgId: string, documentText: string, budget = CONTEXT_BUDGET) {
-  const files = await KnowledgeFile.findAll({ where: { org_id: orgId, is_active: true, status: 'READY', char_count: { [Op.gt]: 0 } }, attributes: ['title', 'content'] })
+export async function knowledgeContext(ctx: AiUserContext, documentText: string, budget = CONTEXT_BUDGET) {
+  // Only the files the uploader may read: an office's private knowledge never reaches another office's suggestion.
+  const rows = await KnowledgeFile.findAll({ where: { ...(knowledgeWhere(ctx) as object), char_count: { [Op.gt]: 0 } }, attributes: ['org_id', 'office_id', 'title', 'content'] })
+  const files = rows.filter((f) => canReadKnowledge(f, ctx))
   if (!files.length) return ''
 
   // Distinctive words of the document, weighted by how often they appear in it.
