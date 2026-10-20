@@ -11,8 +11,8 @@ dist
 
 # Uploaded attachments (only the top-level folder — server/api/uploads/ is code)
 /uploads/
-/docs/
 /database/
+/docs/
 
 # Environment files (copy .env.example → .env)
 .env
