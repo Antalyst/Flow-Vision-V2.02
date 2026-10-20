@@ -14,7 +14,10 @@ import type { Actor } from './auth.ts'
  * History is bucketed by Philippine day and projected with the Holt smoothing in forecast.ts.
  */
 
+// The people of the office, by role. Department Heads (managing, delegated, an umbrella's) are named as the
+// holder of a document but are not compared as workload: the head is who reads and balances the staff cards.
 const MEMBER_TYPES = ['DEPARTMENT_HEAD', 'STAFF']
+const WORKLOAD_TYPES = ['STAFF']
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
 const sum = (a: number[]) => a.reduce((x, y) => x + y, 0)
 const avg = (a: number[]) => (a.length ? sum(a) / a.length : null)
@@ -199,7 +202,7 @@ export async function officeForecastFor(user: Actor, query: Record<string, unkno
   const peakAhead = arrivalsProj.forecast.reduce((best, p) => (p[1] > best[1] ? p : best), arrivalsProj.forecast[0] ?? [today, 0])
 
   // ── Staff: who received, released and uploaded what, and where their load is heading ──
-  const staff = members.map((m) => {
+  const staff = members.filter((m) => WORKLOAD_TYPES.includes(m.account_type as string)).map((m) => {
     const id = m.id as string
     const received = zeros(days.length)
     const released = zeros(days.length)

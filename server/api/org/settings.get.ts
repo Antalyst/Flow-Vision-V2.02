@@ -17,7 +17,7 @@ export default defineApiHandler(async (event) => {
   requirePage(user, '/client/settings')
   const [org, types, usage, files, calendar, templates] = await Promise.all([
     Organization.findByPk(user.org_id),
-    DocumentType.findAll({ where: { org_id: user.org_id }, order: [['sort_order', 'ASC'], ['name', 'ASC']] }),
+    DocumentType.findAll({ where: { org_id: user.org_id }, include: [{ model: Office, as: 'office', attributes: ['id', 'name', 'code'] }], order: [['sort_order', 'ASC'], ['name', 'ASC']] }),
     Document.findAll({ where: { org_id: user.org_id }, attributes: ['category', [fn('COUNT', col('id')), 'count']], group: ['category'], raw: true }) as unknown as Promise<
       Array<{ category: string | null; count: number }>
     >,

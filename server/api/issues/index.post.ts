@@ -1,21 +1,20 @@
 import { Op } from 'sequelize'
-import { Document, Issue, User, ISSUE_PRIORITIES, ISSUE_TYPES } from '~~/server/lib/models.ts'
+import { Document, Issue, User } from '~~/server/lib/models.ts'
 import { openableWhere } from '~~/server/lib/document-queries.ts'
-import { issueIncludes } from '~~/server/lib/issues.ts'
+import { issueIncludes, readIssueInput } from '~~/server/lib/issues.ts'
 import { issueDto } from '~~/server/lib/serializers.ts'
 import { notify } from '~~/server/lib/notifications.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { badRequest } from '~~/server/lib/errors.ts'
-import * as v from '~~/server/lib/validate.ts'
 
-/** Every issue is about a document (issues.document_id is required). */
+/**
+ * Report an issue about a document (issues.document_id is required): { document_id, title, category,
+ * description }. The priority follows the category; "Other" needs a description.
+ */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event)
   const body = await readJson(event)
-  const title = v.reqStr(body, 'title', { label: 'Title' })
-  const description = v.str(body, 'description', { max: 5000 })
-  const category = v.oneOf(body, 'category', ISSUE_TYPES, { fallback: 'OTHER' })!
-  const severity = v.oneOf(body, 'severity', ISSUE_PRIORITIES, { fallback: 'MEDIUM' })!
+  const { title, category, description, priority: severity } = readIssueInput(body)
 
   const doc = body.document_id
     ? await Document.findOne({ where: { id: String(body.document_id), org_id: user.org_id, [Op.and]: [openableWhere(user)] }, attributes: ['id'] })

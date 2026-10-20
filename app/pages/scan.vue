@@ -136,7 +136,7 @@ async function onDecode(data: string) {
 async function verify(data: string) {
   const value = data.trim().toUpperCase()
   if (!qrApi.looksValid(value)) {
-    ui.error('Not a FlowVision document code', 'Expected the office code, the upload date and 6 digits, e.g. BCC100726123456')
+    ui.error('Not a FlowVision document code', 'Expected the office code, the upload date and 6 digits, e.g. CHO-102026-123456')
     resume()
     return
   }
@@ -238,7 +238,7 @@ onBeforeUnmount(() => {
 
     <form v-if="phase === 'scanning'" class="mt-2 flex gap-2" @submit.prevent="verify(manual)">
       <label class="sr-only" for="manual">Document code</label>
-      <input id="manual" v-model="manual" class="input font-mono text-[13px] uppercase" placeholder="Or type the code: BCC100726123456" autocomplete="off" />
+      <input id="manual" v-model="manual" class="input font-mono text-[13px] uppercase" placeholder="Or type the code: CHO-102026-123456" autocomplete="off" />
       <button class="btn btn-ghost shrink-0" :disabled="!manual.trim()">Check</button>
     </form>
 

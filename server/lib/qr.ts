@@ -8,16 +8,18 @@ export const OFFICE_CODE_RE = /^[A-Z0-9]+(?:-[A-Z0-9]+)*$/
 /**
  * Every document gets one routing code when it is uploaded, printed as its QR label and
  * scanned at every hand-off until the document is done:
- *   {OFFICE_CODE}{MMDDYY upload date}{6 random digits}, e.g. BCC100726123456
- * The prefix is the code of the office it originated from; the date (Philippine time) lets
- * people find documents by the day they were uploaded.
- * Labels printed before this format ({OFFICE_CODE}-{8 digits}, e.g. BCL-54967520) still scan.
+ *   {OFFICE_CODE}-{MMDDYY upload date}-{6 random digits}, e.g. CHO-SNTR-102026-123456
+ * The prefix is the code of the office (or umbrella office) it originated from; the date
+ * (Philippine time) lets people find documents by the day they were uploaded.
+ * Labels printed earlier still scan: {OFFICE_CODE}{MMDDYY}{6 digits} (e.g. BCC100726123456) and
+ * {OFFICE_CODE}-{8 digits} (e.g. BCL-54967520).
  */
+export const DASHED_ROUTING_CODE_RE = /^[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{6}-\d{6}$/
 export const ROUTING_CODE_RE = /^[A-Z0-9]+(?:-[A-Z0-9]+)*\d{12}$/
 export const LEGACY_ROUTING_CODE_RE = /^[A-Z0-9]+(?:-[A-Z0-9]+)*-\d{8}$/
-export const isRoutingCode = (code: string) => ROUTING_CODE_RE.test(code) || LEGACY_ROUTING_CODE_RE.test(code)
-// offices.code is at most 50 characters, plus 6 date digits and 6 random digits.
-const MAX_CODE_LENGTH = 62
+export const isRoutingCode = (code: string) => DASHED_ROUTING_CODE_RE.test(code) || ROUTING_CODE_RE.test(code) || LEGACY_ROUTING_CODE_RE.test(code)
+// offices.code is at most 50 characters, plus "-MMDDYY-" and 6 random digits.
+const MAX_CODE_LENGTH = 64
 
 const MANILA_PARTS = new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Manila', year: '2-digit', month: '2-digit', day: '2-digit' })
 
@@ -60,16 +62,27 @@ export function organizationCode(name: string, officeCodes: string[]) {
 /** `uploadedAt` sets the date segment: a replacement label keeps the document's upload date. */
 export function buildRoutingCode(officeCode: string, uploadedAt = new Date()) {
   const digits = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0')
-  return `${officeCode}${routingDate(uploadedAt)}${digits}`
+  return `${officeCode}-${routingDate(uploadedAt)}-${digits}`
+}
+
+/**
+ * The same code written the other way, so a code typed with or without the dashes around the date
+ * finds its label: CHO-102026-123456 ⇄ CHO102026123456. Null for the 8-digit legacy format.
+ */
+export function alternateRoutingCode(code: string) {
+  if (DASHED_ROUTING_CODE_RE.test(code)) return `${code.slice(0, -14)}${code.slice(-13, -7)}${code.slice(-6)}`
+  if (ROUTING_CODE_RE.test(code)) return `${code.slice(0, -12)}-${code.slice(-12, -6)}-${code.slice(-6)}`
+  return null
 }
 
 export function parseRoutingCode(raw: unknown) {
   const code = typeof raw === 'string' ? raw.trim().toUpperCase() : ''
   if (!code) throw badRequest('Scan or type the document’s QR code')
   if (code.length > MAX_CODE_LENGTH || !isRoutingCode(code)) {
-    throw badRequest('This is not a FlowVision document code (expected the office code, the date and 6 digits, e.g. BCC100726123456)')
+    throw badRequest('This is not a FlowVision document code (expected the office code, the date and 6 digits, e.g. CHO-102026-123456)')
   }
-  return { code, officeCode: LEGACY_ROUTING_CODE_RE.test(code) ? code.slice(0, -9) : code.slice(0, -12) }
+  const officeCode = DASHED_ROUTING_CODE_RE.test(code) ? code.slice(0, -14) : LEGACY_ROUTING_CODE_RE.test(code) ? code.slice(0, -9) : code.slice(0, -12)
+  return { code, officeCode }
 }
 
 /** SVG renders crisply when printed at 25mm × 25mm; the PNG data URL is for quick previews. */

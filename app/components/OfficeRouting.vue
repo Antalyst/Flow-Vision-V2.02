@@ -19,6 +19,10 @@ const STATE: Record<RoutingVisit['state'], { label: string; tone: Tone }> = {
 }
 
 const STAGE_ICON: Record<string, { icon: string; tone: Tone }> = {
+  INTERNAL_ROUTE_STARTED: { icon: 'shuffle', tone: 'primary' },
+  INTERNAL_ROUTE_MOVED: { icon: 'arrow-right', tone: 'primary' },
+  INTERNAL_ROUTE_COMPLETED: { icon: 'corner-up-left', tone: 'success' },
+  INTERNAL_ROUTE_ENDED: { icon: 'corner-up-left', tone: 'warning' },
   SUBMITTED: { icon: 'send', tone: 'primary' },
   RESUBMITTED: { icon: 'rotate-ccw', tone: 'primary' },
   ARRIVED: { icon: 'map-pin', tone: 'warning' },
@@ -75,11 +79,28 @@ function stageText(v: RoutingVisit, e: RoutingVisit['events'][number]) {
       return `Approved${who ? ` by ${who}` : ''}`
     case 'RETURNED':
       return `Returned to the submitter${who ? ` by ${who}` : ''}`
+    case 'HANDED_TO_UMBRELLA':
+      return `Handed to an umbrella office${who ? ` by ${who}` : ''}`
+    case 'RETURNED_FROM_UMBRELLA':
+      return `Returned from the umbrella office${who ? ` by ${who}` : ''}`
+    // Internal route moves stay inside this office's route step (they are not route checkpoints).
+    case 'INTERNAL_ROUTE_STARTED':
+      return `Internal route${e.internal?.route_name ? ` “${e.internal.route_name}”` : ''} started${who ? ` by ${who}` : ''}${e.internal?.to_office ? ` → ${e.internal.to_office.name}` : ''}${internalStep(e)}`
+    case 'INTERNAL_ROUTE_MOVED':
+      return `Passed to the next unit${who ? ` by ${who}` : ''}${e.internal?.to_office ? ` → ${e.internal.to_office.name}` : ''}${internalStep(e)}`
+    case 'INTERNAL_ROUTE_COMPLETED':
+      return `Internal route${e.internal?.route_name ? ` “${e.internal.route_name}”` : ''} completed${who ? ` by ${who}` : ''} — back to this office`
+    case 'INTERNAL_ROUTE_ENDED':
+      return `Internal route${e.internal?.route_name ? ` “${e.internal.route_name}”` : ''} ended early${who ? ` by ${who}` : ''} — back to this office`
     default:
       return `${EVENT_LABELS[e.type] ?? e.type}${who ? ` · ${who}` : ''}`
   }
 }
 
+const internalStep = (e: RoutingVisit['events'][number]) => (e.internal?.step && e.internal?.steps ? ` (internal step ${e.internal.step} of ${e.internal.steps})` : '')
+
+const AWAY = ['HANDED_TO_UMBRELLA', 'INTERNAL_ROUTE_STARTED', 'INTERNAL_ROUTE_MOVED']
+const BACK = ['RETURNED_FROM_UMBRELLA', 'INTERNAL_ROUTE_COMPLETED', 'INTERNAL_ROUTE_ENDED']
 
 function handOver(v: RoutingVisit): { icon: string; tone: Tone; text: string } {
   const to = v.to_office?.name ?? 'the next office'
@@ -100,6 +121,19 @@ function handOver(v: RoutingVisit): { icon: string; tone: Tone; text: string } {
         return { icon: 'users', tone: 'warning', text: `Passed to the next staff${by} — waiting for another staff member to scan it in` }
       }
       if (v.released_at && !v.picked_up_at) return { icon: 'package', tone: 'warning', text: `Released — waiting for ${v.messenger ? fullName(v.messenger) : 'the messenger'} to pick it up for ${to}` }
+      {
+        // Handed to one of the office's umbrella units, or just back from one (it is scanned in again here).
+        // An internal route is a series of such moves; the last one tells where it is.
+        const unit = v.events.findLast((e) => AWAY.includes(e.type) || BACK.includes(e.type))
+        if (unit && AWAY.includes(unit.type)) {
+          if (unit.type === 'HANDED_TO_UMBRELLA') return { icon: 'git-branch', tone: 'warning', text: 'With an umbrella office of this office — it comes back here before it moves on' }
+          const where = unit.internal?.to_office?.name ?? 'a unit of this office'
+          return { icon: 'shuffle', tone: 'warning', text: `On internal route${unit.internal?.route_name ? ` “${unit.internal.route_name}”` : ''}: with ${where}${internalStep(unit)} — it comes back here before it moves on` }
+        }
+        if (unit && BACK.includes(unit.type) && !v.events.slice(v.events.lastIndexOf(unit) + 1).some((e) => e.type === 'RECEIVED')) {
+          return { icon: 'inbox', tone: 'warning', text: unit.type === 'RETURNED_FROM_UMBRELLA' ? 'Back from the umbrella office — waiting to be scanned in again' : 'Back from its internal route — waiting to be scanned in again' }
+        }
+      }
       if (v.received_at) return { icon: 'edit-3', tone: 'primary', text: 'Being processed at this office' }
       return { icon: 'inbox', tone: 'warning', text: 'Waiting to be received (QR scan)' }
     default:

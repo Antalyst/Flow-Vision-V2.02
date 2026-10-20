@@ -2,12 +2,12 @@ import { User } from '~~/server/lib/models.ts'
 import { generateTempPassword, hashPassword, revokeAllSessions } from '~~/server/lib/auth.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { notFound } from '~~/server/lib/errors.ts'
-import { canManageMember, requirePage, TEAM_PAGE } from '~~/server/lib/team.ts'
+import { canManageMember, officeInclude, requirePage, TEAM_PAGE } from '~~/server/lib/team.ts'
 
 export default defineApiHandler(async (event) => {
   const admin = await requireUser(event, 'ADMIN', 'DEPARTMENT_HEAD', 'STAFF')
   requirePage(admin, TEAM_PAGE[admin.account_type]!)
-  const user = await User.findOne({ where: { id: routeParam(event, 'id'), org_id: admin.org_id } })
+  const user = await User.findOne({ where: { id: routeParam(event, 'id'), org_id: admin.org_id }, include: [officeInclude] })
   if (!user || !canManageMember(admin, user)) throw notFound('User')
   const tempPassword = generateTempPassword()
   // Back to 'pending' (temporary password) unless the account is suspended.

@@ -2,6 +2,7 @@ import { Op } from 'sequelize'
 import { User, type Row } from './models.ts'
 import { pendingPass, readLog } from './tracking-log.ts'
 import { parsePageAccess } from '../../shared/page-access.ts'
+import { parsePermissions } from '../../shared/dh-permissions.ts'
 import { dayMinutes, isWorkingTime, nextWorkingStart, workingMinutesBetween } from '../../shared/work-calendar.ts'
 import { loadWorkCalendar, type LoadedCalendar } from './work-calendar.ts'
 
@@ -36,6 +37,9 @@ export function officeDto(o: Row | null | undefined) {
     department_code: o.department ?? '',
     department_name: o.department ?? '',
     location: o.address ?? null,
+    // Umbrella offices sit under a parent office.
+    parent_office_id: (o.parent_office_id as string | null) ?? null,
+    ...(o.parent !== undefined && { parent: o.parent ? { id: o.parent.id as string, name: o.parent.name as string, code: o.parent.code as string } : null }),
     is_final_checkpoint: Boolean(o.is_final_checkpoint),
     is_active: o.status !== 'inactive',
     ...(memberCount != null && { member_count: Number(memberCount) }),
@@ -158,7 +162,8 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
   const liaisonId = atOffice || moving ? (val(d, 'visit_liaison_id') as string | null) : null
   // Flagged and on its way back to the previous office (released for it, or being carried there).
   const sendBack = String(val(d, 'send_back_raw') ?? '')
-  const sentBack = liaisonId && sendBack.startsWith('"') ? { office_id: sendBack.slice(1, 37), office_name: (val(d, 'send_back_office_name') as string | null) ?? null } : null
+  // A send-back waiting for one of that office's liaisons to claim it has no messenger yet.
+  const sentBack = (atOffice || moving) && sendBack.startsWith('"') ? { office_id: sendBack.slice(1, 37), office_name: (val(d, 'send_back_office_name') as string | null) ?? null } : null
   const slaHours = val(d, 'step_sla_hours')
   const fileName = d.file_url ? String(d.file_url).split('/').pop() : null
   return {
@@ -167,7 +172,7 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
     route_id: d.route_id,
     route_name: val(d, 'route_name') ?? null,
     tracking_number: trackingNumber(d.id),
-    // The routing code printed on the document's QR label ({OFFICE}{MMDDYY}{6 digits}, e.g. BCC100726123456).
+    // The routing code printed on the document's QR label ({OFFICE}-{MMDDYY}-{6 digits}, e.g. CHO-SNTR-102026-123456).
     qr_code: val(d, 'qr_code') ?? null,
     title: d.title,
     description: d.description ?? null,
@@ -198,7 +203,11 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
     total_steps: Number(val(d, 'total_steps') ?? 0),
     next_office_name: sentBack ? sentBack.office_name : (val(d, 'next_office_name') ?? null),
     sent_back: sentBack,
+    // Sent back and no liaison has claimed the pickup yet.
+    return_pickup_open: Boolean(sentBack) && atOffice && !liaisonId,
     open_issues: Number(val(d, 'open_issues') ?? 0),
+    // The name of the internal route it is following, while it follows one (inside its office's route step).
+    internal_route_name: (val(d, 'internal_route_name') as string | null) ?? null,
     step_sla_hours: slaHours == null ? null : Number(slaHours),
     step_entered_at: iso(val(d, 'visit_arrived_at')),
     currentOffice: officeDto(d.currentOffice),
@@ -356,6 +365,15 @@ export function routingVisits(visits: Row[], users: Map<string, Row>, offices: M
         messenger: ['PICKUP_REQUESTED', 'MESSENGER_REASSIGNED', 'SENT_BACK'].includes(e.type) ? person(e.meta?.liaison_id) : null,
         // A receipt from the previous desk of the same office.
         from_staff: person(e.meta?.from_staff_id),
+        // Internal route moves (inside the office's route step): which route, where to, and which of its steps.
+        ...(String(e.type).startsWith('INTERNAL_ROUTE_') && {
+          internal: {
+            route_name: (e.meta?.route_name as string | undefined) ?? null,
+            to_office: office(e.meta?.to_office_id),
+            step: typeof e.meta?.internal_step === 'number' ? e.meta.internal_step : null,
+            steps: typeof e.meta?.internal_steps === 'number' ? e.meta.internal_steps : null,
+          },
+        }),
       })),
     }
   })
@@ -367,7 +385,7 @@ export function referencedOfficeIds(visits: Row[]) {
   for (const v of visits) {
     if (v.office_id) ids.add(v.office_id)
     for (const e of readLog(v)) {
-      for (const key of ['from_office_id', 'next_office_id']) if (typeof e.meta?.[key] === 'string') ids.add(e.meta[key] as string)
+      for (const key of ['from_office_id', 'next_office_id', 'to_office_id', 'umbrella_id']) if (typeof e.meta?.[key] === 'string') ids.add(e.meta[key] as string)
     }
   }
   return [...ids]
@@ -468,5 +486,10 @@ export function memberDto(u: Row) {
     last_login_at: iso(u.last_login),
     liaisonProfile: liaisonDto(u.liaisonProfile),
     page_access: parsePageAccess(u.page_access),
+    // A Department Head assigned by a Department Head: who, when, and what it may do.
+    delegated: u.account_type === 'DEPARTMENT_HEAD' && Boolean(u.assigned_by),
+    assigned_by: (u.assigned_by as string | null) ?? null,
+    assigned_at: iso(u.assigned_at),
+    permissions: u.account_type === 'DEPARTMENT_HEAD' && u.assigned_by ? parsePermissions(u.permissions) : null,
   }
 }

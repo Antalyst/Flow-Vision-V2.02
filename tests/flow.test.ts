@@ -208,8 +208,8 @@ function uploadForm(title: string, files: SampleFile[], routeId: string, pages?:
   return fd
 }
 
-// New format {OFFICE}{MMDDYY}{6 digits}, e.g. BCC100726123456.
-const QR_RE = /^[A-Z0-9-]+\d{12}$/
+// Format {OFFICE}-{MMDDYY}-{6 digits}, e.g. CHO-SNTR-102026-123456.
+const QR_RE = /^[A-Z0-9-]+-\d{6}-\d{6}$/
 const AT_OFFICE = ['START', 'ARRIVED_AT_OFFICE']
 
 // ---------------------------------------------------------------------------
@@ -460,7 +460,7 @@ async function atOffice(doc: TestDoc, view: any, strict: boolean) {
   }
 }
 
-/** The receiver flags an issue on the document and sends it back to the previous office with one of their office's messengers. */
+/** The receiver flags an issue and sends it back to the previous office; a liaison of that office claims the pickup and brings it back. */
 async function flagAndSendBack(doc: TestDoc, view: any, a: Session, b: Session, strict: boolean) {
   const d = view.document
   const here = officeName(d.current_office_id)
@@ -477,7 +477,6 @@ async function flagAndSendBack(doc: TestDoc, view: any, a: Session, b: Session, 
     title: `E2E: missing signature (${doc.label})`,
     description: 'Flagged by the automated flow test.',
     category: 'MISSING_DOCUMENT',
-    severity: 'HIGH',
   })
   must(flagged.status === 201, `${b.name} flags an issue on the document`, why(flagged, '201'))
   const issue = flagged.data.issue
@@ -493,25 +492,44 @@ async function flagAndSendBack(doc: TestDoc, view: any, a: Session, b: Session, 
   const flaggedView = await viewDoc(client, doc.id)
   check(flaggedView.document.open_issues >= 1, 'Document shows it has an open issue', `open_issues = ${flaggedView.document.open_issues}`)
 
-  const [m] = await freeMessengers(d.current_office_id, 1)
   if (strict) {
-    const byA = await api(a, 'POST', `/documents/${doc.id}/send-back`, { issue_id: issue.id, liaison_user_id: m!.id })
+    const byA = await api(a, 'POST', `/documents/${doc.id}/send-back`, { issue_id: issue.id })
     check(refused(byA, 403), `${a.name} can't send it back (only ${b.name}, who received it, can)`, why(byA, '403'))
-    const noIssue = await api(b, 'POST', `/documents/${doc.id}/send-back`, { liaison_user_id: m!.id })
+    const noIssue = await api(b, 'POST', `/documents/${doc.id}/send-back`, {})
     check(refused(noIssue, 400), 'Sending back without flagging an issue is rejected', why(noIssue, '400'))
-    const otherOffice = [...messengerPools.keys()].find((id) => id !== d.current_office_id) ?? target.office_id
-    const [foreign] = await freeMessengers(otherOffice, 1)
-    const wrongMessenger = await api(b, 'POST', `/documents/${doc.id}/send-back`, { issue_id: issue.id, liaison_user_id: foreign!.id })
-    check(refused(wrongMessenger, 409) && codeOf(wrongMessenger) === 'MESSENGER_OTHER_OFFICE', `A messenger of ${officeName(otherOffice)} can't take it back`, why(wrongMessenger, '409 MESSENGER_OTHER_OFFICE'))
+    const [own] = await freeMessengers(d.current_office_id, 1)
+    const picked = await api(b, 'POST', `/documents/${doc.id}/send-back`, { issue_id: issue.id, liaison_user_id: own!.id })
+    check(refused(picked, 400), `${here} can't choose the messenger: the liaisons of ${targetName} fetch it`, why(picked, '400'))
   }
 
-  const sent = await api(b, 'POST', `/documents/${doc.id}/send-back`, { issue_id: issue.id, liaison_user_id: m!.id, remarks: 'E2E: please complete the signature' })
-  must(sent.ok, `${b.name} sends it back with ${here}'s messenger ${m!.name}`, why(sent))
+  const sent = await api(b, 'POST', `/documents/${doc.id}/send-back`, { issue_id: issue.id, remarks: 'E2E: please complete the signature' })
+  must(sent.ok, `${b.name} sends it back to ${targetName}`, why(sent))
   doc.flagged = true
-  doc.messenger = m!
   check(sent.data.issue?.status === 'IN_PROGRESS', 'Issue status changes OPEN → IN PROGRESS', `status = ${sent.data.issue?.status}`)
   check(sent.data.document?.sent_back?.office_id === target.office_id, `Document shows it is going back to ${targetName}`, `sent_back = ${JSON.stringify(sent.data.document?.sent_back)}`)
-  check(sent.data.document?.assigned_liaison_id === m!.id, 'Document shows the messenger taking it back', `assigned_liaison_id = ${sent.data.document?.assigned_liaison_id}`)
+  check(sent.data.document?.return_pickup_open === true && !sent.data.document?.assigned_liaison_id, 'Nobody is assigned yet: the return pickup is open', JSON.stringify({ open: sent.data.document?.return_pickup_open, liaison: sent.data.document?.assigned_liaison_id }))
+
+  // A liaison of the office it goes back to claims the pickup.
+  const [m] = await freeMessengers(target.office_id, 1)
+  const told = await api(m!, 'GET', '/notifications?limit=100')
+  check(told.data?.data?.some((n: any) => n.type === 'RETURN_PICKUP_AVAILABLE' && n.document_id === doc.id), `${targetName}'s liaisons are notified the pickup is available`, 'no RETURN_PICKUP_AVAILABLE notification')
+  if (strict) {
+    const otherOffice = [...messengerPools.keys()].find((id) => id !== target.office_id && id !== d.current_office_id)
+    const [foreign] = otherOffice ? await freeMessengers(otherOffice, 1) : []
+    if (foreign) {
+      const wrong = await api(foreign, 'POST', `/documents/${doc.id}/return-claim`)
+      check(refused(wrong, 403), `A liaison of ${officeName(otherOffice!)} can't claim it`, why(wrong, '403'))
+    }
+  }
+  const claimed = await api(m!, 'POST', `/documents/${doc.id}/return-claim`)
+  must(claimed.ok, `${m!.name} (${targetName}) claims the return pickup`, why(claimed))
+  doc.messenger = m!
+  if (strict) {
+    const again = await api(m!, 'POST', `/documents/${doc.id}/return-claim`)
+    check(refused(again, 409), 'Claiming it again is refused', why(again, '409'))
+  }
+  const afterClaim = await viewDoc(client, doc.id)
+  check(afterClaim.document?.assigned_liaison_id === m!.id && afterClaim.document?.sent_back?.office_id === target.office_id, 'Document shows the liaison taking it back', `assigned_liaison_id = ${afterClaim.document?.assigned_liaison_id}`)
 
   const targetDesk = desks.get(target.office_id)?.[0]
   if (targetDesk) {
@@ -645,7 +663,8 @@ async function audit(doc: TestDoc, strict: boolean) {
     for (const p of people.values()) {
       const theirs = tracking.filter((e) => e.actor?.id === p.id && e.event_type !== 'CREATED')
       if (!theirs.length) continue
-      const mine = await api(p, 'GET', `/activity?scope=mine&days=1&limit=200&q=${encodeURIComponent(doc.qr)}`)
+      // By tracking number: the QR code is only shown (and searchable) for whoever has the document now.
+      const mine = await api(p, 'GET', `/activity?scope=mine&days=1&limit=200&q=${encodeURIComponent(view.document.tracking_number)}`)
       const ids = new Set((mine.data?.data ?? []).map((r: any) => r.id))
       const lost = theirs.filter((e) => !ids.has(e.id))
       check(mine.ok && !lost.length, `${p.name}'s "My actions" log has their ${theirs.length} step(s)`, mine.ok ? `missing ${lost.map((e) => e.event_type).join(', ')}` : why(mine))
@@ -801,8 +820,7 @@ async function clientOriginSendBackRule() {
     const first = route.steps[0]
     await carry(doc, first, false)
     const receiver = desks.get(first.office_id)![0]!
-    const [m] = await freeMessengers(first.office_id, 1)
-    const res = await api(receiver, 'POST', `/documents/${doc.id}/send-back`, { title: 'E2E: wrong form', category: 'OTHER', liaison_user_id: m!.id })
+    const res = await api(receiver, 'POST', `/documents/${doc.id}/send-back`, { title: 'E2E: wrong form', category: 'OTHER', description: 'The form is the old version.' })
     check(refused(res, 409) && codeOf(res) === 'NO_PREVIOUS_OFFICE', `${officeName(first.office_id)} can't send an admin upload back (no office before it)`, why(res, '409 NO_PREVIOUS_OFFICE'))
     const issues = await api(client, 'GET', `/issues?document_id=${doc.id}`)
     check((issues.data?.data ?? []).length === 0, 'The refused send-back leaves no stray issue behind', `${issues.data?.data?.length} issue(s) on the document`)

@@ -2,11 +2,13 @@ import { Op, fn, type WhereOptions } from 'sequelize'
 import type { Actor } from './auth.ts'
 import { Approval, Document, DocumentTracking, Liaison, Office, OrganizationRoute, QrCode, User, sequelize, type AccountType, type Row } from './models.ts'
 import { currentVisit, liaisonWorkloadSql, submittedFromOffice, visibleWhere } from './document-queries.ts'
+import { idsCondition, qrAccessibleIds, qrSearchIds } from './qr-access.ts'
 import { wordsOf } from './knowledge.ts'
 import type { FoundDocument, KnowledgeSourceRef } from './ai-history.ts'
 import { AT_OFFICE, CARRYING } from './serializers.ts'
 import { KNOWLEDGE_FOCUSES, detectFocus, listCharterServices, resolveOfficeTarget, searchKnowledge, type KnowledgeFocus, type OfficeTarget } from './ai-knowledge.ts'
 import { resolveAiContext, scopeDescription, type AiUserContext } from './ai-context.ts'
+import { hasPermission } from './dh-access.ts'
 import type { ChatCompletionTool } from './ai-groq.ts'
 
 /**
@@ -57,7 +59,7 @@ export const ASSISTANT_TOOLS: ChatCompletionTool[] = [
           office: { type: 'string', description: 'Name or code of the office the document is currently at' },
           document_type: { type: 'string', description: 'Document type name, e.g. Purchase Request' },
           route: { type: 'string', description: 'Document Route name' },
-          search: { type: 'string', description: 'Words from the title or description, or a tracking code like BCC100726123456' },
+          search: { type: 'string', description: 'Words from the title or description, or a tracking code like CHO-102026-123456' },
           submitted_within_days: { type: 'integer', description: 'Only documents submitted in the last N days' },
           limit: { type: 'integer', description: 'How many documents to list (1-50, default 20). Totals always cover every match.' },
         },
@@ -304,7 +306,9 @@ async function getDocumentsSummary(actor: Actor, args: Args) {
       [Op.or]: [
         { title: { [Op.like]: p } },
         { description: { [Op.like]: p } },
-        lit(`EXISTS (SELECT 1 FROM qr_codes q WHERE q.document_id = documents.id AND q.qr_code_data LIKE ${esc(p)})`),
+        // The label of a document on its way to the user's office is hidden, so it isn't searchable either.
+        // By QR code only among documents whose QR this user may see (qr-access.ts).
+        idsCondition(await qrSearchIds(actor, p)),
       ],
     })
   }
@@ -342,6 +346,8 @@ async function getDocumentsSummary(actor: Actor, args: Args) {
     }),
   ])
 
+  // The QR code only where this user may see it (qr-access.ts).
+  const qrVisible = await qrAccessibleIds(actor, docs.map((d) => d.id as string))
   const officeNames = new Map(
     (await Office.findAll({ where: { org_id: actor.org_id, id: byOfficeRaw.map((r) => r.current_office_id).filter(Boolean) }, attributes: ['id', 'name'] })).map((o) => [o.id, o.name]),
   )
@@ -355,7 +361,7 @@ async function getDocumentsSummary(actor: Actor, args: Args) {
     const nextOffice = d.get('next_office') as string | null
     const office = d.currentOffice?.name ?? (status === 'START' ? 'Origin (the organization)' : null)
     return {
-      tracking_code: (d.get('tracking_code') as string | null) ?? null,
+      tracking_code: qrVisible.has(d.id as string) ? ((d.get('tracking_code') as string | null) ?? null) : null,
       title: d.title,
       document_type: d.category ?? null,
       priority: titleCase(d.priority),
@@ -473,7 +479,7 @@ async function findDocuments(actor: Actor, args: Args) {
     and.push({
       [Op.or]: [
         ...words.flatMap((w) => [{ title: { [Op.like]: likePattern(w) } }, { description: { [Op.like]: likePattern(w) } }, { category: { [Op.like]: likePattern(w) } }]),
-        ...(code ? [lit(`EXISTS (SELECT 1 FROM qr_codes q WHERE q.document_id = documents.id AND q.qr_code_data LIKE ${esc(likePattern(code))})`)] : []),
+        ...(code ? [idsCondition(await qrSearchIds(actor, likePattern(code)))] : []),
       ],
     })
   }
@@ -519,6 +525,7 @@ async function findDocuments(actor: Actor, args: Args) {
     limit: 300,
   })
 
+  const qrVisible = await qrAccessibleIds(actor, rows.map((d) => d.id as string))
   const phrase = query?.toLowerCase() ?? ''
   const scored = rows.map((d) => {
     const title = String(d.title ?? '').toLowerCase()
@@ -541,7 +548,7 @@ async function findDocuments(actor: Actor, args: Args) {
       }
     }
     if (phrase.length > 3 && title.includes(phrase)) score += 4
-    const trackingCode = (d.get('tracking_code') as string | null) ?? null
+    const trackingCode = qrVisible.has(d.id as string) ? ((d.get('tracking_code') as string | null) ?? null) : null
     if (code && trackingCode?.includes(code)) {
       score += 10
       matched.add('tracking code')
@@ -607,6 +614,8 @@ async function getPendingApprovals(actor: Actor, args: Args) {
 
   if (actor.account_type === 'DEPARTMENT_HEAD') {
     if (!actor.office_id) return { scope: SCOPE_NOTE.DEPARTMENT_HEAD, note: 'Your account is not assigned to an office yet.', count: 0 }
+    // A delegated Department Head without "Approve or return" doesn't see the office's approvals.
+    if (!hasPermission(actor, 'DECIDE_APPROVALS')) return { scope: SCOPE_NOTE.DEPARTMENT_HEAD, note: 'This account does not have the “Approve or return” permission, so it cannot view approvals.', count: 0 }
     where.office_id = actor.office_id
   } else if (actor.account_type === 'STAFF') {
     where.staff_id = actor.id
@@ -659,9 +668,10 @@ async function getPendingApprovals(actor: Actor, args: Args) {
     grouped.set(key, entry)
   }
 
+  const qrVisible = await qrAccessibleIds(actor, [...grouped.values()].map(({ row }) => row.document_id as string))
   const now = Date.now()
   const all = [...grouped.values()].map(({ row: r, staff }) => ({
-    tracking_code: r.document?.qr?.qr_code_data ?? null,
+    tracking_code: qrVisible.has(r.document_id as string) ? (r.document?.qr?.qr_code_data ?? null) : null,
     title: r.document?.title,
     document_type: r.document?.category ?? null,
     priority: titleCase(r.document?.priority),

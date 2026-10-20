@@ -40,10 +40,21 @@ onMounted(() => {
 const pickerOpen = ref(false)
 const people = ref<UserSummary[]>([])
 const search = ref('')
+const peopleLoading = ref(false)
+const peopleError = ref<string | null>(null)
 async function openPicker() {
   pickerOpen.value = true
   search.value = ''
-  if (!people.value.length) people.value = (await api.get<{ data: UserSummary[] }>('/users')).data.filter((u) => u.id !== auth.user?.id)
+  if (people.value.length || peopleLoading.value) return
+  peopleLoading.value = true
+  peopleError.value = null
+  try {
+    people.value = (await api.get<{ data: UserSummary[] }>('/users')).data.filter((u) => u.id !== auth.user?.id)
+  } catch (err) {
+    peopleError.value = apiErrorMessage(err, 'Could not load the people in your organization')
+  } finally {
+    peopleLoading.value = false
+  }
 }
 const filteredPeople = computed(() => people.value.filter((p) => !search.value || fullName(p).toLowerCase().includes(search.value.toLowerCase())))
 
@@ -127,7 +138,7 @@ const preview = (m?: Message) => (m ? `${m.sender_id === auth.user?.id ? 'You: '
             <div class="min-w-0 flex-1">
               <p class="truncate font-display font-semibold">{{ active.title }}</p>
               <p class="text-xs text-ink-2">
-                {{ active.kind === 'OFFICE' ? 'Everyone at your office' : active.kind === 'DOCUMENT' ? 'Document thread' : ROLE_META[active.user.account_type].label }}
+                {{ active.kind === 'OFFICE' ? 'Everyone at your office' : active.kind === 'DOCUMENT' ? 'Document thread' : roleMeta(active.user.account_type).label }}
               </p>
             </div>
             <NuxtLink v-if="active.kind === 'DOCUMENT'" :to="`/documents/${active.id}`" class="btn btn-sm btn-ghost">Open document</NuxtLink>
@@ -142,13 +153,19 @@ const preview = (m?: Message) => (m ? `${m.sender_id === auth.user?.id ? 'You: '
         <FIcon name="search" :size="16" class="absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-2" />
         <input v-model="search" class="input pl-10" placeholder="Search people" aria-label="Search people" />
       </div>
+      <p v-if="peopleLoading" class="flex items-center gap-2 px-2.5 py-3 text-sm text-ink-2"><span class="spinner" /> Loading people…</p>
+      <div v-else-if="peopleError" class="rounded-xl bg-danger/10 px-3 py-3 text-sm text-danger-ink">
+        {{ peopleError }}
+        <button class="btn btn-sm btn-ghost mt-2" @click="openPicker">Try again</button>
+      </div>
+      <p v-else-if="!filteredPeople.length" class="px-2.5 py-3 text-sm text-ink-2">{{ search ? 'Nobody matches that name.' : 'There is nobody else in your organization yet.' }}</p>
       <ul class="max-h-80 space-y-1 overflow-y-auto">
         <li v-for="p in filteredPeople" :key="p.id">
           <button class="flex w-full items-center gap-3 rounded-xl p-2.5 text-left hover:bg-ink/[0.04]" @click="openDirect(p); pickerOpen = false">
             <UserAvatar :user="p" size="sm" />
             <span class="min-w-0 flex-1">
               <span class="block truncate text-sm font-medium">{{ fullName(p) }}</span>
-              <span class="block truncate text-xs text-ink-2">{{ ROLE_META[p.account_type].label }}<template v-if="p.office"> · {{ p.office.name }}</template></span>
+              <span class="block truncate text-xs text-ink-2">{{ roleMeta(p.account_type).label }}<template v-if="p.office"> · {{ p.office.name }}</template></span>
             </span>
           </button>
         </li>

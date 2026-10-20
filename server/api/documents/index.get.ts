@@ -2,6 +2,7 @@ import { Op, type WhereOptions } from 'sequelize'
 import { sequelize, Document, DOCUMENT_STATUSES, PRIORITIES, User } from '~~/server/lib/models.ts'
 import { badRequest } from '~~/server/lib/errors.ts'
 import { defaultScope, documentAttributes, documentIncludes, scopeWhere, visibleWhere } from '~~/server/lib/document-queries.ts'
+import { applyQrPolicy, idsCondition, qrSearchIds } from '~~/server/lib/qr-access.ts'
 import { documentDtos } from '~~/server/lib/serializers.ts'
 import * as v from '~~/server/lib/validate.ts'
 import { parseRoutingDate } from '~~/server/lib/qr.ts'
@@ -53,7 +54,8 @@ export default defineApiHandler(async (event) => {
   if (search) {
     const idPrefix = search.replace(/^FV-?/i, '').toLowerCase()
     const qrMatch = /^[A-Z0-9-]{4,}$/i.test(search)
-      ? [sequelize.literal(`EXISTS (SELECT 1 FROM qr_codes q WHERE q.document_id = documents.id AND q.qr_code_data LIKE ${sequelize.escape(`%${search.toUpperCase()}%`)})`)]
+      ? // Only documents whose QR code this account may see match by code (qr-access.ts): a search must not reveal a hidden code.
+        [idsCondition(await qrSearchIds(user, `%${search.toUpperCase()}%`))]
       : []
     const day = parseRoutingDate(search)
     and.push({
@@ -70,10 +72,11 @@ export default defineApiHandler(async (event) => {
     where: { [Op.and]: and },
     attributes: documentAttributes,
     include: documentIncludes,
-    order: [['updated_at', 'DESC']],
+    // Default: most recent activity first. `sort=submitted`: newest submission first (document pickers).
+    order: query.sort === 'submitted' ? [['submitted_at', 'DESC'], ['created_at', 'DESC']] : [['updated_at', 'DESC']],
     limit,
     offset,
     distinct: true,
   })
-  return { data: await documentDtos(rows), meta: { page, limit, total: count, scope } }
+  return { data: await applyQrPolicy(await documentDtos(rows), user), meta: { page, limit, total: count, scope } }
 })

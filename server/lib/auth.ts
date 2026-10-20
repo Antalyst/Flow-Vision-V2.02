@@ -6,6 +6,7 @@ import { liaisonDto, officeDto } from './serializers.ts'
 import { env } from './env.ts'
 import { parsePageAccess } from '../../shared/page-access.ts'
 import { imageKey, imageVersion } from './org-assets.ts'
+import { effectivePermissions, isDelegatedHead } from './dh-access.ts'
 
 /** A signed-in user with `office` and `organization` loaded. */
 export type Actor = Row
@@ -53,7 +54,8 @@ export const fullNameOf = (first?: string | null, last?: string | null) => [firs
 export async function loadActor(userId: string): Promise<Actor | null> {
   const user = await User.findByPk(userId, {
     include: [
-      { model: Office, as: 'office' },
+      // An umbrella office's parent office comes along (its name and code are shown, and its head manages it).
+      { model: Office, as: 'office', include: [{ model: Office, as: 'parent', attributes: ['id', 'name', 'code'] }] },
       { model: Organization, as: 'organization', attributes: ['id', 'name', 'status', 'logo_url'] },
     ],
   })
@@ -136,5 +138,8 @@ export async function serializeActor(user: Actor) {
     has_approval_authority: hasApprovalAuthority(user),
     liaison: liaisonDto(liaison),
     page_access: parsePageAccess(user.page_access),
+    // Department Heads: what this account may do (every permission unless it is a delegate).
+    delegated: isDelegatedHead(user),
+    permissions: effectivePermissions(user),
   }
 }

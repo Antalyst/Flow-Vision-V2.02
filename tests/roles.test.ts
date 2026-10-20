@@ -119,7 +119,8 @@ describe('approval authority', () => {
 describe('account management boundaries', () => {
   it('who may create which accounts', () => {
     assert.equal(managedTypesOf(person('ADMIN')), null) // everyone in the organization
-    assert.deepEqual([...managedTypesOf(person('DEPARTMENT_HEAD'))!], ['STAFF', 'LIAISON'])
+    // A Department Head also adds the head of each of its umbrella offices.
+    assert.deepEqual([...managedTypesOf(person('DEPARTMENT_HEAD'))!], ['STAFF', 'LIAISON', 'DEPARTMENT_HEAD'])
     assert.deepEqual([...managedTypesOf(person('STAFF'))!], ['LIAISON'])
     assert.deepEqual([...managedTypesOf(person('LIAISON'))!], [])
   })

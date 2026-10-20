@@ -2,15 +2,17 @@ import { sequelize, ACCOUNT_TYPES, Liaison, User } from '~~/server/lib/models.ts
 import { fullNameOf, generateTempPassword, hashPassword } from '~~/server/lib/auth.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { conflict, forbidden } from '~~/server/lib/errors.ts'
-import { managedTypesOf, officeInclude, readPageAccess, requirePage, resolveOffice, syncLiaisonProfile, TEAM_PAGE } from '~~/server/lib/team.ts'
+import { assertManagerPlacement, managedTypesOf, officeInclude, readPageAccess, requirePage, resolveOffice, syncLiaisonProfile, TEAM_PAGE } from '~~/server/lib/team.ts'
 import { memberDto } from '~~/server/lib/serializers.ts'
+import { readGrantedPermissions, recordAssignment } from '~~/server/lib/dh-access.ts'
 import * as v from '~~/server/lib/validate.ts'
 
 /**
  * Invite a team member. The account starts as status 'pending' with a one-time
  * temporary password the inviter shares; it becomes 'active' when they set their own.
- * The ADMIN invites anyone; a DEPARTMENT_HEAD creates STAFF and LIAISON (messenger) accounts for their own office;
- * a STAFF member creates LIAISON accounts for their own office.
+ * The ADMIN invites anyone; a DEPARTMENT_HEAD creates STAFF and LIAISON (messenger) accounts for their own office
+ * and its umbrella offices, and the head (DEPARTMENT_HEAD) of each umbrella office; a STAFF member creates LIAISON
+ * accounts for their own office.
  * The inviter also chooses which pages the new account may open (`page_access`, omitted = every page).
  */
 export default defineApiHandler(async (event) => {
@@ -33,8 +35,14 @@ export default defineApiHandler(async (event) => {
   const meta = requestMeta(event)
 
   const userId = await sequelize.transaction(async (transaction) => {
-    // Accounts a DEPARTMENT_HEAD or STAFF member creates always belong to their own office.
-    const office = await resolveOffice(inOwnOffice ? admin.office_id : body.office_id, admin.org_id, accountType, transaction)
+    // Accounts a DEPARTMENT_HEAD or STAFF member creates belong to their own office — or, for a
+    // DEPARTMENT_HEAD, to one of its umbrella offices.
+    const office = await resolveOffice(inOwnOffice ? body.office_id || admin.office_id : body.office_id, admin.org_id, accountType, transaction)
+    if (inOwnOffice) await assertManagerPlacement(admin, accountType, office)
+    // A Department Head added by a Department Head is a delegate: assigned by them, with only the
+    // permissions they grant (each one they hold themselves). One the ADMIN adds is a managing head.
+    const delegated = accountType === 'DEPARTMENT_HEAD' && admin.account_type === 'DEPARTMENT_HEAD'
+    const permissions = delegated ? readGrantedPermissions(body, admin, office) : null
     const created = await User.create(
       {
         org_id: admin.org_id,
@@ -49,11 +57,17 @@ export default defineApiHandler(async (event) => {
         password_hash: passwordHash,
         status: 'pending',
         page_access: pageAccess ? JSON.stringify(pageAccess) : null,
+        ...(delegated && { assigned_by: admin.id, assigned_at: new Date(), permissions: JSON.stringify(permissions) }),
       },
       { transaction },
     )
     await syncLiaisonProfile(created, office, transaction)
-    await audit(meta, { action: 'USER_INVITE', entityType: 'user', entityId: created.id, after: { email, account_type: accountType, office_id: office?.id ?? null, page_access: pageAccess } }, transaction)
+    if (delegated) await recordAssignment({ orgId: admin.org_id, userId: created.id, officeId: office?.id ?? null, action: 'ASSIGNED', permissions, changedBy: admin.id }, transaction)
+    await audit(
+      meta,
+      { action: 'USER_INVITE', entityType: 'user', entityId: created.id, after: { email, account_type: accountType, office_id: office?.id ?? null, page_access: pageAccess, ...(delegated && { assigned_by: admin.id, permissions }) } },
+      transaction,
+    )
     return created.id as string
   })
 

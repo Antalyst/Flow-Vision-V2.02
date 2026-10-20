@@ -20,7 +20,21 @@ const [{ data: routeData, refresh }, { data: officeData }] = await Promise.all([
 const routes = computed<OrgRoute[]>(() => routeData.value?.data ?? [])
 const offices = computed<Office[]>(() => officeData.value?.data ?? [])
 const officeById = computed(() => new Map(offices.value.map((o) => [o.id, o])))
-const departments = computed(() => [...new Set(offices.value.map((o) => o.department_name))])
+// Offices are the steps. Umbrella offices are units of their office (the office hands documents to them),
+// so they are offered only where a route built earlier already has one.
+const legacyUmbrellaIds = computed(() => new Set((editing.value?.steps ?? []).map((s) => s.office_id).filter((id) => offices.value.find((o) => o.id === id)?.parent_office_id)))
+const officeFilter = ref('')
+const officeGroups = computed(() =>
+  offices.value
+    .filter((o) => !o.parent_office_id)
+    .map((o) => ({ office: o, umbrellas: offices.value.filter((u) => u.parent_office_id === o.id) })),
+)
+/** The options a step's list shows: those matching the filter, and always the office it already has. */
+function visibleIn(group: { office: Office; umbrellas: Office[] }, selectedId: string) {
+  const f = officeFilter.value.trim().toLowerCase()
+  const allowed = [group.office, ...group.umbrellas.filter((u) => legacyUmbrellaIds.value.has(u.id))]
+  return allowed.filter((o) => o.id === selectedId || !f || `${o.name} ${o.code} ${group.office.name}`.toLowerCase().includes(f))
+}
 
 // ---------------------------------------------------------------------------
 // Builder: create a new route, or edit one (`editing` = the route being edited)
@@ -47,12 +61,14 @@ function closeBuilder() {
   editing.value = null
 }
 
-function addStep() {
-  const last = steps.value.at(-1)?.office_id
+/** Add a step at the end, or (`after`) right below that step. It starts on an office not used yet. */
+function addStep(after?: number) {
+  const at = after ?? steps.value.length - 1
+  const neighbour = steps.value[at]?.office_id
   const used = new Set(steps.value.map((s) => s.office_id))
-  const office = offices.value.find((o) => !used.has(o.id)) ?? offices.value.find((o) => o.id !== last) ?? offices.value[0]
+  const office = offices.value.find((o) => !used.has(o.id)) ?? offices.value.find((o) => o.id !== neighbour) ?? offices.value[0]
   if (!office) return
-  steps.value.push({ key: nextKey++, office_id: office.id, action_label: 'Review' })
+  steps.value.splice(at + 1, 0, { key: nextKey++, office_id: office.id, action_label: 'Review' })
 }
 
 function move(i: number, delta: number) {
@@ -197,7 +213,14 @@ async function confirmRemove() {
           </div>
         </div>
 
-        <h3 class="mt-7 mb-3 text-base">Steps</h3>
+        <div class="mt-7 mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 class="text-base">Steps</h3>
+          <div class="relative w-full sm:w-64">
+            <FIcon name="search" :size="15" class="absolute top-1/2 left-3 -translate-y-1/2 text-ink-2" />
+            <input v-model="officeFilter" type="search" class="input !min-h-9 pl-9 !text-sm" placeholder="Filter the office lists" aria-label="Filter the office lists" />
+          </div>
+        </div>
+        <p class="-mt-1 mb-3 text-xs text-ink-2">Any office can be a step, in any order. The document goes to each step in turn; the last step approves it. An office passes documents to its umbrella offices itself — they aren’t steps.</p>
         <ol class="space-y-3">
           <li v-for="(s, i) in steps" :key="s.key" class="rounded-2xl border border-line bg-card/70 p-4">
             <div class="mb-3 flex items-center justify-between">
@@ -212,6 +235,7 @@ async function confirmRemove() {
               <span class="flex gap-1">
                 <button class="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-ink/5 disabled:opacity-30" :disabled="i === 0" aria-label="Move up" @click="move(i, -1)"><FIcon name="arrow-up" :size="16" /></button>
                 <button class="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-ink/5 disabled:opacity-30" :disabled="i === steps.length - 1" aria-label="Move down" @click="move(i, 1)"><FIcon name="arrow-down" :size="16" /></button>
+                <button class="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-ink/5" aria-label="Insert a step below" title="Insert a step below" @click="addStep(i)"><FIcon name="plus" :size="16" /></button>
                 <button class="grid size-9 place-items-center rounded-lg text-danger-ink hover:bg-danger/10 disabled:opacity-30" :disabled="steps.length === 1" aria-label="Remove step" @click="steps.splice(i, 1)"><FIcon name="trash-2" :size="16" /></button>
               </span>
             </div>
@@ -219,9 +243,11 @@ async function confirmRemove() {
               <div>
                 <label class="sr-only" :for="`office-${s.key}`">Office</label>
                 <select :id="`office-${s.key}`" v-model="s.office_id" class="input">
-                  <optgroup v-for="dept in departments" :key="dept" :label="dept">
-                    <option v-for="o in offices.filter((x) => x.department_name === dept)" :key="o.id" :value="o.id">{{ o.name }} ({{ o.code }})</option>
-                  </optgroup>
+                  <template v-for="g in officeGroups" :key="g.office.id">
+                    <optgroup v-if="visibleIn(g, s.office_id).length" :label="visibleIn(g, s.office_id).length > 1 ? `${g.office.name} (and an umbrella step kept from before)` : g.office.name">
+                      <option v-for="o in visibleIn(g, s.office_id)" :key="o.id" :value="o.id">{{ o.parent_office_id ? `↳ ${o.name} (${o.code})` : `${o.name} (${o.code})` }}</option>
+                    </optgroup>
+                  </template>
                 </select>
               </div>
               <div>
@@ -231,7 +257,7 @@ async function confirmRemove() {
             </div>
           </li>
         </ol>
-        <button class="btn btn-secondary mt-3 w-full" @click="addStep"><FIcon name="plus" :size="16" /> Add step</button>
+        <button class="btn btn-secondary mt-3 w-full" @click="addStep()"><FIcon name="plus" :size="16" /> Add step</button>
       </section>
 
       <section class="space-y-6">

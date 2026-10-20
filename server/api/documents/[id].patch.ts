@@ -4,9 +4,9 @@ import { badRequest, conflict, forbidden, notFound } from '~~/server/lib/errors.
 import { allowedHoursFor, canManageDocument, SUBMITTER_TYPES } from '~~/server/lib/documents.ts'
 import { routeForNewDocument } from '~~/server/lib/routes.ts'
 import { autoPriority } from '~~/server/lib/priority.ts'
-import { loadDocumentDto } from '~~/server/lib/document-queries.ts'
 import { parseDocumentForm, removeUpload } from '~~/server/lib/uploads.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { loadDocumentFor } from '~~/server/lib/qr-access.ts'
 
 /** Edit a draft (multipart, incl. `route_id`). Once a document enters its route, its content is frozen. */
 export default defineApiHandler(async (event) => {
@@ -31,7 +31,7 @@ export default defineApiHandler(async (event) => {
       title: (updates.title as string | undefined) ?? doc.title,
       description: 'description' in updates ? (updates.description as string | null) : doc.description,
       document_type: 'category' in updates ? (updates.category as string | null) : doc.category,
-      routeHours: (await allowedHoursFor(user.org_id, 'category' in updates ? (updates.category as string | null) : doc.category, routeIdAfter)) || null,
+      routeHours: (await allowedHoursFor(user.org_id, 'category' in updates ? (updates.category as string | null) : doc.category, routeIdAfter, undefined, user.office_id)) || null,
     })
     // New files replace all of the draft's files (one, or a bulk set).
     const first = files[0]
@@ -55,7 +55,7 @@ export default defineApiHandler(async (event) => {
     })
     for (const url of new Set(oldFiles)) removeUpload(url)
     await audit(requestMeta(event), { action: 'DOCUMENT_UPDATE', entityType: 'document', entityId: doc.id, before, after: doc.toJSON() })
-    return { document: await loadDocumentDto(doc.id) }
+    return { document: await loadDocumentFor(doc.id, user) }
   } catch (err) {
     files.forEach((f) => removeUpload(f.fileUrl))
     throw err

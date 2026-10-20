@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { LiaisonProfile } from '~/types'
+import type { FlowDocument, LiaisonProfile } from '~/types'
 
 useHead({ title: 'Pickups · FlowVision' })
 
@@ -8,14 +8,27 @@ const auth = useAuthStore()
 const docsApi = useDocuments()
 const { busy, run } = useAction()
 
-const [{ data: dash, refresh: r1 }, { data: pickups, refresh: r2 }, { data: carrying, refresh: r3 }] = await Promise.all([
+const [{ data: dash, refresh: r1 }, { data: pickups, refresh: r2 }, { data: carrying, refresh: r3 }, { data: me, refresh: r4 }] = await Promise.all([
   useAsyncData('liaison-dash', () =>
     api.get<{ profile: LiaisonProfile; counts: { available_pickups: number; carrying: number; delivered_today: number } }>('/dashboard'),
   ),
   useAsyncData('liaison-pickups', () => docsApi.list({ scope: 'pickups', limit: 100 })),
   useAsyncData('liaison-carrying', () => docsApi.list({ scope: 'carrying', limit: 100 })),
+  // Flagged documents going back to my office: any of its liaisons may claim them.
+  useAsyncData('liaison-returns', () => api.get<{ returns: FlowDocument[] }>('/liaisons/me')),
 ])
-const refreshAll = () => Promise.all([r1(), r2(), r3()])
+const refreshAll = () => Promise.all([r1(), r2(), r3(), r4()])
+const returns = computed(() => me.value?.returns ?? [])
+
+async function claim(d: FlowDocument) {
+  const ok = await run(`claim-${d.id}`, () => api.post(`/documents/${d.id}/return-claim`), 'Pickup claimed — it is now in "Released to you"')
+  // Lost the race, or it changed meanwhile: show the current state either way.
+  refreshAll()
+  return ok
+}
+async function giveUp(d: FlowDocument) {
+  if (await run(`unclaim-${d.id}`, () => api.del(`/documents/${d.id}/return-claim`), 'Pickup given up — the other liaisons were told')) refreshAll()
+}
 useLiveRefresh(refreshAll)
 
 // On duty / off duty is the messenger's switch; "busy" is shown while they have a document to pick up or deliver.
@@ -82,6 +95,24 @@ async function startTransit(id: string) {
       </div>
     </section>
 
+    <section v-if="returns.length" class="mt-8" aria-labelledby="returns-title">
+      <h2 id="returns-title" class="mb-1 text-lg">Returns to pick up</h2>
+      <p class="mb-3 text-sm text-ink-body">Flagged documents going back to your office. Any of your office’s liaisons may take one: claim it, then fetch it.</p>
+      <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <DocumentCard v-for="d in returns" :key="d.id" :doc="d">
+          <template #actions>
+            <span class="inline-flex items-center gap-1.5 text-[13px] text-ink-body">
+              <FIcon name="map-pin" :size="14" /> {{ d.currentOffice?.name }}
+              <FIcon name="arrow-right" :size="14" class="text-ink-3" /> {{ d.sent_back?.office_name }}
+            </span>
+            <button class="btn btn-sm btn-primary ml-auto" :disabled="busy === `claim-${d.id}`" :aria-busy="busy === `claim-${d.id}`" @click="claim(d)">
+              <FIcon name="corner-down-left" :size="14" /> Claim pickup
+            </button>
+          </template>
+        </DocumentCard>
+      </div>
+    </section>
+
     <section class="mt-8">
       <h2 class="mb-3 text-lg">Released to you</h2>
       <div v-if="!pickups?.data.length" class="card">
@@ -94,7 +125,8 @@ async function startTransit(id: string) {
               <FIcon name="map-pin" :size="14" /> {{ d.currentOffice?.code ?? d.origin?.name }}
               <FIcon name="arrow-right" :size="14" class="text-ink-3" /> {{ d.next_office_name }}
             </span>
-            <NuxtLink to="/scan" class="btn btn-sm btn-primary ml-auto"><FIcon name="maximize" :size="14" /> Scan to pick up</NuxtLink>
+            <button v-if="d.sent_back" class="btn btn-sm btn-ghost ml-auto" :disabled="busy === `unclaim-${d.id}`" :aria-busy="busy === `unclaim-${d.id}`" @click="giveUp(d)">Give up</button>
+            <NuxtLink to="/scan" class="btn btn-sm btn-primary" :class="!d.sent_back && 'ml-auto'"><FIcon name="maximize" :size="14" /> Scan to pick up</NuxtLink>
           </template>
         </DocumentCard>
       </div>

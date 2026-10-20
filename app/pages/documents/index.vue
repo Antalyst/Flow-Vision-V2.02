@@ -134,7 +134,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil((data.value?.meta.total 
           class="input pl-10"
           placeholder="Title, QR code or date (MMDDYY)"
           aria-label="Search documents by title, QR code, tracking number or upload date (MMDDYY)"
-          title="The date is the middle of the QR code: BCC100726123456 was uploaded on 10/07/26 — search 100726"
+          title="The date is the middle of the QR code: CHO-102026-123456 was uploaded on 10/20/26 — search 102026"
         />
       </div>
     </div>

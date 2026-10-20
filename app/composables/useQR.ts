@@ -1,4 +1,4 @@
-import type { DocumentFileInfo, FlowDocument, Office, QrInfo, UserSummary } from '~/types'
+import type { DocumentFileInfo, FlowDocument, Office, QrInfo, RoutingSlip, UserSummary } from '~/types'
 
 export type ScanAction = 'PICKUP' | 'RECEIVE'
 
@@ -23,10 +23,10 @@ export interface ScanPreview {
 type PrintableDoc = Pick<FlowDocument, 'id' | 'title' | 'file_name'>
 
 /**
- * {OFFICE_CODE}{MMDDYY upload date}{6 random digits}, e.g. BCC100726123456 — the prefix is the origin
+ * {OFFICE_CODE}-{MMDDYY upload date}-{6 random digits}, e.g. CHO-SNTR-102026-123456 (older labels without the dashes still scan) — the prefix is the origin
  * office's code. Labels printed before (BCL-54967520: code, dash, 8 digits) still scan.
  */
-const QR_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)*(?:\d{12}|-\d{8})$/i
+const QR_PATTERN = /^[A-Z0-9]+(?:-[A-Z0-9]+)*(?:-\d{6}-\d{6}|\d{12}|-\d{8})$/i
 // Long PDFs print the first pages only, to keep the browser responsive.
 const MAX_PDF_PAGES = 60
 
@@ -45,6 +45,32 @@ const LABEL_CSS = `
   .label .qr svg { width: 25mm; height: 25mm; display: block; }
   .label .code { font: 700 2.6mm ui-monospace, monospace; letter-spacing: 0.02em; color: #1B1B1B; }
   .label .title { font-size: 2mm; max-width: 34mm; text-align: center; color: #5F5B54; }`
+
+/**
+ * The routing slip's document-information table, under the QR on the QR page. Values come from what was
+ * registered (server: qr-access.ts routingSlipOf); dates and times in Philippine time; a missing one is "—".
+ */
+const slipRows = (slip: RoutingSlip): Array<[string, string | null]> => [
+  ['Subject', slip.subject],
+  ['Document type', slip.document_type],
+  ['Origin office', slip.origin_office],
+  ['First destination', slip.first_destination],
+  ['Final destination', slip.final_destination],
+  ['Priority', slip.priority ? slip.priority.charAt(0) + slip.priority.slice(1).toLowerCase() : null],
+  ['Registered by', slip.registered_by],
+  ['Date registered', slip.registered_at ? formatDate(slip.registered_at) : null],
+  ['Time registered', slip.registered_at ? formatTime(slip.registered_at) : null],
+]
+const slipTableHtml = (slip: RoutingSlip) =>
+  `<table class="qr-slip"><tbody>${slipRows(slip)
+    .map(([k, v]) => `<tr><th scope="row">${esc(k)}</th><td>${esc(v || '—')}</td></tr>`)
+    .join('')}</tbody></table>`
+const SLIP_CSS = `
+      .qr-slip { width: 100%; border-collapse: collapse; margin: 0 0 6mm; text-align: left; font-size: 3mm; line-height: 1.35; }
+      .qr-slip th, .qr-slip td { border: 0.25mm solid #1B1B1B; padding: 1.2mm 2mm; vertical-align: top; }
+      .qr-slip th { width: 36%; font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em; font-size: 2.6mm; background: #F3F2EE; }
+      .qr-slip td { overflow-wrap: anywhere; }
+      .qr-slip tr { break-inside: avoid; }`
 
 // The organization logo sits at the top right of the label, above the code.
 const labelHtml = (qr: QrInfo, doc: Pick<FlowDocument, 'title'>, brand: LabelBrand) =>
@@ -89,7 +115,7 @@ export function useQR() {
    * (.docx) files print this way; other files are skipped (and named), and a document without any
    * prints the QR page alone.
    */
-  async function printWithDocument(qr: QrInfo, doc: PrintableDoc, files: DocumentFileInfo[] = []) {
+  async function printWithDocument(qr: QrInfo, doc: PrintableDoc, files: DocumentFileInfo[] = [], slip: RoutingSlip | null = null) {
     // Older callers pass no list: the document's one file.
     const list: DocumentFileInfo[] = files.length
       ? files
@@ -106,6 +132,7 @@ export function useQR() {
         <div class="qr-big">${qr.svg}</div>
         <p class="qr-code">${esc(qr.payload)}</p>
         <p class="qr-title">${esc(doc.title)}</p>
+        ${slip ? slipTableHtml(slip) : ''}
         <p class="qr-note">Keep this page with the document. Messengers scan it to pick the document up, and each office scans it to receive it.</p>
       </div>
     </section>`
@@ -117,7 +144,7 @@ export function useQR() {
       .qr-big svg { width: 60mm; height: 60mm; display: block; margin: 0 auto; }
       .qr-code { font: 700 5mm ui-monospace, monospace; letter-spacing: 0.03em; margin: 5mm 0 2mm; }
       .qr-title { font-size: 4mm; margin: 0 0 6mm; }
-      .qr-note { font-size: 3mm; color: #5F5B54; line-height: 1.5; margin: 0; }`
+      .qr-note { font-size: 3mm; color: #5F5B54; line-height: 1.5; margin: 0; }${SLIP_CSS}`
     // One job for everything: picture pages fill the sheet, Word files get page margins.
     const css = `
       @page { size: auto; margin: 0; }

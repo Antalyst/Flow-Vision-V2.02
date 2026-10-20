@@ -141,11 +141,11 @@ CREATE TABLE `document_tracking` (
   `status` enum('CREATED','START','PICKED_UP','IN_TRANSIT','ARRIVED_AT_OFFICE','COMPLETED','RETURNED') NOT NULL COMMENT 'Event status',
   `handler_id` char(36) DEFAULT NULL COMMENT 'Employee handling document',
   `liaison_id` char(36) DEFAULT NULL COMMENT 'Liaison handling delivery',
-  `arrived_at` timestamp NULL DEFAULT NULL COMMENT 'Arrival time at office',
-  `completed_at` timestamp NULL DEFAULT NULL COMMENT 'Completion time',
+  `arrived_at` timestamp(3) NULL DEFAULT NULL COMMENT 'Arrival time at office',
+  `completed_at` timestamp(3) NULL DEFAULT NULL COMMENT 'Completion time',
   `notes` text DEFAULT NULL COMMENT 'Event notes',
-  `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
-  `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+  `created_at` timestamp(3) NOT NULL DEFAULT current_timestamp(3),
+  `updated_at` timestamp(3) NOT NULL DEFAULT current_timestamp(3) ON UPDATE current_timestamp(3)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Document movement tracking history';
 
 -- --------------------------------------------------------
@@ -260,6 +260,7 @@ CREATE TABLE `notifications` (
 CREATE TABLE `offices` (
   `id` char(36) NOT NULL,
   `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `parent_office_id` char(36) DEFAULT NULL COMMENT 'NULL = office; set = umbrella office under that office',
   `name` varchar(255) NOT NULL COMMENT 'Office name',
   `code` varchar(50) NOT NULL COMMENT 'Unique office code (for QR)',
   `address` text DEFAULT NULL COMMENT 'Office address',
@@ -385,6 +386,9 @@ CREATE TABLE `users` (
   `email_verified` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Email verification status',
   `two_factor_enabled` tinyint(1) NOT NULL DEFAULT 0 COMMENT 'Two-factor authentication',
   `page_access` text DEFAULT NULL COMMENT 'JSON list of pages the account may open (NULL = every page of its role)',
+  `assigned_by` char(36) DEFAULT NULL COMMENT 'Set = delegated Department Head, assigned by this user',
+  `assigned_at` datetime DEFAULT NULL COMMENT 'When the delegation was made',
+  `permissions` text DEFAULT NULL COMMENT 'Delegated Department Head: JSON list of granted permissions',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='User accounts with role-based access';
@@ -489,7 +493,8 @@ ALTER TABLE `offices`
   ADD UNIQUE KEY `uq_offices_code` (`code`),
   ADD KEY `idx_offices_org_id` (`org_id`),
   ADD KEY `idx_offices_status` (`status`),
-  ADD KEY `fk_offices_manager` (`manager_id`);
+  ADD KEY `fk_offices_manager` (`manager_id`),
+  ADD KEY `idx_offices_parent` (`parent_office_id`);
 
 --
 -- Indexes for table `organizations`
@@ -532,7 +537,8 @@ ALTER TABLE `users`
   ADD UNIQUE KEY `uq_users_email` (`email`),
   ADD KEY `idx_users_org_office` (`org_id`,`office_id`,`account_type`),
   ADD KEY `idx_users_status` (`status`),
-  ADD KEY `fk_users_office` (`office_id`);
+  ADD KEY `fk_users_office` (`office_id`),
+  ADD KEY `idx_users_assigned_by` (`assigned_by`);
 
 -- --------------------------------------------------------
 
@@ -638,6 +644,7 @@ ALTER TABLE `notifications`
 --
 ALTER TABLE `offices`
   ADD CONSTRAINT `fk_offices_manager` FOREIGN KEY (`manager_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_offices_parent` FOREIGN KEY (`parent_office_id`) REFERENCES `offices` (`id`),
   ADD CONSTRAINT `fk_offices_organization` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE;
 
 --
@@ -665,6 +672,7 @@ ALTER TABLE `route_steps`
 --
 ALTER TABLE `users`
   ADD CONSTRAINT `fk_users_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`) ON DELETE SET NULL,
+  ADD CONSTRAINT `fk_users_assigned_by` FOREIGN KEY (`assigned_by`) REFERENCES `users` (`id`),
   ADD CONSTRAINT `fk_users_organization` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE;
 
 -- --------------------------------------------------------
@@ -676,17 +684,24 @@ ALTER TABLE `users`
 CREATE TABLE `document_types` (
   `id` char(36) NOT NULL,
   `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `office_id` char(36) DEFAULT NULL COMMENT 'NULL = Global (every office); set = only this office',
   `name` varchar(100) NOT NULL COMMENT 'Shown in the upload form, e.g. Purchase Request',
   `description` varchar(500) DEFAULT NULL COMMENT 'What this type covers (also given to the AI)',
   `processing_days` int(11) NOT NULL DEFAULT 0 COMMENT 'How long a document of this type may take: days',
   `processing_hours` int(11) NOT NULL DEFAULT 0 COMMENT '… plus hours (0–23); 0 + 0 = no deadline',
+  `processing_minutes` int(11) NOT NULL DEFAULT 0 COMMENT '… plus minutes (0–59)',
+  `service_category` enum('INTERNAL','EXTERNAL') DEFAULT NULL COMMENT 'As labelled in the Citizen''s Charter',
+  `source_file_id` char(36) DEFAULT NULL COMMENT 'Citizen''s Charter file it was imported from',
+  `source_page` int(11) DEFAULT NULL COMMENT 'Page of that charter',
   `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Offered when uploading',
   `sort_order` int(11) NOT NULL DEFAULT 0 COMMENT 'Position in the list',
   `created_by` char(36) DEFAULT NULL COMMENT 'CLIENT who added it',
   `created_at` timestamp NOT NULL DEFAULT current_timestamp(),
   `updated_at` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uq_document_types_org_name` (`org_id`,`name`),
+  UNIQUE KEY `uq_document_types_org_office_name` (`org_id`,`office_id`,`name`),
+  KEY `idx_document_types_source` (`source_file_id`),
+  CONSTRAINT `fk_document_types_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`),
   CONSTRAINT `fk_document_types_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `fk_document_types_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Document types an organization offers when uploading';
@@ -877,3 +892,94 @@ COMMIT;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40101 SET CHARACTER_SET_RESULTS=@OLD_CHARACTER_SET_RESULTS */;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `department_head_assignments` (delegated Department Heads)
+--
+
+CREATE TABLE `department_head_assignments` (
+  `id` char(36) NOT NULL,
+  `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `user_id` char(36) NOT NULL COMMENT 'The delegated Department Head',
+  `office_id` char(36) DEFAULT NULL COMMENT 'Office or umbrella office at the time',
+  `action` enum('ASSIGNED','UPDATED','REVOKED','REINSTATED') NOT NULL COMMENT 'What happened',
+  `permissions` text DEFAULT NULL COMMENT 'JSON list of permissions after the change',
+  `changed_by` char(36) DEFAULT NULL COMMENT 'Who made the change',
+  `note` varchar(500) DEFAULT NULL COMMENT 'Why: e.g. removed because the grantor lost the permission',
+  `created_at` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_dha_user` (`user_id`, `created_at`),
+  KEY `idx_dha_org` (`org_id`, `created_at`),
+  CONSTRAINT `fk_dha_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_dha_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_dha_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`),
+  CONSTRAINT `fk_dha_changed_by` FOREIGN KEY (`changed_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='History of delegated Department Head assignments and permissions';
+
+-- --------------------------------------------------------
+
+--
+-- Internal transaction routes (an office's own paths through its umbrella offices)
+--
+
+CREATE TABLE `internal_routes` (
+  `id` char(36) NOT NULL,
+  `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `office_id` char(36) NOT NULL COMMENT 'The (main) office that owns the route; only it can use it',
+  `name` varchar(120) NOT NULL COMMENT 'Route name, unique within the office',
+  `description` varchar(500) DEFAULT NULL COMMENT 'What the route is for',
+  `is_active` tinyint(1) NOT NULL DEFAULT 1 COMMENT 'Deactivated routes can no longer be started; documents already on one finish it',
+  `created_by` char(36) DEFAULT NULL COMMENT 'Department Head who created it',
+  `created_at` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT current_timestamp(3) ON UPDATE current_timestamp(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_internal_routes_office_name` (`office_id`, `name`),
+  KEY `idx_internal_routes_org` (`org_id`),
+  CONSTRAINT `fk_internal_routes_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_internal_routes_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`),
+  CONSTRAINT `fk_internal_routes_creator` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Internal transaction routes of an office: an ordered path through its umbrella offices';
+
+CREATE TABLE `internal_route_steps` (
+  `id` char(36) NOT NULL,
+  `route_id` char(36) NOT NULL COMMENT 'Internal route reference',
+  `step_number` int(11) NOT NULL COMMENT '1, 2, 3 … in order',
+  `office_id` char(36) NOT NULL COMMENT 'Umbrella office of the route''s office',
+  `action_label` varchar(255) DEFAULT NULL COMMENT 'What the unit does at this step',
+  `created_at` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_internal_route_step` (`route_id`, `step_number`),
+  KEY `idx_internal_route_steps_office` (`office_id`),
+  CONSTRAINT `fk_internal_route_steps_route` FOREIGN KEY (`route_id`) REFERENCES `internal_routes` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_internal_route_steps_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Ordered steps of an internal route';
+
+CREATE TABLE `document_internal_transactions` (
+  `id` char(36) NOT NULL,
+  `org_id` char(36) NOT NULL COMMENT 'Organization reference',
+  `document_id` char(36) NOT NULL COMMENT 'The document',
+  `internal_route_id` char(36) DEFAULT NULL COMMENT 'The internal route it follows',
+  `route_name` varchar(120) NOT NULL COMMENT 'Route name when it started',
+  `parent_office_id` char(36) NOT NULL COMMENT 'Office whose route step the document stays on',
+  `route_step_number` int(11) NOT NULL COMMENT 'The organization route step it stays on (never advanced by this)',
+  `steps` text NOT NULL COMMENT 'JSON snapshot of the internal steps when it started (route edits do not change it)',
+  `current_index` int(11) NOT NULL DEFAULT 0 COMMENT '0-based index of the step whose unit has the document',
+  `status` enum('ACTIVE','COMPLETED','CANCELLED') NOT NULL DEFAULT 'ACTIVE' COMMENT 'ACTIVE while units have it; COMPLETED when the last unit returned it; CANCELLED when returned early',
+  `started_by` char(36) DEFAULT NULL COMMENT 'Who started it',
+  `started_at` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  `ended_by` char(36) DEFAULT NULL COMMENT 'Who completed or ended it',
+  `ended_at` datetime(3) DEFAULT NULL,
+  `created_at` datetime(3) NOT NULL DEFAULT current_timestamp(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT current_timestamp(3) ON UPDATE current_timestamp(3),
+  PRIMARY KEY (`id`),
+  KEY `idx_dit_document` (`document_id`, `status`),
+  KEY `idx_dit_office` (`parent_office_id`, `status`),
+  CONSTRAINT `fk_dit_org` FOREIGN KEY (`org_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_dit_document` FOREIGN KEY (`document_id`) REFERENCES `documents` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_dit_route` FOREIGN KEY (`internal_route_id`) REFERENCES `internal_routes` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_dit_office` FOREIGN KEY (`parent_office_id`) REFERENCES `offices` (`id`),
+  CONSTRAINT `fk_dit_started_by` FOREIGN KEY (`started_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_dit_ended_by` FOREIGN KEY (`ended_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Internal transactions: a document moving through its office units without advancing its route';

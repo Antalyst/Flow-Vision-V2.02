@@ -7,6 +7,7 @@ import { badRequest } from './errors.ts'
 import { typeHours } from './knowledge.ts'
 import { AT_OFFICE, CARRYING, documentDtos, liaisonDto, officeDto } from './serializers.ts'
 import { carriedBy, documentAttributes, documentIncludes, hasOpenPickup, incomingTo, isReceived, noOpenPickup, notReceived, pickupsWhere, submittedFromOffice } from './document-queries.ts'
+import { applyQrPolicy } from './qr-access.ts'
 
 const ACTIVE = [...AT_OFFICE, ...CARRYING]
 
@@ -158,7 +159,7 @@ export async function officeDashboard(user: Actor) {
   const result: Record<string, unknown> = {
     office: officeDto(user.office),
     counts: { awaiting_receipt: awaitingReceipt, in_process: inProcess, awaiting_pickup: awaitingPickup, outbound, incoming, received_today: receivedToday },
-    documents: await documentDtos(documents),
+    documents: await applyQrPolicy(await documentDtos(documents), user),
   }
 
   // The office's employees follow everything their staff upload (drafts excluded).
@@ -170,7 +171,7 @@ export async function officeDashboard(user: Actor) {
       order: [['updated_at', 'DESC']],
       limit: 10,
     })
-    result.staff_uploads = await documentDtos(staffUploads)
+    result.staff_uploads = await applyQrPolicy(await documentDtos(staffUploads), user)
   }
 
   if (user.account_type === 'STAFF') {

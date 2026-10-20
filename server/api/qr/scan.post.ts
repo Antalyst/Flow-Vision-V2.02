@@ -1,7 +1,7 @@
 import { OFFICE_STAFF_TYPES, performScan } from '~~/server/lib/documents.ts'
-import { loadDocumentDto } from '~~/server/lib/document-queries.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { loadDocumentFor } from '~~/server/lib/qr-access.ts'
 
 /** A messenger scans to pick up; staff of the office the document reached scan to receive it. */
 export default defineApiHandler(async (event) => {
@@ -11,5 +11,5 @@ export default defineApiHandler(async (event) => {
   const payload = v.reqStr(body, 'payload', { max: 100, label: 'QR code' })
   const action = v.oneOf(body, 'action', ['PICKUP', 'RECEIVE'] as const)
   const result = await performScan(payload, action, user)
-  return { action: result.action, document: await loadDocumentDto(result.doc.id) }
+  return { action: result.action, document: await loadDocumentFor(result.doc.id, user) }
 })

@@ -122,7 +122,7 @@ try {
   // …plus AI Assistant chat history (conversations before their messages, for the foreign key),
   // file_blobs, where uploads are kept on hosts with a read-only disk (Vercel), and Organization
   // Settings' working hours, holidays and document templates (also: scripts/db-add-settings.ts).
-  for (const table of ['document_types', 'knowledge_files', 'document_files', 'ai_conversations', 'ai_messages', 'file_blobs', 'organization_settings', 'organization_holidays', 'document_templates']) {
+  for (const table of ['document_types', 'knowledge_files', 'document_files', 'ai_conversations', 'ai_messages', 'file_blobs', 'organization_settings', 'organization_holidays', 'document_templates', 'department_head_assignments', 'internal_routes', 'internal_route_steps', 'document_internal_transactions']) {
     if (await hasTable(table)) {
       console.log(`[migrate] ${table} already present`)
       continue
@@ -185,6 +185,80 @@ try {
     console.log('[migrate] document_types.processing_days / processing_hours added')
   } else {
     console.log('[migrate] document_types processing time already present')
+  }
+
+  // Umbrella offices and document types by office (database/migrations/2026-10-20-umbrella-offices-and-document-types.sql).
+  const hasConstraint = async (table: string, name: string) => {
+    const [rows] = await connection.query('SELECT 1 FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = ?', [env.db.name, table, name])
+    return (rows as unknown[]).length > 0
+  }
+  if (!(await hasColumn('offices', 'parent_office_id'))) {
+    await connection.query("ALTER TABLE `offices` ADD COLUMN `parent_office_id` char(36) DEFAULT NULL COMMENT 'NULL = office; set = umbrella office under that office' AFTER `org_id`")
+    console.log('[migrate] offices.parent_office_id added')
+  }
+  if (!(await hasIndex('offices', 'idx_offices_parent'))) await connection.query('CREATE INDEX `idx_offices_parent` ON `offices` (`parent_office_id`)')
+  if (!(await hasConstraint('offices', 'fk_offices_parent'))) {
+    await connection.query('ALTER TABLE `offices` ADD CONSTRAINT `fk_offices_parent` FOREIGN KEY (`parent_office_id`) REFERENCES `offices` (`id`)')
+  }
+  const typeColumns: Array<[string, string]> = [
+    ['office_id', "char(36) DEFAULT NULL COMMENT 'NULL = Global (every office); set = only this office' AFTER `org_id`"],
+    ['processing_minutes', "int(11) NOT NULL DEFAULT 0 COMMENT '… plus minutes (0–59)' AFTER `processing_hours`"],
+    ['service_category', "enum('INTERNAL','EXTERNAL') DEFAULT NULL COMMENT 'As labelled in the Citizen''s Charter' AFTER `processing_minutes`"],
+    ['source_file_id', "char(36) DEFAULT NULL COMMENT 'Citizen''s Charter file it was imported from' AFTER `service_category`"],
+    ['source_page', "int(11) DEFAULT NULL COMMENT 'Page of that charter' AFTER `source_file_id`"],
+  ]
+  for (const [column, definition] of typeColumns) {
+    if (!(await hasColumn('document_types', column))) {
+      await connection.query(`ALTER TABLE \`document_types\` ADD COLUMN \`${column}\` ${definition}`)
+      console.log(`[migrate] document_types.${column} added`)
+    }
+  }
+  if (!(await hasConstraint('document_types', 'fk_document_types_office'))) {
+    await connection.query('ALTER TABLE `document_types` ADD CONSTRAINT `fk_document_types_office` FOREIGN KEY (`office_id`) REFERENCES `offices` (`id`)')
+  }
+  if (!(await hasIndex('document_types', 'idx_document_types_source'))) await connection.query('CREATE INDEX `idx_document_types_source` ON `document_types` (`source_file_id`)')
+  if (!(await hasIndex('document_types', 'uq_document_types_org_office_name'))) {
+    // New key first, so the organization foreign key always keeps an index.
+    await connection.query('CREATE UNIQUE INDEX `uq_document_types_org_office_name` ON `document_types` (`org_id`, `office_id`, `name`)')
+    console.log('[migrate] document type names are now unique per office')
+  }
+  if (await hasIndex('document_types', 'uq_document_types_org_name')) await connection.query('DROP INDEX `uq_document_types_org_name` ON `document_types`')
+
+  // Delegated Department Heads (database/migrations/2026-10-21-delegated-department-heads.sql).
+  // Every existing Department Head stays a managing one (assigned_by NULL).
+  const userColumns: Array<[string, string]> = [
+    ['assigned_by', "char(36) DEFAULT NULL COMMENT 'Set = delegated Department Head, assigned by this user' AFTER `page_access`"],
+    ['assigned_at', "datetime DEFAULT NULL COMMENT 'When the delegation was made' AFTER `assigned_by`"],
+    ['permissions', "text DEFAULT NULL COMMENT 'Delegated Department Head: JSON list of granted permissions' AFTER `assigned_at`"],
+  ]
+  for (const [column, definition] of userColumns) {
+    if (!(await hasColumn('users', column))) {
+      await connection.query(`ALTER TABLE \`users\` ADD COLUMN \`${column}\` ${definition}`)
+      console.log(`[migrate] users.${column} added`)
+    }
+  }
+  if (!(await hasIndex('users', 'idx_users_assigned_by'))) await connection.query('CREATE INDEX `idx_users_assigned_by` ON `users` (`assigned_by`)')
+  if (!(await hasConstraint('users', 'fk_users_assigned_by'))) {
+    await connection.query('ALTER TABLE `users` ADD CONSTRAINT `fk_users_assigned_by` FOREIGN KEY (`assigned_by`) REFERENCES `users` (`id`)')
+  }
+
+  // Millisecond visit times and history notes (database/migrations/2026-10-22-tracking-precision-and-history-notes.sql).
+  const [precision] = await connection.query(
+    "SELECT COLUMN_NAME AS c, DATETIME_PRECISION AS p FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'document_tracking' AND COLUMN_NAME IN ('created_at','updated_at','arrived_at','completed_at')",
+    [env.db.name],
+  )
+  if ((precision as Array<{ p: number }>).some((r) => Number(r.p) !== 3)) {
+    await connection.query(
+      "ALTER TABLE `document_tracking` MODIFY `arrived_at` timestamp(3) NULL DEFAULT NULL COMMENT 'Arrival time at office', " +
+        "MODIFY `completed_at` timestamp(3) NULL DEFAULT NULL COMMENT 'Completion time', " +
+        'MODIFY `created_at` timestamp(3) NOT NULL DEFAULT current_timestamp(3), ' +
+        'MODIFY `updated_at` timestamp(3) NOT NULL DEFAULT current_timestamp(3) ON UPDATE current_timestamp(3)',
+    )
+    console.log('[migrate] document_tracking times now keep milliseconds')
+  }
+  if (!(await hasColumn('department_head_assignments', 'note'))) {
+    await connection.query("ALTER TABLE `department_head_assignments` ADD COLUMN `note` varchar(500) DEFAULT NULL COMMENT 'Why: e.g. removed because the grantor lost the permission' AFTER `changed_by`")
+    console.log('[migrate] department_head_assignments.note added')
   }
 
   // Every organization starts with the default document types (only those that have none yet).

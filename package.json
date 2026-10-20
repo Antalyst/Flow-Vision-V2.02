@@ -17,7 +17,16 @@
     "test:flow": "node tests/flow.test.ts",
     "test:roles": "node --test tests/roles.test.ts",
     "test:office-ai": "node --test tests/office-ai.test.ts",
-    "test:roles-api": "node tests/roles-api.test.ts"
+    "test:umbrella-types": "node --test tests/umbrella-types.test.ts",
+    "test:delegated-heads": "node --test tests/delegated-heads.test.ts",
+    "test:internal-routes": "node --test tests/internal-routes.test.ts",
+    "test:qr-issue-return": "node --test tests/qr-issue-return.test.ts",
+    "test:qr-issue-return-api": "node tests/qr-issue-return-api.test.ts",
+    "test:delegated-heads-api": "node tests/delegated-heads-api.test.ts",
+    "test:knowledge-upload": "node --test --test-timeout=240000 tests/knowledge-upload.test.ts",
+    "test:knowledge-upload-api": "node tests/knowledge-upload-api.test.ts",
+    "test:roles-api": "node tests/roles-api.test.ts",
+    "test:office-workflow-api": "node tests/office-workflow-api.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

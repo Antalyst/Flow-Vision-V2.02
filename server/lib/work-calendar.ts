@@ -81,7 +81,8 @@ export async function loadWorkCalendar(orgId: string, { fresh = false, transacti
 export const invalidateWorkCalendar = (orgId: string) => cache.delete(orgId)
 
 /** The deadline of a processing time (days + hours) that starts at `from`, on the organization's calendar. */
-export const deadlineFrom = (from: Date, time: { days: number; hours: number }, cal: WorkCalendar) => addWorkingMinutes(from, allowanceMinutes(time.days, time.hours, cal), cal)
+export const deadlineFrom = (from: Date, time: { days: number; hours: number; minutes?: number }, cal: WorkCalendar) =>
+  addWorkingMinutes(from, allowanceMinutes(time.days, time.hours, cal) + (time.minutes ?? 0), cal)
 
 /**
  * The working hours, days or holidays changed: move the deadline of every document still in

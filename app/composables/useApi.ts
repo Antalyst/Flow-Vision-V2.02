@@ -8,6 +8,9 @@ export function apiErrorMessage(err: unknown, fallback = 'Something went wrong')
     if (!err.response) return 'Cannot reach the FlowVision server.'
     return (err.data as { message?: string } | undefined)?.message ?? fallback
   }
+  // useAsyncData wraps the fetch error (NuxtError): the server's own message is still in `data`.
+  const data = err && typeof err === 'object' && 'data' in err ? (err.data as { message?: unknown } | null) : null
+  if (data && typeof data.message === 'string') return data.message
   if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') return err.message
   return fallback
 }

@@ -5,6 +5,7 @@ import { pendingApprovalsFor } from '~~/server/lib/documents.ts'
 import { documentAttributes, documentIncludes, userAttrs } from '~~/server/lib/document-queries.ts'
 import { approvalDto, documentDtos } from '~~/server/lib/serializers.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { applyQrPolicy } from '~~/server/lib/qr-access.ts'
 
 /** PENDING: documents waiting for my decision. APPROVED / RETURNED: my office's decisions. */
 export default defineApiHandler(async (event) => {
@@ -28,7 +29,7 @@ export default defineApiHandler(async (event) => {
   const docs = approvals.length
     ? await Document.findAll({ where: { id: { [Op.in]: approvals.map((a) => a.document_id) } }, attributes: documentAttributes, include: documentIncludes })
     : []
-  const dtos = await documentDtos(docs)
+  const dtos = await applyQrPolicy(await documentDtos(docs), user)
   const byId = new Map(dtos.map((d) => [d.id, d]))
   return { data: approvals.map((a) => approvalDto(a, byId.get(a.document_id))), has_approval_authority: true }
 })

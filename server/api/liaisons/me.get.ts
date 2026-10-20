@@ -1,10 +1,11 @@
 import { Op } from 'sequelize'
-import { Document, DocumentTracking, Liaison, Office } from '~~/server/lib/models.ts'
-import { carriedBy, documentAttributes, documentIncludes, pickupsWhere } from '~~/server/lib/document-queries.ts'
-import { CARRYING, documentDtos, liaisonDto, trackingNumber } from '~~/server/lib/serializers.ts'
+import { sequelize, Document, DocumentTracking, Liaison, Office } from '~~/server/lib/models.ts'
+import { carriedBy, currentVisit, documentAttributes, documentIncludes, pickupsWhere, sendBackSql } from '~~/server/lib/document-queries.ts'
+import { AT_OFFICE, CARRYING, documentDtos, liaisonDto, trackingNumber } from '~~/server/lib/serializers.ts'
 import { readLog } from '~~/server/lib/tracking-log.ts'
 import { notFound } from '~~/server/lib/errors.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { applyQrPolicy } from '~~/server/lib/qr-access.ts'
 
 const MY_EVENTS = new Set(['PICKED_UP', 'ARRIVED', 'DELIVERY_FAILED'])
 
@@ -21,7 +22,10 @@ export default defineApiHandler(async (event) => {
     return d
   })()
 
-  const [carrying, pickups, visits] = await Promise.all([
+  // Flagged documents going back to my office (or my office's parent office, for an umbrella office's
+  // liaison) that nobody has claimed yet: any of us may claim them.
+  const returnOffices = [user.office_id, user.office?.parent_office_id].filter(Boolean) as string[]
+  const [carrying, pickups, visits, returns] = await Promise.all([
     Document.findAll({
       where: { status: { [Op.in]: CARRYING }, [Op.and]: [carriedBy(user.id)] },
       attributes: documentAttributes,
@@ -38,6 +42,22 @@ export default defineApiHandler(async (event) => {
       ],
       limit: 500,
     }),
+    returnOffices.length
+      ? Document.findAll({
+          where: {
+            org_id: user.org_id,
+            status: { [Op.in]: AT_OFFICE },
+            [Op.and]: [
+              sequelize.literal(`${currentVisit('liaison_id')} IS NULL`),
+              sequelize.literal(`${sendBackSql()} IN (${returnOffices.map((id) => sequelize.escape(`"${id}"`)).join(', ')})`),
+            ],
+          },
+          attributes: documentAttributes,
+          include: documentIncludes,
+          order: [['updated_at', 'ASC']],
+          limit: 50,
+        })
+      : [],
   ])
 
   const activity = visits
@@ -64,7 +84,9 @@ export default defineApiHandler(async (event) => {
   const count = (type: string) => activity.filter((e) => e.event_type === type).length
   return {
     profile: liaisonDto(profile, carrying.length + pickups),
-    carrying: await documentDtos(carrying),
+    carrying: await applyQrPolicy(await documentDtos(carrying), user),
+    // Return pickups I may claim (POST /documents/:id/return-claim). No QR code until I have it.
+    returns: await applyQrPolicy(await documentDtos(returns), user),
     activity,
     today: { pickups: count('PICKED_UP'), deliveries: count('ARRIVED'), failed: count('DELIVERY_FAILED') },
   }

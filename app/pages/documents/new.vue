@@ -14,7 +14,19 @@ const step = ref(0)
 
 // The organization's own document types (Organization Settings); "Other" is always available.
 const { data: typeData } = await useAsyncData('upload-document-types', () => useApi().get<{ data: DocumentTypeItem[] }>('/document-types'))
-const docTypes = computed(() => (typeData.value?.data ?? []).map((t) => t.name))
+const docTypes = computed(() => [...new Set((typeData.value?.data ?? []).map((t) => t.name))])
+// The types this account is offered, by office: its own office's first, then Global (offered to every office).
+const typeGroups = computed(() => {
+  const groups = new Map<string, Set<string>>()
+  const mine = auth.user?.office?.id
+  const list = [...(typeData.value?.data ?? [])].sort((a, b) => Number(b.office_id === mine) - Number(a.office_id === mine) || Number(Boolean(b.office_id)) - Number(Boolean(a.office_id)))
+  for (const t of list) {
+    const label = t.office ? t.office.name : 'Global — every office'
+    if (!groups.has(label)) groups.set(label, new Set())
+    groups.get(label)!.add(t.name)
+  }
+  return [...groups].map(([label, names]) => ({ label, names: [...names] }))
+})
 const form = reactive({
   title: '',
   document_type: '',
@@ -270,7 +282,7 @@ const officeChain = (r: OrgRoute) => r.steps.map((s) => s.office?.name ?? '—')
 // The chosen document type's processing time sets the target completion; priority is worked out on the server.
 const selectedType = computed(() => (typeData.value?.data ?? []).find((t) => t.name === form.document_type) ?? null)
 const deadlineText = computed(() =>
-  selectedType.value?.total_hours ? `${formatSla(selectedType.value.total_hours)} after submission` : form.document_type ? 'No time limit for this type' : 'Pick a document type',
+  selectedType.value?.total_minutes ? `${selectedType.value.total_minutes < 60 ? `${selectedType.value.total_minutes} min` : formatSla(selectedType.value.total_hours)} after submission` : form.document_type ? 'No time limit for this type' : 'Pick a document type',
 )
 
 async function send(submit: boolean) {
@@ -490,7 +502,9 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
           <label class="field-label" for="type">Document type</label>
           <select v-if="docTypes.length" id="type" v-model="form.document_type" class="input">
             <option value="">Choose a type…</option>
-            <option v-for="t in docTypes" :key="t" :value="t">{{ t }}</option>
+            <optgroup v-for="g in typeGroups" :key="g.label" :label="g.label">
+              <option v-for="t in g.names" :key="`${g.label}-${t}`" :value="t">{{ t }}</option>
+            </optgroup>
             <option value="Other">Other</option>
           </select>
           <input v-else id="type" v-model="form.document_type" class="input" maxlength="100" placeholder="e.g. Purchase Request" />

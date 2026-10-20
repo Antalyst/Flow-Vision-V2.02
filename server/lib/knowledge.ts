@@ -39,31 +39,59 @@ export async function createDefaultDocumentTypes(orgId: string, userId: string |
   )
 }
 
-/** Active types, in their order — what the upload form offers and the AI classifies into. */
-export function activeDocumentTypes(orgId: string) {
-  return DocumentType.findAll({ where: { org_id: orgId, is_active: true }, order: [['sort_order', 'ASC'], ['name', 'ASC']] })
+/**
+ * The offices whose document types an account is offered: its own office and, for an umbrella
+ * office, the office above it. null = every office (the ADMIN, who has none).
+ */
+export async function typeOfficeIds(officeId: string | null | undefined, transaction?: Transaction): Promise<string[] | null> {
+  if (!officeId) return null
+  const office = await Office.findByPk(officeId, { attributes: ['id', 'parent_office_id'], transaction })
+  return office ? [office.id as string, ...(office.parent_office_id ? [office.parent_office_id as string] : [])] : []
 }
 
-/** A type's processing time in hours (days × 24 + hours). */
-export const typeHours = (t: Row | null | undefined) => (t ? Number(t.processing_days ?? 0) * 24 + Number(t.processing_hours ?? 0) : 0)
+/**
+ * Active types, in their order — what the upload form offers and the AI classifies into: Global
+ * types (office_id NULL, e.g. Payroll) plus those of `officeIds`. officeIds null = all of them.
+ */
+export function activeDocumentTypes(orgId: string, officeIds: string[] | null = null) {
+  return DocumentType.findAll({
+    where: { org_id: orgId, is_active: true, ...(officeIds && { [Op.or]: [{ office_id: null }, { office_id: { [Op.in]: officeIds } }] }) },
+    include: [{ model: Office, as: 'office', attributes: ['id', 'name', 'code'] }],
+    order: [['sort_order', 'ASC'], ['name', 'ASC']],
+  })
+}
+
+/** A type's processing time in minutes (days × 24 h + hours + minutes). */
+export const typeMinutes = (t: Row | null | undefined) =>
+  t ? (Number(t.processing_days ?? 0) * 24 + Number(t.processing_hours ?? 0)) * 60 + Number(t.processing_minutes ?? 0) : 0
+
+/** A type's processing time in hours (fractional when minutes are set). */
+export const typeHours = (t: Row | null | undefined) => typeMinutes(t) / 60
 
 /**
  * How long a document of this type may take, in hours — from the organization's document type
  * of that name. 0 when the type is unknown or has no time set (then the document gets no deadline).
  */
-export async function processingHoursFor(orgId: string, typeName: string | null | undefined, transaction?: Transaction) {
-  const { days, hours } = await processingTimeFor(orgId, typeName, transaction)
-  return days * 24 + hours
+export async function processingHoursFor(orgId: string, typeName: string | null | undefined, transaction?: Transaction, officeId?: string | null) {
+  const { days, hours, minutes } = await processingTimeFor(orgId, typeName, transaction, officeId)
+  return days * 24 + hours + minutes / 60
 }
 
 /**
  * The same as days + hours. Days are working days once the organization sets its working hours
  * (see work-calendar.ts); 0 + 0 when the type is unknown or untimed.
  */
-export async function processingTimeFor(orgId: string, typeName: string | null | undefined, transaction?: Transaction) {
-  if (!typeName) return { days: 0, hours: 0 }
-  const type = await DocumentType.findOne({ where: { org_id: orgId, name: typeName }, attributes: ['processing_days', 'processing_hours'], transaction })
-  return { days: Number(type?.processing_days ?? 0), hours: Number(type?.processing_hours ?? 0) }
+export async function processingTimeFor(orgId: string, typeName: string | null | undefined, transaction?: Transaction, officeId?: string | null) {
+  if (!typeName) return { days: 0, hours: 0, minutes: 0 }
+  // The same name can exist per office: the uploader's office (or the office above an umbrella) first, then Global.
+  const types = await DocumentType.findAll({
+    where: { org_id: orgId, name: typeName },
+    attributes: ['office_id', 'processing_days', 'processing_hours', 'processing_minutes'],
+    transaction,
+  })
+  const offices = (await typeOfficeIds(officeId, transaction)) ?? []
+  const type = offices.map((id) => types.find((t) => t.office_id === id)).find(Boolean) ?? types.find((t) => !t.office_id) ?? types[0]
+  return { days: Number(type?.processing_days ?? 0), hours: Number(type?.processing_hours ?? 0), minutes: Number(type?.processing_minutes ?? 0) }
 }
 
 /** Processing time from a request body: whole days 0–365 plus hours 0–23. */
@@ -75,7 +103,11 @@ export function readProcessingTime(body: Record<string, unknown>) {
     if (!Number.isInteger(n) || n < 0 || n > max) throw badRequest(`${label} must be a whole number from 0 to ${max}`, { field })
     return n
   }
-  return { processing_days: read('processing_days', 365, 'Days'), processing_hours: read('processing_hours', 23, 'Hours') }
+  return {
+    processing_days: read('processing_days', 365, 'Days'),
+    processing_hours: read('processing_hours', 23, 'Hours'),
+    processing_minutes: read('processing_minutes', 59, 'Minutes'),
+  }
 }
 
 export function documentTypeDto(t: Row, usage?: number) {
@@ -85,8 +117,16 @@ export function documentTypeDto(t: Row, usage?: number) {
     description: t.description ?? null,
     processing_days: Number(t.processing_days ?? 0),
     processing_hours: Number(t.processing_hours ?? 0),
-    /** processing_days × 24 + processing_hours; 0 = no deadline. */
+    processing_minutes: Number(t.processing_minutes ?? 0),
+    /** Days × 24 + hours (+ minutes / 60); 0 = no deadline. */
     total_hours: typeHours(t),
+    total_minutes: typeMinutes(t),
+    /** null = Global: offered to every office. */
+    office_id: (t.office_id as string | null) ?? null,
+    office: t.office ? { id: t.office.id as string, name: t.office.name as string, code: t.office.code as string } : null,
+    service_category: (t.service_category as string | null) ?? null,
+    source_file_id: (t.source_file_id as string | null) ?? null,
+    source_page: (t.source_page as number | null) ?? null,
     is_active: Boolean(t.is_active),
     sort_order: Number(t.sort_order ?? 0),
     ...(usage !== undefined && { usage }),

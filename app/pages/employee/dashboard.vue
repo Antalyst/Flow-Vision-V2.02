@@ -22,7 +22,7 @@ const pickupDoc = ref<FlowDocument | null>(null)
 
 <template>
   <div class="fv-rise">
-    <PageHeader :eyebrow="auth.user?.office?.department_name" :title="auth.user?.office?.name ?? 'Your office'" description="Documents assigned to your office and what each one needs next.">
+    <PageHeader :eyebrow="auth.user?.office?.parent?.name ?? auth.user?.office?.code" :title="auth.user?.office?.name ?? 'Your office'" description="Documents assigned to your office and what each one needs next.">
       <template #actions>
         <NuxtLink to="/employee/queue" class="btn btn-ghost"><FIcon name="inbox" :size="16" /> Open queue</NuxtLink>
         <NuxtLink to="/scan" class="btn btn-primary"><FIcon name="maximize" :size="16" /> Scan to receive</NuxtLink>

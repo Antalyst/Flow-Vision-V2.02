@@ -4,7 +4,7 @@ import type { FlowDocument, LiaisonProfile } from '~/types'
 useHead({ title: 'Release to messenger · FlowVision' })
 
 interface LiaisonRow extends LiaisonProfile {
-  user: { id: string; first_name: string; last_name: string; phone: string | null; office?: { name: string; department_name: string } | null }
+  user: { id: string; first_name: string; last_name: string; phone: string | null; office?: { id: string; name: string } | null }
 }
 
 const api = useApi()
@@ -89,7 +89,7 @@ const pickupDoc = ref<FlowDocument | null>(null)
               <UserAvatar :user="l.user" />
               <div class="min-w-0 flex-1">
                 <p class="truncate text-sm font-semibold">{{ fullName(l.user) }}</p>
-                <p class="truncate text-xs text-ink-2">{{ l.user.office?.department_name }}</p>
+                <p class="truncate text-xs text-ink-2">{{ l.user.office?.name }}</p>
               </div>
               <ToneBadge :tone="availabilityTone[l.availability]" dot>{{ { AVAILABLE: 'free', BUSY: 'busy', OFF_DUTY: 'off duty' }[l.availability] }}</ToneBadge>
             </div>

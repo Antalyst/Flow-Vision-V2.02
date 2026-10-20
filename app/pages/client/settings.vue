@@ -63,24 +63,138 @@ const calendarText = computed(() => {
   if (!c?.configured) return null
   return describeCalendar({ start: parseClock(c.work_start) ?? 480, end: parseClock(c.work_end) ?? 1020, days: c.work_days, holidays: [], recurring: [] })
 })
-const newType = reactive({ name: '', description: '', processing_days: 1, processing_hours: 0 })
+// Who a type is offered to: Global (every office, e.g. Payroll) or one office / umbrella office.
+const scopeOptions = computed(() => {
+  const all = offices.value as Array<{ id: string; name: string; code: string; parent_office_id?: string | null }>
+  const out: Array<{ id: string; label: string }> = [{ id: '', label: 'Global — every office' }]
+  for (const o of all.filter((x) => !x.parent_office_id)) {
+    out.push({ id: o.id, label: `${o.name} (${o.code})` })
+    for (const u of all.filter((x) => x.parent_office_id === o.id)) out.push({ id: u.id, label: `↳ ${u.name} (${u.code})` })
+  }
+  return out
+})
+const typeScope = ref('all')
+const shownTypes = computed(() => (typeScope.value === 'all' ? types.value : types.value.filter((t) => (t.office_id ?? '') === (typeScope.value === 'global' ? '' : typeScope.value))))
+
+const newType = reactive({ name: '', description: '', office_id: '', processing_days: 1, processing_hours: 0, processing_minutes: 0 })
 async function addType() {
   if (!newType.name.trim()) return
-  const ok = await run('add-type', () => api.post('/org/document-types', { ...newType }), `“${newType.name.trim()}” added`)
+  const ok = await run('add-type', () => api.post('/org/document-types', { ...newType, office_id: newType.office_id || null }), `“${newType.name.trim()}” added`)
   if (ok) {
-    Object.assign(newType, { name: '', description: '', processing_days: 1, processing_hours: 0 })
+    Object.assign(newType, { name: '', description: '', office_id: newType.office_id, processing_days: 1, processing_hours: 0, processing_minutes: 0 })
     refresh()
   }
 }
 
 const editing = ref<string | null>(null)
-const editForm = reactive({ name: '', description: '', processing_days: 0, processing_hours: 0 })
+const editForm = reactive({ name: '', description: '', office_id: '', processing_days: 0, processing_hours: 0, processing_minutes: 0 })
 function startEdit(t: DocumentTypeItem) {
   editing.value = t.id
-  Object.assign(editForm, { name: t.name, description: t.description ?? '', processing_days: t.processing_days, processing_hours: t.processing_hours })
+  suggestion.value = null
+  Object.assign(editForm, {
+    name: t.name,
+    description: t.description ?? '',
+    office_id: t.office_id ?? '',
+    processing_days: t.processing_days,
+    processing_hours: t.processing_hours,
+    processing_minutes: t.processing_minutes ?? 0,
+  })
+}
+
+// "Suggest from Citizen's Charter": read from the charter text of the type's service. Nothing is
+// saved until the admin applies it and saves.
+interface TimeSuggestion {
+  found: boolean
+  days?: number
+  hours?: number
+  minutes?: number
+  basis?: 'total' | 'stated' | 'sum_of_steps' | 'ai'
+  source?: { title: string; page: number | null }
+  lines?: string[]
+  reason?: string
+}
+const suggestion = ref<TimeSuggestion | null>(null)
+const BASIS_TEXT: Record<NonNullable<TimeSuggestion['basis']>, string> = {
+  total: 'the total processing time the charter states',
+  stated: 'the processing time the charter states',
+  sum_of_steps: 'the charter’s step times added up — check it',
+  ai: 'the AI’s reading of the charter (quoted below) — check it',
+}
+async function suggestTime(t: DocumentTypeItem) {
+  suggestion.value = null
+  const res = await run(`suggest-${t.id}`, () => api.post<{ suggestion: TimeSuggestion }>(`/org/document-types/${t.id}/suggest-time`))
+  if (res) suggestion.value = res.suggestion
+}
+function applySuggestion() {
+  const sgt = suggestion.value
+  if (!sgt?.found) return
+  Object.assign(editForm, { processing_days: sgt.days ?? 0, processing_hours: sgt.hours ?? 0, processing_minutes: sgt.minutes ?? 0 })
+}
+
+// "Import from Citizen's Charter": the charter's List of Services, ticked rows become types.
+interface CharterRow {
+  office: string
+  parent_office: string
+  division: string | null
+  category: 'INTERNAL' | 'EXTERNAL' | null
+  name: string
+  page: number | null
+  office_id: string | null
+  already_exists: boolean
+  pick?: boolean
+}
+const importOpen = ref(false)
+const importFileId = ref('')
+const importRows = ref<CharterRow[]>([])
+const importNeedsReread = ref(false)
+const switchOffDefaults = ref(true)
+const charterFiles = computed(() => files.value.filter((f) => f.status === 'READY'))
+const importGroups = computed(() => {
+  const groups: Array<{ office: string; rows: CharterRow[] }> = []
+  for (const r of importRows.value) {
+    if (groups.at(-1)?.office !== r.office) groups.push({ office: r.office, rows: [] })
+    groups.at(-1)!.rows.push(r)
+  }
+  return groups
+})
+const importPicked = computed(() => importRows.value.filter((r) => r.pick))
+function openImport() {
+  importOpen.value = true
+  importRows.value = []
+  importFileId.value = charterFiles.value.find((f) => f.kind === 'CITIZENS_CHARTER')?.id ?? charterFiles.value[0]?.id ?? ''
+  if (importFileId.value) loadPreview()
+}
+async function loadPreview() {
+  importRows.value = []
+  if (!importFileId.value) return
+  const res = await run('preview', () => api.post<{ rows: CharterRow[]; needs_reread: boolean }>('/org/document-types/charter/preview', { file_id: importFileId.value }))
+  if (!res) return
+  importNeedsReread.value = res.needs_reread
+  importRows.value = res.rows.map((r) => ({ ...r, pick: !r.already_exists }))
+}
+/** One office choice per charter office group; Global = '' (every office). */
+function setGroupOffice(group: { rows: CharterRow[] }, officeId: string) {
+  for (const r of group.rows) r.office_id = officeId || null
+}
+function setGroupPick(group: { rows: CharterRow[] }, value: boolean) {
+  for (const r of group.rows) r.pick = value && !r.already_exists
+}
+async function runImport() {
+  const rows = importPicked.value.map(({ name, category, office_id, page }) => ({ name, category, office_id, page }))
+  const res = await run('import', () =>
+    api.post<{ created: number; skipped: number; switched_off: number }>('/org/document-types/charter/import', { file_id: importFileId.value, rows, switch_off_defaults: switchOffDefaults.value }),
+  )
+  if (res) {
+    ui.success(
+      `${res.created} document type${res.created === 1 ? '' : 's'} imported`,
+      [res.skipped && `${res.skipped} already existed`, res.switched_off && `${res.switched_off} starting type${res.switched_off === 1 ? '' : 's'} switched off`, 'set their processing times next'].filter(Boolean).join(' · '),
+    )
+    importOpen.value = false
+    refresh()
+  }
 }
 async function saveEdit(t: DocumentTypeItem) {
-  const ok = await run(`edit-${t.id}`, () => api.patch(`/org/document-types/${t.id}`, { ...editForm }), 'Document type saved')
+  const ok = await run(`edit-${t.id}`, () => api.patch(`/org/document-types/${t.id}`, { ...editForm, office_id: editForm.office_id || null }), 'Document type saved')
   if (ok) {
     editing.value = null
     refresh()
@@ -124,7 +238,7 @@ const maxBytes = computed(() => data.value?.limits.knowledge_max_bytes ?? 200 * 
 const ACCEPT = '.pdf,.docx,.txt,.md,.csv'
 // office_id '' = organization-wide. The scope is chosen here, never taken from the uploader's office.
 const upload = reactive({ title: '', description: '', office_id: '', charter: false })
-const { data: officeData } = useLazyAsyncData('knowledge-offices', () => api.get<{ data: Array<{ id: string; name: string; code: string }> }>('/offices'), { server: false })
+const { data: officeData } = useLazyAsyncData('knowledge-offices', () => api.get<{ data: Array<{ id: string; name: string; code: string; parent_office_id?: string | null }> }>('/offices'), { server: false })
 const offices = computed(() => officeData.value?.data ?? [])
 const picked = ref<File | null>(null)
 const dragging = ref(false)
@@ -288,7 +402,20 @@ const STATUS = {
       <section class="card overflow-hidden">
         <div class="card-pad pb-3">
           <h2 class="text-lg">Document types</h2>
-          <p class="mt-1 text-sm text-ink-body">Offered when anyone uploads a document. Each type's processing time sets the deadline of documents submitted with it. The AI picks a type when it reads a file, using the description to decide.</p>
+          <div class="flex flex-wrap items-start justify-between gap-2">
+            <p class="mt-1 max-w-2xl text-sm text-ink-body">
+              Offered when someone uploads a document: <strong>Global</strong> types to every office (e.g. Payroll), the others only to their office. Each type's processing time sets the deadline of documents submitted with it.
+            </p>
+            <button type="button" class="btn btn-secondary btn-sm" @click="openImport"><FIcon name="book-open" :size="14" /> Import from Citizen’s Charter</button>
+          </div>
+          <label class="mt-3 block max-w-xs">
+            <span class="sr-only">Show the types of</span>
+            <select v-model="typeScope" class="input !min-h-9 !text-sm">
+              <option value="all">All types ({{ types.length }})</option>
+              <option value="global">Global types</option>
+              <option v-for="o in scopeOptions.slice(1)" :key="o.id" :value="o.id">{{ o.label }}</option>
+            </select>
+          </label>
           <p class="mt-2 flex items-start gap-2 rounded-xl bg-ink/[0.035] px-3 py-2 text-[13px] text-ink-body">
             <FIcon name="clock" :size="14" class="mt-0.5 shrink-0 text-ink-2" />
             <span v-if="calendarText">Processing time counts working time only — {{ calendarText }}. Nights, days off and holidays don’t count, so 1 day means one working day.</span>
@@ -299,17 +426,39 @@ const STATUS = {
           <EmptyState icon="tag" title="No document types yet" description="Add the kinds of documents your organization handles." />
         </div>
         <ul v-else class="divide-y divide-line/60 border-t border-line/60">
-          <li v-for="(t, i) in types" :key="t.id" class="flex gap-3 p-4" :class="!t.is_active && 'opacity-60'">
+          <li v-for="(t, i) in shownTypes" :key="t.id" class="flex gap-3 p-4" :class="!t.is_active && 'opacity-60'">
             <div class="flex shrink-0 flex-col">
               <button class="grid size-6 place-items-center rounded text-ink-2 hover:bg-ink/5 disabled:opacity-30" :disabled="i === 0" aria-label="Move up" @click="moveType(t, -1)"><FIcon name="chevron-up" :size="14" /></button>
-              <button class="grid size-6 place-items-center rounded text-ink-2 hover:bg-ink/5 disabled:opacity-30" :disabled="i === types.length - 1" aria-label="Move down" @click="moveType(t, 1)"><FIcon name="chevron-down" :size="14" /></button>
+              <button class="grid size-6 place-items-center rounded text-ink-2 hover:bg-ink/5 disabled:opacity-30" :disabled="i === shownTypes.length - 1" aria-label="Move down" @click="moveType(t, 1)"><FIcon name="chevron-down" :size="14" /></button>
             </div>
 
             <form v-if="editing === t.id" class="min-w-0 flex-1 space-y-2" @submit.prevent="saveEdit(t)">
               <input v-model="editForm.name" class="input" maxlength="100" required aria-label="Name" />
               <textarea v-model="editForm.description" class="input" rows="2" maxlength="500" placeholder="What documents belong here (helps the AI choose)" aria-label="Description" />
-              <ProcessingTimeInput :id="`edit-time-${t.id}`" v-model:days="editForm.processing_days" v-model:hours="editForm.processing_hours" :working="!!calendarText" />
-              <p v-if="editForm.processing_days !== t.processing_days || editForm.processing_hours !== t.processing_hours" class="text-xs text-ink-2">
+              <label class="block">
+                <span class="field-label">Offered to</span>
+                <select v-model="editForm.office_id" class="input">
+                  <option v-for="o in scopeOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
+                </select>
+              </label>
+              <ProcessingTimeInput :id="`edit-time-${t.id}`" v-model:days="editForm.processing_days" v-model:hours="editForm.processing_hours" v-model:minutes="editForm.processing_minutes" :working="!!calendarText" />
+              <div>
+                <button type="button" class="btn btn-ghost btn-sm" :disabled="busy === `suggest-${t.id}`" :aria-busy="busy === `suggest-${t.id}`" @click="suggestTime(t)">
+                  <FIcon name="zap" :size="14" /> Suggest from Citizen’s Charter
+                </button>
+                <div v-if="suggestion" class="mt-2 rounded-xl px-3 py-2 text-[13px]" :class="suggestion.found ? 'bg-info/10 text-info-ink' : 'bg-ink/[0.04] text-ink-body'">
+                  <template v-if="suggestion.found">
+                    <p>
+                      Suggested: <strong>{{ processingLabel(suggestion.days ?? 0, suggestion.hours ?? 0, !!calendarText, suggestion.minutes ?? 0) }}</strong> — from {{ BASIS_TEXT[suggestion.basis!] }}.
+                      <span class="block text-xs opacity-80">{{ suggestion.source?.title }}<template v-if="suggestion.source?.page">, p. {{ suggestion.source.page }}</template></span>
+                    </p>
+                    <ul class="mt-1 list-inside list-disc text-xs opacity-80"><li v-for="(l, li) in suggestion.lines" :key="li">{{ l }}</li></ul>
+                    <button type="button" class="btn btn-sm btn-secondary mt-2" @click="applySuggestion">Use this time</button>
+                  </template>
+                  <template v-else>{{ suggestion.reason }}</template>
+                </div>
+              </div>
+              <p v-if="editForm.processing_days !== t.processing_days || editForm.processing_hours !== t.processing_hours || editForm.processing_minutes !== (t.processing_minutes ?? 0)" class="text-xs text-ink-2">
                 Applies to documents submitted from now on. Documents already in progress keep their deadline.
               </p>
               <p v-if="t.usage && editForm.name.trim() !== t.name" class="text-xs text-amber-ink">Renaming also renames it on the {{ t.usage }} document{{ t.usage === 1 ? '' : 's' }} filed under it.</p>
@@ -324,12 +473,15 @@ const STATUS = {
                 <p class="flex flex-wrap items-center gap-2 text-sm font-semibold">
                   {{ t.name }}
                   <ToneBadge v-if="!t.is_active" tone="neutral">Hidden</ToneBadge>
+                  <ToneBadge :tone="t.office ? 'info' : 'primary'">{{ t.office ? t.office.name : 'Global' }}</ToneBadge>
+                  <ToneBadge v-if="t.service_category" tone="neutral">{{ t.service_category === 'INTERNAL' ? 'Internal' : 'External' }}</ToneBadge>
                 </p>
                 <p v-if="t.description" class="mt-0.5 text-[13px] text-ink-body">{{ t.description }}</p>
                 <p class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-2">
-                  <span class="inline-flex items-center gap-1" :class="t.total_hours ? 'text-ink-body' : ''">
-                    <FIcon name="clock" :size="12" /> {{ t.total_hours ? `Process within ${processingLabel(t.processing_days, t.processing_hours, !!calendarText)}` : 'No time limit' }}
+                  <span class="inline-flex items-center gap-1" :class="t.total_minutes ? 'text-ink-body' : ''">
+                    <FIcon name="clock" :size="12" /> {{ t.total_minutes ? `Process within ${processingLabel(t.processing_days, t.processing_hours, !!calendarText, t.processing_minutes ?? 0)}` : 'No time limit set' }}
                   </span>
+                  <span v-if="t.source_page">Citizen’s Charter p. {{ t.source_page }}</span>
                   <span>{{ t.usage ?? 0 }} document{{ t.usage === 1 ? '' : 's' }}</span>
                 </p>
               </div>
@@ -356,7 +508,14 @@ const STATUS = {
             <label class="field-label" for="type-desc">Description <span class="font-normal text-ink-2">(optional)</span></label>
             <textarea id="type-desc" v-model="newType.description" class="input" rows="3" maxlength="500" placeholder="What documents belong here — helps the AI choose" />
           </div>
-          <ProcessingTimeInput id="new-type-time" v-model:days="newType.processing_days" v-model:hours="newType.processing_hours" :working="!!calendarText" />
+          <div>
+            <label class="field-label" for="type-scope">Offered to</label>
+            <select id="type-scope" v-model="newType.office_id" class="input">
+              <option v-for="o in scopeOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
+            </select>
+            <p class="field-hint">Global types (e.g. Payroll) are offered to every office.</p>
+          </div>
+          <ProcessingTimeInput id="new-type-time" v-model:days="newType.processing_days" v-model:hours="newType.processing_hours" v-model:minutes="newType.processing_minutes" :working="!!calendarText" />
           <button class="btn btn-primary w-full justify-center" :disabled="busy === 'add-type' || !newType.name.trim()" :aria-busy="busy === 'add-type'"><FIcon name="plus" :size="16" /> Add type</button>
         </form>
       </aside>
@@ -476,5 +635,51 @@ const STATUS = {
         </ul>
       </section>
     </div>
+    <AppModal :open="importOpen" title="Import from Citizen’s Charter" description="Services in the charter’s List of Services become document types. Processing times stay empty until you set them (or accept a suggestion)." width="lg" @close="importOpen = false">
+      <div v-if="!charterFiles.length" class="text-sm text-ink-body">Upload the Citizen’s Charter first, in the AI knowledge tab.</div>
+      <template v-else>
+        <label class="block">
+          <span class="field-label">Charter file</span>
+          <select v-model="importFileId" class="input" @change="loadPreview">
+            <option v-for="f in charterFiles" :key="f.id" :value="f.id">{{ f.title }}{{ f.kind === 'CITIZENS_CHARTER' ? '' : ' (not marked as charter)' }}</option>
+          </select>
+        </label>
+        <p v-if="busy === 'preview'" class="mt-4 flex items-center gap-2 text-sm text-ink-2"><span class="spinner" /> Reading the List of Services…</p>
+        <p v-else-if="importNeedsReread" class="mt-4 text-sm text-amber-ink">This file was read before pages and lines were kept. Press <strong>Re-read</strong> on it in the AI knowledge tab, then try again.</p>
+        <p v-else-if="!importRows.length" class="mt-4 text-sm text-ink-2">No List of Services was found in this file.</p>
+        <template v-else>
+          <p class="mt-4 text-sm text-ink-body">
+            {{ importRows.length }} services in {{ importGroups.length }} offices · <strong>{{ importPicked.length }}</strong> ticked. Choose the FlowVision office for each charter office, or Global.
+          </p>
+          <div class="mt-3 max-h-[50vh] space-y-4 overflow-y-auto pr-1">
+            <section v-for="g in importGroups" :key="g.office" class="rounded-xl border border-line p-3">
+              <div class="flex flex-wrap items-center gap-2">
+                <p class="min-w-0 flex-1 text-sm font-semibold">{{ g.office }}</p>
+                <select class="input !min-h-8 w-auto !py-0 !text-xs" :value="g.rows[0]?.office_id ?? ''" :aria-label="`FlowVision office for ${g.office}`" @change="setGroupOffice(g, ($event.target as HTMLSelectElement).value)">
+                  <option v-for="o in scopeOptions" :key="o.id" :value="o.id">{{ o.label }}</option>
+                </select>
+                <button type="button" class="btn btn-ghost btn-sm" @click="setGroupPick(g, !g.rows.some((r) => r.pick))">{{ g.rows.some((r) => r.pick) ? 'Untick all' : 'Tick all' }}</button>
+              </div>
+              <ul class="mt-2 space-y-1">
+                <li v-for="(r, ri) in g.rows" :key="ri">
+                  <label class="flex items-start gap-2 text-[13px]" :class="r.already_exists && 'opacity-50'">
+                    <input v-model="r.pick" type="checkbox" class="mt-0.5 size-4" :disabled="r.already_exists" />
+                    <span class="min-w-0 flex-1">{{ r.name }}<span class="text-ink-2"> · {{ r.category === 'INTERNAL' ? 'Internal' : r.category === 'EXTERNAL' ? 'External' : 'Unlabelled' }}<template v-if="r.page"> · p. {{ r.page }}</template><template v-if="r.already_exists"> · already a type</template></span></span>
+                  </label>
+                </li>
+              </ul>
+            </section>
+          </div>
+          <label class="mt-4 flex items-center gap-2 text-sm">
+            <input v-model="switchOffDefaults" type="checkbox" class="size-4" /> Switch off the starting types (Purchase Request, Leave Application, …). They aren’t deleted; you can switch them on again.
+          </label>
+        </template>
+      </template>
+      <template #footer>
+        <button class="btn btn-ghost" @click="importOpen = false">Cancel</button>
+        <button class="btn btn-primary" :disabled="!importPicked.length || busy === 'import'" :aria-busy="busy === 'import'" @click="runImport"><FIcon name="download" :size="16" /> Import {{ importPicked.length }}</button>
+      </template>
+    </AppModal>
+
   </div>
 </template>

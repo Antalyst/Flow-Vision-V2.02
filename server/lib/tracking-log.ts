@@ -80,3 +80,24 @@ export function pendingPass(visit: Row | null | undefined): LogEvent | null {
     .at(-1)
   return last?.type === 'PASSED_TO_STAFF' ? last : null
 }
+
+/**
+ * When a visit began, to the millisecond: its first logged event (event times keep milliseconds),
+ * else the row's created_at. document_tracking timestamps were whole seconds before the
+ * 2026-10-22 migration, so visits created in the same second need this to stay in order.
+ */
+export function visitStartedAt(visit: Row) {
+  const first = readLog(visit).reduce<string | null>((min, e) => (min === null || e.at < min ? e.at : min), null)
+  return first ? Date.parse(first) : new Date(visit.created_at).getTime()
+}
+
+/** Visits in the order they happened: by start time, then created_at, then step number (deterministic). */
+export function sortVisits<T extends Row>(visits: T[]): T[] {
+  return [...visits].sort(
+    (a, b) =>
+      visitStartedAt(a) - visitStartedAt(b) ||
+      new Date(a.created_at).getTime() - new Date(b.created_at).getTime() ||
+      Number(a.step_number) - Number(b.step_number) ||
+      String(a.id).localeCompare(String(b.id)),
+  )
+}

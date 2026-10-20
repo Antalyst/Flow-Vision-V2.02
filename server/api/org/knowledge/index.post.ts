@@ -3,6 +3,8 @@ import { knowledgeDto, readKnowledgeKind, resolveKnowledgeOffice, saveKnowledgeF
 import { userAttrs } from '~~/server/lib/document-queries.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { badRequest } from '~~/server/lib/errors.ts'
+import { env } from '~~/server/lib/env.ts'
+import { readUploadParts } from '~~/server/lib/multipart.ts'
 import * as v from '~~/server/lib/validate.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
@@ -14,7 +16,8 @@ import { requirePage } from '~~/server/lib/team.ts'
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
-  const parts = (await readMultipartFormData(event)) ?? []
+  // Not h3's readMultipartFormData: it fails on files of ~108 MiB and up (see server/lib/multipart.ts).
+  const parts = (await readUploadParts(event, { maxBytes: env.maxKnowledgeBytes })) ?? []
   const filePart = parts.find((p) => p.name === 'file' && p.filename !== undefined && p.data.length)
   if (!filePart) throw badRequest('Choose a file to upload')
   const fields = Object.fromEntries(parts.filter((p) => p.filename === undefined && p.name).map((p) => [p.name!, p.data.toString('utf8')]))

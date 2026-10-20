@@ -122,9 +122,10 @@ check((await s.LIAISON.call('GET', '/approvals')).status === 403, "LIAISON can't
 
 // ── Account management ─────────────────────────────────────────────────────────
 const stamp = Date.now()
-const offices = ((await s.ADMIN.call('GET', '/offices')).body?.data ?? []) as Array<{ id: string; code: string }>
+const offices = ((await s.ADMIN.call('GET', '/offices')).body?.data ?? []) as Array<{ id: string; code: string; parent_office_id?: string | null }>
 const headOffice = s.DEPARTMENT_HEAD.user.office?.id as string
-const otherOffice = offices.find((o) => o.id !== headOffice)?.id
+// Another office: not the head's own, and not one of its umbrella offices (where it may place staff).
+const otherOffice = offices.find((o) => o.id !== headOffice && o.parent_office_id !== headOffice)?.id
 const made = await s.ADMIN.call('POST', '/users', { account_type: 'DEPARTMENT_HEAD', email: `rt.head.${stamp}@flowvision.test`, first_name: 'Role', last_name: 'Head', office_id: headOffice })
 check(made.status === 201 && made.body?.user?.account_type === 'DEPARTMENT_HEAD', 'ADMIN creates a DEPARTMENT_HEAD (stored with the new value)', `${made.status}`)
 for (const old of ['CLIENT', 'EMPLOYEE']) {
@@ -133,14 +134,18 @@ for (const old of ['CLIENT', 'EMPLOYEE']) {
 }
 for (const [role, target] of [
   ['DEPARTMENT_HEAD', 'ADMIN'],
-  ['DEPARTMENT_HEAD', 'DEPARTMENT_HEAD'],
   ['STAFF', 'STAFF'],
 ] as Array<[keyof typeof ACCOUNTS, string]>) {
   const r = await s[role].call('POST', '/users', { account_type: target, email: `rt.${role}.${target}.${stamp}@flowvision.test`.toLowerCase(), first_name: 'X', last_name: 'Y' })
   check([400, 403].includes(r.status) && !r.body?.user, `${role} can't create an account of type ${target}`, `${r.status}`)
 }
-const staffMade = await s.DEPARTMENT_HEAD.call('POST', '/users', { account_type: 'STAFF', email: `rt.staff.${stamp}@flowvision.test`, first_name: 'New', last_name: 'Staff', office_id: otherOffice })
-check(staffMade.status === 201 && staffMade.body?.user?.office?.id === headOffice, 'DEPARTMENT_HEAD creates STAFF, always in its own office (an office_id for another office is ignored)', `${staffMade.status}`)
+// A Department Head adds a Department Head only as a delegate: assigned by it, with no permissions unless granted.
+const delegateMade = await s.DEPARTMENT_HEAD.call('POST', '/users', { account_type: 'DEPARTMENT_HEAD', email: `rt.dh.dh.${stamp}@flowvision.test`, first_name: 'X', last_name: 'Y' })
+check(delegateMade.status === 201 && delegateMade.body?.user?.delegated === true && delegateMade.body.user.permissions?.length === 0, 'DEPARTMENT_HEAD adds a DEPARTMENT_HEAD only as a delegate with no permissions', `${delegateMade.status}`)
+const otherOfficeStaff = await s.DEPARTMENT_HEAD.call('POST', '/users', { account_type: 'STAFF', email: `rt.staff.other.${stamp}@flowvision.test`, first_name: 'New', last_name: 'Staff', office_id: otherOffice })
+check(otherOfficeStaff.status === 403, 'DEPARTMENT_HEAD cannot place STAFF in another office (refused, not ignored)', `${otherOfficeStaff.status}`)
+const staffMade = await s.DEPARTMENT_HEAD.call('POST', '/users', { account_type: 'STAFF', email: `rt.staff.${stamp}@flowvision.test`, first_name: 'New', last_name: 'Staff' })
+check(staffMade.status === 201 && staffMade.body?.user?.office?.id === headOffice, 'DEPARTMENT_HEAD creates STAFF in its own office', `${staffMade.status}`)
 
 const roster = ((await s.ADMIN.call('GET', '/users')).body?.data ?? []) as Array<{ id: string; email: string; office: { id: string } | null; account_type: string }>
 const outsider = roster.find((u) => u.office?.id && u.office.id !== headOffice && ['STAFF', 'LIAISON'].includes(u.account_type))

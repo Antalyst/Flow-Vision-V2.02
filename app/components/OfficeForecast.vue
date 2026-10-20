@@ -7,7 +7,7 @@ interface StaffForecast {
   id: string
   first_name: string
   last_name: string
-  account_type: 'DEPARTMENT_HEAD' | 'STAFF'
+  account_type: 'STAFF'
   position: string | null
   holding: number
   received_total: number
@@ -231,7 +231,7 @@ const maxLoad = computed(() => Math.max(1, ...(f.value?.staff ?? []).map((s) => 
       <div class="mb-4 flex flex-wrap items-start justify-between gap-2">
         <div>
           <h3 class="text-base font-semibold">Staff workload forecast</h3>
-          <p class="text-xs text-ink-2">For everyone in your office: what they hold now plus what they are predicted to receive in the next {{ f.range.horizon }} days</p>
+          <p class="text-xs text-ink-2">For each staff member of your office (Department Heads are not included): what they hold now plus what they are predicted to receive in the next {{ f.range.horizon }} days</p>
         </div>
         <NuxtLink to="/employee/team" class="btn btn-sm btn-ghost">Manage staff <FIcon name="arrow-right" :size="14" /></NuxtLink>
       </div>
@@ -239,7 +239,7 @@ const maxLoad = computed(() => Math.max(1, ...(f.value?.staff ?? []).map((s) => 
         <FIcon name="zap" :size="16" class="mt-0.5 shrink-0" />
         <span>{{ f.suggestion }}</span>
       </div>
-      <EmptyState v-if="!f.staff.length" icon="users" title="No staff yet" description="Add staff to your office to see their workload forecast." />
+      <EmptyState v-if="!f.staff.length" icon="users" title="No staff to compare yet" description="Staff members of your office appear here with their predicted workload. Department Heads are not included. Add staff to your office to see it." />
       <div v-else class="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <div v-for="s in f.staff" :key="s.id" class="rounded-2xl border border-line/70 p-4">
           <div class="flex items-center gap-3">

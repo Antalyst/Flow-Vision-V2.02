@@ -31,7 +31,7 @@ watch(
 
 <template>
   <div class="fv-rise">
-    <PageHeader eyebrow="C1 · Staff" :title="auth.user?.office?.name ?? 'Your office'" :description="auth.user?.office?.department_name" />
+    <PageHeader eyebrow="C1 · Staff" :title="auth.user?.office?.name ?? 'Your office'" :description="auth.user?.office?.parent ? `Under ${auth.user.office.parent.name}` : auth.user?.office?.code" />
 
     <AuthorityBanner :authority="Boolean(data?.has_approval_authority)" :office-name="auth.user?.office?.name" class="mb-6" />
 

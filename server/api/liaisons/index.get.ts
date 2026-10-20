@@ -9,7 +9,7 @@ const workloadAttr: any = [sequelize.literal(liaisonWorkloadSql('liaisons.user_i
 
 /**
  * Search messengers (B3). `?free=true` keeps only the ones that can take a document now:
- * on duty with nothing to pick up or deliver. Same-department, free messengers are listed first.
+ * on duty with nothing to pick up or deliver. Free messengers of the user's own office are listed first.
  * Each office has its own messengers: `?office_id=` lists one office's, and `?document_id=` the
  * ones that can carry that document from where it is now (its office's; any at the organization
  * origin of an admin upload).
@@ -25,12 +25,17 @@ export default defineApiHandler(async (event) => {
   const search = v.q(query, 'q')
   const userWhere: Record<string | symbol, unknown> = { status: { [Op.ne]: 'inactive' } }
   const documentId = v.q(query, 'document_id', 36)
+  // An office's own messengers — and, for an umbrella office, its parent office's too.
+  const messengerOffices = async (id: string) => {
+    const office = await Office.findOne({ where: { id, org_id: user.org_id }, attributes: ['id', 'parent_office_id'] })
+    return office?.parent_office_id ? { [Op.in]: [office.id, office.parent_office_id] } : id
+  }
   if (documentId) {
     const doc = await Document.findOne({ where: { id: documentId, org_id: user.org_id }, attributes: ['current_office_id'] })
-    if (doc?.current_office_id) userWhere.office_id = doc.current_office_id
+    if (doc?.current_office_id) userWhere.office_id = await messengerOffices(doc.current_office_id)
   }
   const officeId = v.q(query, 'office_id', 36)
-  if (officeId) userWhere.office_id = officeId
+  if (officeId) userWhere.office_id = await messengerOffices(officeId)
   if (search) userWhere[Op.or] = ['first_name', 'last_name', 'full_name'].map((c) => ({ [c]: { [Op.like]: `%${search}%` } }))
 
   const liaisons = await Liaison.findAll({
@@ -39,7 +44,8 @@ export default defineApiHandler(async (event) => {
     include: [{ model: User, as: 'user', where: userWhere, include: [{ model: Office, as: 'office' }] }],
   })
 
-  const myDept = (user.office?.department ?? '').toLowerCase()
+  // Free messengers first, then the user's own office's, then the most reliable.
+  const myOffice = user.office_id ?? null
   const rank: Record<string, number> = { AVAILABLE: 0, BUSY: 1, OFF_DUTY: 2 }
   const data = liaisons
     .map((l) => liaisonDto(l, Number(l.get('workload') ?? 0))!)
@@ -47,7 +53,7 @@ export default defineApiHandler(async (event) => {
     .sort(
       (a, b) =>
         rank[a.availability]! - rank[b.availability]! ||
-        Number(b.department_code.toLowerCase() === myDept) - Number(a.department_code.toLowerCase() === myDept) ||
+        Number(b.user?.office?.id === myOffice) - Number(a.user?.office?.id === myOffice) ||
         b.success_rate - a.success_rate,
     )
   return { data }

@@ -1,7 +1,7 @@
 import { decideApproval, OFFICE_STAFF_TYPES } from '~~/server/lib/documents.ts'
-import { loadDocumentDto } from '~~/server/lib/document-queries.ts'
 import { approvalDto } from '~~/server/lib/serializers.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { loadDocumentFor } from '~~/server/lib/qr-access.ts'
 
 /**
  * decision: APPROVED (→ COMPLETED) or RETURNED (→ RETURNED, remarks required).
@@ -12,5 +12,5 @@ export default defineApiHandler(async (event) => {
   const body = await readJson(event)
   const decision = v.oneOf(body, 'decision', ['APPROVED', 'RETURNED'] as const, { required: true })!
   const { approval, doc } = await decideApproval(routeParam(event, 'id'), user, { decision, remarks: v.str(body, 'remarks', { max: 2000 }) }, requestMeta(event))
-  return { approval: approvalDto(approval), document: await loadDocumentDto(doc.id) }
+  return { approval: approvalDto(approval), document: await loadDocumentFor(doc.id, user) }
 })

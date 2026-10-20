@@ -1,4 +1,4 @@
-import type { Approval, DocumentFileInfo, DocumentPermissions, FlowDocument, OrgRoute, QrInfo, RoutingVisit, TrackingEvent } from '~/types'
+import type { Approval, DocumentFileInfo, DocumentPermissions, FlowDocument, InternalRun, OrgRoute, QrInfo, RoutingSlip, RoutingVisit, TrackingEvent } from '~/types'
 
 export interface DocumentDetail {
   document: FlowDocument
@@ -8,8 +8,18 @@ export interface DocumentDetail {
   approvals: Approval[]
   pending_approval: Approval | null
   active_qr: QrInfo | null
+  /** The routing slip's document table (only with the QR itself). */
+  routing_slip: RoutingSlip | null
   files: DocumentFileInfo[]
   permissions: DocumentPermissions
+  /** Umbrella offices this document can be handed to (when canHandToUmbrella). */
+  umbrella_options: Array<{ id: string; name: string; code: string }>
+  /** Set while an umbrella office has it: the office it returns to. */
+  unit_parent: { id: string } | null
+  /** Internal routes of the office this document can start (when canStartInternalRoute). */
+  internal_route_options: Array<{ id: string; name: string; description: string | null }>
+  /** Internal routes it followed, newest first. */
+  internal_routes: InternalRun[]
 }
 
 /**
@@ -70,6 +80,10 @@ export function useDocuments() {
     /** Pass it desk to desk to the next staff of the office; no messenger until another staff member scans it in. */
     passToStaff: (id: string, remarks?: string) => api.post<{ document: FlowDocument }>(`/documents/${id}/pass-staff`, remarks ? { remarks } : {}),
     takeBackPass: (id: string) => api.del<{ document: FlowDocument }>(`/documents/${id}/pass-staff`),
+    handToUmbrella: (id: string, body: { umbrella_id: string; remarks?: string }) => api.post<{ document: FlowDocument }>(`/documents/${id}/umbrella-handoff`, body),
+    returnFromUmbrella: (id: string, remarks?: string) => api.post<{ document: FlowDocument }>(`/documents/${id}/umbrella-return`, remarks ? { remarks } : {}),
+    startInternalRoute: (id: string, body: { route_id: string; remarks?: string }) => api.post<{ document: FlowDocument }>(`/documents/${id}/internal-start`, body),
+    advanceInternalRoute: (id: string, remarks?: string) => api.post<{ document: FlowDocument; completed: boolean }>(`/documents/${id}/internal-advance`, remarks ? { remarks } : {}),
     startTransit: (id: string) => api.post<{ document: FlowDocument }>(`/documents/${id}/transit`),
     failDelivery: (id: string, remarks: string) => api.post<{ document: FlowDocument }>(`/documents/${id}/fail-delivery`, { remarks }),
     addNote: (id: string, remarks: string) => api.post(`/documents/${id}/notes`, { remarks }),

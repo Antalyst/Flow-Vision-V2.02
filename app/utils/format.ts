@@ -24,6 +24,14 @@ export const ROLE_META: Record<AccountType, { label: string; home: string; tone:
   LIAISON: { label: 'Messenger', home: '/liaison/dashboard', tone: 'warning', description: 'Carries documents between offices' },
 }
 
+const UNKNOWN_ROLE = { label: 'Unknown role', home: '/login', tone: 'neutral' as Tone, description: '' }
+
+/**
+ * ROLE_META for any account, including one whose stored role isn't valid (e.g. a blank enum value
+ * left by a migration). Lists of other people use this, so one bad row can't break the page.
+ */
+export const roleMeta = (role: string | null | undefined) => ROLE_META[role as AccountType] ?? UNKNOWN_ROLE
+
 export type Tone = 'neutral' | 'primary' | 'success' | 'warning' | 'danger' | 'info'
 
 export const TONE_CLASSES: Record<Tone, string> = {
@@ -62,6 +70,12 @@ export const EVENT_LABELS: Record<string, string> = {
   MESSENGER_REASSIGNED: 'Messenger reassigned',
   PASSED_TO_STAFF: 'Passed to the next staff',
   PASS_CANCELLED: 'Taken back from the next staff',
+  HANDED_TO_UMBRELLA: 'Handed to an umbrella office',
+  RETURNED_FROM_UMBRELLA: 'Returned from the umbrella office',
+  INTERNAL_ROUTE_STARTED: 'Sent along an internal route',
+  INTERNAL_ROUTE_MOVED: 'Passed to the next unit (internal route)',
+  INTERNAL_ROUTE_COMPLETED: 'Internal route completed — back to its office',
+  INTERNAL_ROUTE_ENDED: 'Internal route ended early — back to its office',
   NOTE: 'Note',
 }
 
@@ -137,9 +151,10 @@ export function formatBytes(bytes?: number | null) {
  * A document type's processing time in words: "3 working days 2 hours" once the organization
  * set working hours (days are working days then), else "3d 2h".
  */
-export function processingLabel(days: number, hours: number, working: boolean) {
-  if (!working) return formatSla(days * 24 + hours)
-  const parts = [days && `${days} working day${days === 1 ? '' : 's'}`, hours && `${hours} working hour${hours === 1 ? '' : 's'}`].filter(Boolean)
+export function processingLabel(days: number, hours: number, working: boolean, minutes = 0) {
+  const mins = minutes ? `${minutes} min` : ''
+  if (!working) return [days * 24 + hours ? formatSla(days * 24 + hours) : '', mins].filter(Boolean).join(' ') || '0 hours'
+  const parts = [days && `${days} working day${days === 1 ? '' : 's'}`, hours && `${hours} working hour${hours === 1 ? '' : 's'}`, minutes && `${minutes} working min`].filter(Boolean)
   return parts.join(' ') || '0 hours'
 }
 
@@ -219,3 +234,12 @@ export function releasesDocument(doc: FlowDocument, userId: string | null | unde
   if (!userId) return false
   return doc.current_step_number === 0 || doc.received_by?.id === userId
 }
+
+/** A new issue's request body from the issue form (IssueFields): only the description of the chosen kind is sent. */
+export function issueBody(f: { title: string; category: string; details: string; otherText: string }) {
+  const description = (f.category === 'OTHER' ? f.otherText : f.details).trim()
+  return { title: f.title.trim(), category: f.category, ...(description && { description }) }
+}
+
+/** Is the issue form complete? ("Other" needs a description that isn't only spaces.) */
+export const issueFormReady = (f: { title: string; category: string; otherText: string }) => Boolean(f.title.trim()) && (f.category !== 'OTHER' || Boolean(f.otherText.trim()))

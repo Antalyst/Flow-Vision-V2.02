@@ -159,7 +159,7 @@ async function copyCredentials() {
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2 sm:w-[340px] sm:justify-end">
-            <ToneBadge :tone="ROLE_META[m.account_type].tone" dot>{{ ROLE_META[m.account_type].label }}</ToneBadge>
+            <ToneBadge :tone="roleMeta(m.account_type).tone" dot>{{ roleMeta(m.account_type).label }}</ToneBadge>
             <span v-if="m.office" class="truncate text-xs text-ink-body">{{ m.office.code }}</span>
             <ToneBadge v-if="m.account_type === 'STAFF' && m.office?.is_final_checkpoint" tone="success" icon="shield">Approver</ToneBadge>
             <span v-if="m.liaisonProfile" class="text-xs text-ink-2">{{ m.liaisonProfile.success_rate }}% success</span>

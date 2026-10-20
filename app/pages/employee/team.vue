@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { AccountType, LiaisonProfile, Office } from '~/types'
+import type { AccountType, LiaisonProfile, Office, UserSummary } from '~/types'
+import { DH_PERMISSIONS, DH_PERMISSION_META, MAIN_OFFICE_ONLY, SUGGESTED_DELEGATE_PERMISSIONS, type DhPermission } from '#shared/dh-permissions'
 
 useHead({ title: 'Staff & messengers · FlowVision' })
 
@@ -17,15 +18,26 @@ interface TeamMember {
   must_change_password: boolean
   liaisonProfile: LiaisonProfile | null
   page_access: string[] | null
+  delegated: boolean
+  assigned_by: string | null
+  assigned_at: string | null
+  permissions: DhPermission[] | null
 }
 
-type ManagedType = 'STAFF' | 'LIAISON'
+type ManagedType = 'STAFF' | 'LIAISON' | 'DEPARTMENT_HEAD'
 
-// A department head creates and manages the STAFF and LIAISON (messenger) accounts of their own office.
+// A department head manages the STAFF and LIAISON (messenger) accounts of their own office and its umbrella
+// offices ("Manage staff and messengers"), and assigns delegated Department Heads there ("Assign Department
+// Heads") — any number per office or umbrella office, each with only the permissions granted here.
 const ROLES: Record<ManagedType, { label: string; description: string }> = {
   STAFF: { label: 'Staff', description: 'Uploads and tracks their own documents; approves at the final checkpoint' },
   LIAISON: { label: 'Messenger', description: 'Picks up and delivers documents between offices' },
+  DEPARTMENT_HEAD: { label: 'Department Head (delegated)', description: 'Assigned by you, with only the permissions you grant below' },
 }
+const myPermissions = computed(() => auth.user?.permissions ?? [])
+const allowedRoles = computed(() =>
+  (Object.keys(ROLES) as ManagedType[]).filter((r) => myPermissions.value.includes(r === 'DEPARTMENT_HEAD' ? 'ASSIGN_HEADS' : 'MANAGE_TEAM')),
+)
 
 const api = useApi()
 const auth = useAuthStore()
@@ -33,6 +45,14 @@ const { busy, run } = useAction()
 const officeName = computed(() => auth.user?.office?.name ?? 'your office')
 
 const { data, refresh } = await useAsyncData('employee-team', () => api.get<{ data: TeamMember[] }>('/users', { managed: 1 }))
+// The umbrella offices of this office (none for an umbrella office itself).
+const { data: officeData } = await useAsyncData('employee-team-offices', () => api.get<{ data: Office[] }>('/offices'))
+const umbrellas = computed(() => (officeData.value?.data ?? []).filter((o) => o.parent_office_id && o.parent_office_id === auth.user?.office?.id))
+const refreshUmbrellas = () => {}
+const officeChoices = computed(() => [
+  ...(auth.user?.office ? [{ id: auth.user.office.id, label: `${auth.user.office.name} (your office)` }] : []),
+  ...umbrellas.value.map((u) => ({ id: u.id, label: `↳ ${u.name} · ${u.code}` })),
+])
 
 const filter = ref<ManagedType | ''>('')
 const q = ref('')
@@ -51,32 +71,83 @@ const counts = computed(() => {
 
 const formOpen = ref(false)
 const editing = ref<TeamMember | null>(null)
-const form = reactive({ account_type: 'STAFF' as ManagedType, first_name: '', last_name: '', email: '', phone: '', status: 'ACTIVE', page_access: null as string[] | null })
+const form = reactive({
+  account_type: 'STAFF' as ManagedType,
+  office_id: '',
+  first_name: '',
+  last_name: '',
+  email: '',
+  phone: '',
+  status: 'ACTIVE',
+  page_access: null as string[] | null,
+  permissions: [] as DhPermission[],
+})
+
+/** Roles this account may add (its own permissions decide). */
+const roleChoices = computed(() => allowedRoles.value)
+watch(roleChoices, (choices) => {
+  if (!choices.includes(form.account_type)) form.account_type = choices[0] ?? 'STAFF'
+})
+/** Permissions offered for a delegate: only those this account holds; umbrella management only in the main office. */
+const grantable = computed(() => {
+  const intoUmbrella = umbrellas.value.some((u) => u.id === form.office_id)
+  return DH_PERMISSIONS.filter((p) => myPermissions.value.includes(p) && !(intoUmbrella && MAIN_OFFICE_ONLY.includes(p)))
+})
+watch(grantable, (list) => (form.permissions = form.permissions.filter((p) => list.includes(p))))
+function togglePermission(p: DhPermission) {
+  form.permissions = form.permissions.includes(p) ? form.permissions.filter((x) => x !== p) : DH_PERMISSIONS.filter((x) => x === p || form.permissions.includes(x))
+}
+const officeLabelOf = (id: string | null) => (id === auth.user?.office?.id ? null : umbrellas.value.find((u) => u.id === id)?.name ?? null)
 
 function openForm(member?: TeamMember) {
   editing.value = member ?? null
   Object.assign(form, {
     account_type: (member?.account_type as ManagedType) ?? 'STAFF',
+    office_id: member?.office_id ?? auth.user?.office?.id ?? '',
     first_name: member?.first_name ?? '',
     last_name: member?.last_name ?? '',
     email: member?.email ?? '',
     phone: member?.phone ?? '',
     status: member?.status ?? 'ACTIVE',
     page_access: member?.page_access ? [...member.page_access] : null,
+    // A new delegate starts with the everyday document permissions ticked; nothing is granted until saved.
+    permissions: member?.permissions ? [...member.permissions] : SUGGESTED_DELEGATE_PERMISSIONS.filter((p) => myPermissions.value.includes(p)),
   })
   formOpen.value = true
 }
 
+// Assignment history of a delegate: who assigned it, each change, and when.
+interface AssignmentRow {
+  id: string
+  action: 'ASSIGNED' | 'UPDATED' | 'REVOKED' | 'REINSTATED'
+  permissions: DhPermission[] | null
+  changed_by: UserSummary | null
+  note: string | null
+  created_at: string
+}
+const historyOf = ref<TeamMember | null>(null)
+const history = ref<AssignmentRow[]>([])
+async function openHistory(m: TeamMember) {
+  historyOf.value = m
+  history.value = []
+  const res = await run(`history-${m.id}`, () => api.get<{ data: AssignmentRow[] }>(`/users/${m.id}/assignments`))
+  if (res) history.value = res.data
+}
+const permissionNames = (list: DhPermission[]) => (list.length ? list.map((x) => DH_PERMISSION_META[x].label).join(', ') : 'No permissions')
+const ACTION_LABEL: Record<AssignmentRow['action'], string> = { ASSIGNED: 'Assigned', UPDATED: 'Permissions changed', REVOKED: 'Access revoked', REINSTATED: 'Reinstated' }
+
 const credentials = ref<{ email: string; password: string } | null>(null)
 
 async function save() {
-  // The server places the account in this department head's office.
-  const body = { ...form }
+  // The server checks the office (own office or one of its umbrella offices) and every permission granted.
+  const { permissions, ...rest } = form
+  const body: Record<string, unknown> = { ...rest, ...(form.account_type === 'DEPARTMENT_HEAD' && { permissions }) }
   if (editing.value) {
     const ok = await run('save', () => api.patch(`/users/${editing.value!.id}`, body), 'Account updated')
     if (ok) {
       formOpen.value = false
       refresh()
+      refreshUmbrellas()
     }
     return
   }
@@ -85,6 +156,7 @@ async function save() {
     formOpen.value = false
     credentials.value = { email: form.email, password: res.temporary_password }
     refresh()
+    refreshUmbrellas()
   }
 }
 
@@ -117,7 +189,7 @@ async function copyCredentials() {
       :description="`Create accounts for ${officeName}. Everything your staff upload shows up under Office documents, so you can follow it.`"
     >
       <template #actions>
-        <button class="btn btn-primary" :disabled="!auth.user?.office" @click="openForm()"><FIcon name="user-plus" :size="16" /> New account</button>
+        <button class="btn btn-primary" :disabled="!auth.user?.office || !allowedRoles.length" :title="allowedRoles.length ? undefined : 'Your account doesn’t have permission to add accounts'" @click="openForm()"><FIcon name="user-plus" :size="16" /> New account</button>
       </template>
     </PageHeader>
 
@@ -160,16 +232,20 @@ async function copyCredentials() {
                 <ToneBadge v-else-if="m.must_change_password" tone="warning">Temp password</ToneBadge>
                 <ToneBadge v-if="m.page_access" tone="neutral" icon="lock">{{ m.page_access.length }} pages</ToneBadge>
               </p>
-              <p class="truncate text-xs text-ink-2">{{ m.email }}</p>
+              <p class="truncate text-xs text-ink-2">{{ m.email }}<template v-if="officeLabelOf(m.office_id)"> · {{ officeLabelOf(m.office_id) }}</template></p>
+              <p v-if="m.delegated" class="mt-0.5 text-xs text-ink-2">
+                Assigned {{ formatDate(m.assigned_at) }} · {{ m.permissions?.length ?? 0 }} of {{ DH_PERMISSIONS.length }} permissions
+              </p>
             </div>
           </div>
           <div class="flex flex-wrap items-center gap-2 sm:w-[260px] sm:justify-end">
-            <ToneBadge :tone="ROLE_META[m.account_type].tone" dot>{{ ROLES[m.account_type as ManagedType]?.label ?? ROLE_META[m.account_type].label }}</ToneBadge>
+            <ToneBadge :tone="roleMeta(m.account_type).tone" dot>{{ ROLES[m.account_type as ManagedType]?.label ?? roleMeta(m.account_type).label }}</ToneBadge>
             <ToneBadge v-if="m.account_type === 'STAFF' && m.office?.is_final_checkpoint" tone="success" icon="shield">Approver</ToneBadge>
             <span v-if="m.liaisonProfile" class="text-xs text-ink-2">{{ m.liaisonProfile.success_rate }}% success</span>
           </div>
           <div class="flex gap-1">
             <button class="btn btn-sm btn-ghost border-0" @click="openForm(m)"><FIcon name="edit-2" :size="14" /> Edit</button>
+            <button v-if="m.delegated" class="btn btn-sm btn-ghost border-0" :disabled="busy === `history-${m.id}`" @click="openHistory(m)"><FIcon name="clock" :size="14" /> History</button>
             <button class="btn btn-sm btn-ghost border-0" :disabled="busy === `reset-${m.id}`" :aria-busy="busy === `reset-${m.id}`" @click="resetPassword(m)"><FIcon name="key" :size="14" /> Reset</button>
           </div>
         </li>
@@ -178,23 +254,30 @@ async function copyCredentials() {
 
     <AppModal
       :open="formOpen"
-      :title="editing ? `Edit ${fullName(editing)}` : 'New staff or messenger account'"
-      :description="`The account belongs to ${officeName}. They'll sign in with a temporary password and be asked to set their own.`"
+      :title="editing ? `Edit ${fullName(editing)}` : 'New account'"
+      description="They'll sign in with a temporary password and be asked to set their own."
       @close="formOpen = false"
     >
       <form id="team-form" class="space-y-4" @submit.prevent="save">
+        <div v-if="officeChoices.length > 1">
+          <label class="field-label" for="t-office">Office</label>
+          <select id="t-office" v-model="form.office_id" class="input">
+            <option v-for="o in officeChoices" :key="o.id" :value="o.id">{{ o.label }}</option>
+          </select>
+          <p class="field-hint">People can work in your office or one of its umbrella offices. Any number of delegated Department Heads can be assigned to each.</p>
+        </div>
         <fieldset>
           <legend class="field-label">Role</legend>
           <div class="grid grid-cols-2 gap-2">
             <label
-              v-for="(meta, role) in ROLES"
+              v-for="role in roleChoices"
               :key="role"
               class="flex cursor-pointer flex-col rounded-xl border p-3 transition-colors"
               :class="form.account_type === role ? 'border-terracotta bg-terracotta/[0.06]' : 'border-line hover:bg-card'"
             >
               <input v-model="form.account_type" type="radio" :value="role" class="sr-only" @change="form.page_access = null" />
-              <span class="flex items-center gap-2 text-sm font-semibold"><span class="size-2 rounded-full" :class="TONE_DOT[ROLE_META[role].tone]" />{{ meta.label }}</span>
-              <span class="mt-1 text-xs text-ink-body">{{ meta.description }}</span>
+              <span class="flex items-center gap-2 text-sm font-semibold"><span class="size-2 rounded-full" :class="TONE_DOT[ROLE_META[role].tone]" />{{ ROLES[role].label }}</span>
+              <span class="mt-1 text-xs text-ink-body">{{ ROLES[role].description }}</span>
             </label>
           </div>
         </fieldset>
@@ -223,12 +306,38 @@ async function copyCredentials() {
             <option value="SUSPENDED">Suspended — cannot sign in</option>
           </select>
         </div>
+        <fieldset v-if="form.account_type === 'DEPARTMENT_HEAD'">
+          <legend class="field-label">Permissions</legend>
+          <p class="field-hint -mt-1 mb-2">Granted explicitly. You can only grant what your own account may do. Change or revoke them any time.</p>
+          <div class="space-y-1.5">
+            <label v-for="p in grantable" :key="p" class="flex items-start gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-ink/[0.03]">
+              <input type="checkbox" class="mt-0.5 size-4" :checked="form.permissions.includes(p)" @change="togglePermission(p)" />
+              <span>
+                <span class="font-medium">{{ DH_PERMISSION_META[p].label }}</span>
+                <span class="block text-xs text-ink-2">{{ DH_PERMISSION_META[p].description }}</span>
+              </span>
+            </label>
+          </div>
+          <p v-if="!form.permissions.length" class="mt-1 text-xs text-amber-ink">With no permissions this Department Head can only view the office’s documents.</p>
+        </fieldset>
         <PageAccessPicker v-model="form.page_access" :role="form.account_type" />
       </form>
       <template #footer>
         <button class="btn btn-ghost" @click="formOpen = false">Cancel</button>
         <button class="btn btn-primary" form="team-form" :disabled="busy === 'save'" :aria-busy="busy === 'save'">{{ editing ? 'Save changes' : 'Create account' }}</button>
       </template>
+    </AppModal>
+
+    <AppModal :open="Boolean(historyOf)" :title="historyOf ? `Assignment history · ${fullName(historyOf)}` : ''" width="sm" @close="historyOf = null">
+      <p v-if="busy === `history-${historyOf?.id}`" class="flex items-center gap-2 text-sm text-ink-2"><span class="spinner" /> Loading…</p>
+      <p v-else-if="!history.length" class="text-sm text-ink-2">No history recorded.</p>
+      <ol v-else class="space-y-3">
+        <li v-for="h in history" :key="h.id" class="text-sm">
+          <p class="font-medium">{{ ACTION_LABEL[h.action] }} <span class="font-normal text-ink-2">· {{ formatDateTime(h.created_at) }}<template v-if="h.changed_by"> · by {{ fullName(h.changed_by) }}</template></span></p>
+          <p v-if="h.permissions" class="text-xs text-ink-2">{{ permissionNames(h.permissions) }}</p>
+          <p v-if="h.note" class="text-xs text-amber-ink">{{ h.note }}</p>
+        </li>
+      </ol>
     </AppModal>
 
     <AppModal :open="Boolean(credentials)" title="Share these sign-in details" description="This temporary password is shown once. Send it privately." width="sm" @close="credentials = null">

@@ -1,4 +1,4 @@
-import { Issue, User, ISSUE_PRIORITIES, ISSUE_STATUSES } from '~~/server/lib/models.ts'
+import { Issue, User, ISSUE_STATUSES } from '~~/server/lib/models.ts'
 import { issueIncludes } from '~~/server/lib/issues.ts'
 import { issueDto } from '~~/server/lib/serializers.ts'
 import { notify } from '~~/server/lib/notifications.ts'
@@ -20,7 +20,8 @@ export default defineApiHandler(async (event) => {
   const before = issue.toJSON()
   const updates: Record<string, unknown> = {}
   if ('status' in body) updates.status = v.oneOf(body, 'status', ISSUE_STATUSES, { required: true })
-  if ('severity' in body) updates.priority = v.oneOf(body, 'severity', ISSUE_PRIORITIES, { required: true })
+  // The priority follows the issue's category (shared/issue-categories.ts): it can't be set by hand.
+  if ('severity' in body || 'priority' in body) throw badRequest('The priority follows the issue’s category and can’t be changed', { field: 'severity' })
   if ('resolution' in body) updates.resolution_notes = v.str(body, 'resolution', { max: 5000 })
   if ('assigned_to' in body) {
     if (!isClient) throw forbidden('Only an admin can assign issues')

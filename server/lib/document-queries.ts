@@ -5,11 +5,21 @@ import { AT_OFFICE, CARRYING, documentDtoOne } from './serializers.ts'
 import type { Actor } from './auth.ts'
 import type { AccountType } from './models.ts'
 
+const lit = (sql: string) => sequelize.literal(sql)
+const esc = (value: string) => sequelize.escape(value)
+
 export const userAttrs = ['id', 'first_name', 'last_name', 'full_name', 'email', 'account_type']
+
+/**
+ * Latest visit first: by created_at, then — for rows created in the same second (whole-second timestamps
+ * before the 2026-10-22 migration) — by the visit's first event time (ISO text, sorts as time), as
+ * tracking-log.ts sortVisits does. JSON_VALID guards plain-text notes written by another tool.
+ */
+export const LATEST_VISIT_ORDER = "t.created_at DESC, CASE WHEN JSON_VALID(t.notes) THEN JSON_UNQUOTE(JSON_EXTRACT(t.notes, '$[0].at')) END DESC"
 
 /** A column of the document's current visit (latest document_tracking row for its current step). */
 export const currentVisit = (column: string, doc = 'documents') =>
-  `(SELECT t.${column} FROM document_tracking t WHERE t.document_id = ${doc}.id AND t.step_number = ${doc}.current_step_number ORDER BY t.created_at DESC LIMIT 1)`
+  `(SELECT t.${column} FROM document_tracking t WHERE t.document_id = ${doc}.id AND t.step_number = ${doc}.current_step_number ORDER BY ${LATEST_VISIT_ORDER} LIMIT 1)`
 
 /**
  * SQL twin of tracking-log.ts sendBackTarget: the text after the last `"send_back_to":` in the
@@ -44,6 +54,8 @@ export const documentAttributes: any = {
     [sequelize.literal(sendBackSql()), 'send_back_raw'],
     [sequelize.literal(`(SELECT o.name FROM offices o WHERE CONCAT('"', o.id, '"') = ${sendBackSql()})`), 'send_back_office_name'],
     [sequelize.literal("(SELECT COUNT(*) FROM issues i WHERE i.document_id = documents.id AND i.status IN ('OPEN', 'IN_PROGRESS'))"), 'open_issues'],
+    // Following one of its office's internal routes right now (2026-10-23 migration).
+    [sequelize.literal("(SELECT t.route_name FROM document_internal_transactions t WHERE t.document_id = documents.id AND t.status = 'ACTIVE' LIMIT 1)"), 'internal_route_name'],
   ],
 }
 
@@ -52,21 +64,33 @@ export const documentIncludes = [
   { model: User, as: 'submitter', attributes: userAttrs },
 ]
 
-/** Reload a document in its API shape (after a workflow command). */
+/** Reload a document in its API shape (after a workflow command). Its QR code follows qr-access.ts: use loadDocumentFor there. */
 export async function loadDocumentDto(id: string) {
   const doc = await Document.findByPk(id, { attributes: documentAttributes, include: documentIncludes })
   return doc ? documentDtoOne(doc) : null
 }
 
-const lit = (sql: string) => sequelize.literal(sql)
-const esc = (value: string) => sequelize.escape(value)
+/** SQL: the document is travelling towards `officeId` (its destination is the step after the current one, or the office a flagged one goes back to). */
+export const incomingSql = (officeId: string) =>
+  `(${sendBackSql()} = CONCAT('"', ${esc(officeId)}, '"') OR (COALESCE(${sendBackSql()}, '') NOT LIKE '"%' AND ` +
+  `EXISTS (SELECT 1 FROM route_steps rs WHERE rs.route_id = documents.route_id AND rs.step_number = documents.current_step_number + 1 AND rs.office_id = ${esc(officeId)})))`
 
 /** Documents travelling towards `officeId` (destination = the step after the current one). */
-export const incomingTo = (officeId: string) =>
-  lit(
-    `(${sendBackSql()} = CONCAT('"', ${esc(officeId)}, '"') OR (COALESCE(${sendBackSql()}, '') NOT LIKE '"%' AND ` +
-      `EXISTS (SELECT 1 FROM route_steps rs WHERE rs.route_id = documents.route_id AND rs.step_number = documents.current_step_number + 1 AND rs.office_id = ${esc(officeId)})))`,
-  )
+export const incomingTo = (officeId: string) => lit(incomingSql(officeId))
+
+/**
+ * Which of these documents are being carried to the actor's office right now (its QR code is then hidden
+ * from that office: see qr-access.ts). The messenger carrying it is not "the destination".
+ */
+export async function incomingHereIds(actor: Actor, ids: string[]) {
+  if (!ids.length || !actor.office_id || actor.account_type === 'LIAISON') return new Set<string>()
+  const rows = (await Document.findAll({
+    where: { id: { [Op.in]: ids }, org_id: actor.org_id, status: { [Op.in]: CARRYING }, [Op.and]: [incomingTo(actor.office_id as string)] },
+    attributes: ['id'],
+    raw: true,
+  })) as unknown as Array<{ id: string }>
+  return new Set(rows.map((r) => r.id))
+}
 
 // A document waiting at an office has an open pickup once it is released to a messenger.
 export const hasOpenPickup = () => lit(`${currentVisit('liaison_id')} IS NOT NULL`)

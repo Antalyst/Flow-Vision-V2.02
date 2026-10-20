@@ -1,9 +1,9 @@
 import { createDocument, SUBMITTER_TYPES } from '~~/server/lib/documents.ts'
-import { loadDocumentDto } from '~~/server/lib/document-queries.ts'
 import { parseDocumentForm, removeUpload } from '~~/server/lib/uploads.ts'
 import { badRequest } from '~~/server/lib/errors.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { loadDocumentFor } from '~~/server/lib/qr-access.ts'
 
 /**
  * multipart/form-data: title, description, document_type, route_id, submit, file (once, or
@@ -37,7 +37,7 @@ export default defineApiHandler(async (event) => {
       requestMeta(event),
     )
     setResponseStatus(event, 201)
-    return { document: await loadDocumentDto(doc.id) }
+    return { document: await loadDocumentFor(doc.id, user) }
   } catch (err) {
     files.forEach((f) => removeUpload(f.fileUrl))
     throw err

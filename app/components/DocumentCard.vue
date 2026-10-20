@@ -17,12 +17,14 @@ const deadline = computed(() => deadlineState(props.doc))
     <div class="flex items-start gap-4">
       <div class="min-w-0 flex-1">
         <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span class="mono text-ink-2">{{ doc.qr_code ?? doc.tracking_number }}</span>
+          <!-- On its way to your office: the QR label is shown once it arrives (only the tracking number until then). -->
+          <span class="mono text-ink-2" :title="doc.qr_hidden ? 'Tracking number. The QR label is shown when the document arrives at your office.' : undefined">{{ doc.qr_code ?? doc.tracking_number }}</span>
           <PriorityBadge :priority="doc.priority" />
           <ToneBadge v-if="deadline" :tone="deadline.tone" icon="clock">{{ deadline.label }}</ToneBadge>
           <ToneBadge v-if="(doc.file_count ?? 0) > 1" tone="neutral" icon="layers">{{ doc.file_count }} files</ToneBadge>
           <ToneBadge v-if="doc.sent_back" tone="danger" icon="flag">Sent back to {{ doc.sent_back.office_name ?? 'previous office' }}</ToneBadge>
           <ToneBadge v-else-if="doc.open_issues" tone="danger" icon="flag">Flagged</ToneBadge>
+          <ToneBadge v-if="doc.internal_route_name" tone="primary" icon="shuffle">Internal: {{ doc.internal_route_name }}</ToneBadge>
         </div>
         <NuxtLink
           :to="`/documents/${doc.id}`"

@@ -4,6 +4,7 @@ import { badRequest } from './errors.ts'
 import { readLog } from './tracking-log.ts'
 import { trackingNumber, userSummary } from './serializers.ts'
 import type { Actor } from './auth.ts'
+import { qrAccessibleIds } from './qr-access.ts'
 
 /**
  * The activity log: who did what, when — for accountability. It merges three sources:
@@ -215,7 +216,9 @@ export async function activityLog(actor: Actor, query: ActivityQuery) {
   ])
   const userById = new Map(users.map((u) => [u.id as string, u]))
   const docById = new Map(docs.map((d) => [d.id as string, d]))
-  const qrByDoc = new Map(qrs.map((q) => [q.document_id as string, q.qr_code_data as string]))
+  // Only the QR codes this account may see (qr-access.ts).
+  const qrVisible = await qrAccessibleIds(actor, docIds)
+  const qrByDoc = new Map(qrs.filter((q) => qrVisible.has(q.document_id as string)).map((q) => [q.document_id as string, q.qr_code_data as string]))
   const officeById = new Map(offices.map((o) => [o.id as string, o]))
   const personName = (id: unknown) => {
     const u = typeof id === 'string' ? userById.get(id) : null

@@ -1,49 +1,110 @@
 <script setup lang="ts">
 import type { FlowDocument, Issue } from '~/types'
 import type { Tone } from '~/utils/format'
+import type { IssueFieldsModel } from '~/components/IssueFields.vue'
 
 useHead({ title: 'Issues · FlowVision' })
 
 const api = useApi()
 const auth = useAuthStore()
 const route = useRoute()
+const router = useRouter()
 const { busy, run } = useAction()
 
 const status = ref<'' | Issue['status']>('')
-const { data, refresh } = await useAsyncData('issues', () => api.get<{ data: Issue[] }>('/issues', { status: status.value || undefined }), {
-  watch: [status],
-})
+const q = ref('')
+const debouncedQ = refDebounced(q, 300)
+// Arriving from a document (/issues?document=…): its issues only, until the filter is cleared.
+const documentFilter = ref(typeof route.query.document === 'string' ? route.query.document : '')
+const { data, refresh, status: loadStatus } = await useAsyncData(
+  'issues',
+  () => api.get<{ data: Issue[] }>('/issues', { status: status.value || undefined, q: debouncedQ.value.trim() || undefined, document_id: documentFilter.value || undefined }),
+  { watch: [status, debouncedQ, documentFilter] },
+)
+const filterTitle = ref<string | null>(null)
+watch(
+  () => [documentFilter.value, data.value] as const,
+  async ([id]) => {
+    if (!id) return (filterTitle.value = null)
+    const fromList = data.value?.data.find((i) => i.document?.id === id)?.document
+    if (fromList) return (filterTitle.value = `${fromList.tracking_number} · ${fromList.title}`)
+    if (!filterTitle.value) {
+      const doc = await api.get<{ document: FlowDocument }>(`/documents/${id}`).then((r) => r.document).catch(() => null)
+      filterTitle.value = doc ? `${doc.tracking_number} · ${doc.title}` : 'this document'
+    }
+  },
+  { immediate: true },
+)
+function clearDocumentFilter() {
+  documentFilter.value = ''
+  router.replace({ query: { ...route.query, document: undefined, report: undefined } })
+}
 
-const CATEGORIES = ['MISSING_DOCUMENT', 'DELAY', 'DAMAGE', 'INCORRECT_ROUTING', 'SYSTEM', 'OTHER']
 const SEVERITY_TONE: Record<Issue['severity'], Tone> = { LOW: 'neutral', MEDIUM: 'info', HIGH: 'warning', CRITICAL: 'danger' }
 const STATUS_TONE: Record<Issue['status'], Tone> = { OPEN: 'danger', IN_PROGRESS: 'warning', RESOLVED: 'success', CLOSED: 'neutral' }
 const label = (s: string) => s.replace(/_/g, ' ').toLowerCase().replace(/^\w/, (c) => c.toUpperCase())
 
 // Report — every issue is about a document, so the form needs one.
 const formOpen = ref(false)
-const form = reactive({ title: '', description: '', category: 'OTHER', severity: 'MEDIUM', document_id: '' })
-const documentOptions = ref<FlowDocument[]>([])
+// The priority follows the category (shown in the form, decided by the server); "Other" needs a description.
+const blankIssue = (category: IssueFieldsModel['category'] = 'MISSING_DOCUMENT'): IssueFieldsModel => ({ title: '', category, details: '', otherText: '' })
+const issue = ref<IssueFieldsModel>(blankIssue())
+const form = reactive({ document_id: '' })
+
+// Document picker: searched on the server (title, QR code, tracking number, upload date MMDDYY), newest submission first.
+const docSearch = ref('')
+const debouncedDocSearch = refDebounced(docSearch, 300)
+const docResults = ref<FlowDocument[]>([])
+const docLoading = ref(false)
+const docError = ref<string | null>(null)
+const selectedDoc = ref<FlowDocument | null>(null)
+async function searchDocuments() {
+  docLoading.value = true
+  docError.value = null
+  try {
+    const res = await api.get<{ data: FlowDocument[] }>('/documents', { scope: 'all', sort: 'submitted', limit: 20, q: debouncedDocSearch.value.trim() || undefined })
+    docResults.value = res.data.filter((d) => d.status !== 'CREATED')
+  } catch (err) {
+    docError.value = apiErrorMessage(err, 'Could not load documents')
+  } finally {
+    docLoading.value = false
+  }
+}
+watch(debouncedDocSearch, () => formOpen.value && searchDocuments())
+function pickDocument(d: FlowDocument) {
+  selectedDoc.value = d
+  form.document_id = d.id
+}
+function clearDocument() {
+  selectedDoc.value = null
+  form.document_id = ''
+}
 
 async function openReport() {
   formOpen.value = true
-  if (!documentOptions.value.length) {
-    documentOptions.value = (await api.get<{ data: FlowDocument[] }>('/documents', { scope: 'all', limit: 100 })).data.filter((d) => d.status !== 'CREATED')
-  }
+  searchDocuments()
 }
 
-onMounted(() => {
-  if (typeof route.query.document === 'string') {
-    form.document_id = route.query.document
-    form.category = 'DELAY'
+onMounted(async () => {
+  // "Report an issue" on a document page: the form opens with that document chosen.
+  if (route.query.report === '1' && documentFilter.value) {
+    const doc = await api.get<{ document: FlowDocument }>(`/documents/${documentFilter.value}`).then((r) => r.document).catch(() => null)
+    if (doc) pickDocument(doc)
+    issue.value = blankIssue('DELAY')
     openReport()
   }
 })
 
 async function report() {
-  const ok = await run('report', () => api.post('/issues', { ...form }), 'Issue reported')
+  if (!form.document_id) return useUiStore().error('Choose a document', 'Search for the document this issue is about.')
+  if (!issueFormReady(issue.value)) return useUiStore().error('Describe the issue', issue.value.title.trim() ? 'For “Other”, say what’s wrong with the document.' : 'Say what’s wrong.')
+  const ok = await run('report', () => api.post('/issues', { document_id: form.document_id, ...issueBody(issue.value) }), 'Issue reported')
   if (ok) {
     formOpen.value = false
-    Object.assign(form, { title: '', description: '', category: 'OTHER', severity: 'MEDIUM', document_id: '' })
+    issue.value = blankIssue()
+    form.document_id = ''
+    selectedDoc.value = null
+    docSearch.value = ''
     refresh()
   }
 }
@@ -71,14 +132,25 @@ async function setStatus(i: Issue, next: Issue['status'], extra: Record<string, 
       </template>
     </PageHeader>
 
-    <div class="mb-5 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-ink/[0.04] p-1" role="tablist">
-      <button v-for="s in ['', 'OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const" :key="s" class="tab shrink-0" :class="status === s && 'tab-active'" role="tab" :aria-selected="status === s" @click="status = s">
-        {{ s ? label(s) : 'All' }}
-      </button>
+    <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div class="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-ink/[0.04] p-1" role="tablist">
+        <button v-for="s in ['', 'OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const" :key="s" class="tab shrink-0" :class="status === s && 'tab-active'" role="tab" :aria-selected="status === s" @click="status = s">
+          {{ s ? label(s) : 'All' }}
+        </button>
+      </div>
+      <div class="relative flex-1 sm:max-w-sm">
+        <FIcon name="search" :size="16" class="absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-2" />
+        <input v-model="q" type="search" class="input pl-10" placeholder="Search issues, documents or people" aria-label="Search issues" />
+      </div>
+    </div>
+    <div v-if="documentFilter" class="mb-4 flex flex-wrap items-center gap-2 text-sm text-ink-body">
+      <FIcon name="filter" :size="14" class="text-ink-2" />
+      Issues about <strong class="font-semibold text-ink">{{ filterTitle ?? '…' }}</strong>
+      <button type="button" class="btn btn-ghost btn-sm" @click="clearDocumentFilter"><FIcon name="x" :size="14" /> All issues</button>
     </div>
 
     <div v-if="!data?.data.length" class="card">
-      <EmptyState icon="check-circle" title="No issues" description="Nothing has been reported here." />
+      <EmptyState icon="check-circle" title="No issues" :description="loadStatus === 'pending' ? 'Loading…' : q || documentFilter ? 'No issue matches. Try other words or clear the filter.' : 'Nothing has been reported here.'" />
     </div>
     <div v-else class="space-y-3">
       <article v-for="i in data.data" :key="i.id" class="card card-pad">
@@ -91,7 +163,7 @@ async function setStatus(i: Issue, next: Issue['status'], extra: Record<string, 
             </div>
             <h2 class="mt-2 text-base">{{ i.title }}</h2>
             <p class="mt-1 text-xs text-ink-2">
-              Reported by {{ fullName(i.reporter) }} · {{ timeAgo(i.created_at) }}
+              Reported by {{ fullName(i.reporter) }} · <time :datetime="i.created_at ?? undefined" :title="timeAgo(i.created_at)">{{ formatDate(i.created_at) }}, {{ formatTime(i.created_at) }}</time>
               <template v-if="i.assignee"> · assigned to {{ fullName(i.assignee) }}</template>
             </p>
           </div>
@@ -111,34 +183,38 @@ async function setStatus(i: Issue, next: Issue['status'], extra: Record<string, 
 
     <AppModal :open="formOpen" title="Report an issue" @close="formOpen = false">
       <form id="issue-form" class="space-y-4" @submit.prevent="report">
-        <div>
-          <label class="field-label" for="i-title">What's wrong?</label>
-          <input id="i-title" v-model="form.title" class="input" required maxlength="255" placeholder="e.g. Document stuck at Budget for 3 days" />
-        </div>
-        <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label class="field-label" for="i-cat">Category</label>
-            <select id="i-cat" v-model="form.category" class="input">
-              <option v-for="c in CATEGORIES" :key="c" :value="c">{{ label(c) }}</option>
-            </select>
-          </div>
-          <div>
-            <label class="field-label" for="i-sev">Severity</label>
-            <select id="i-sev" v-model="form.severity" class="input">
-              <option v-for="s in ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']" :key="s" :value="s">{{ label(s) }}</option>
-            </select>
-          </div>
-        </div>
-        <div>
-          <label class="field-label" for="i-desc">Details</label>
-          <textarea id="i-desc" v-model="form.description" class="input" rows="4" maxlength="5000" />
-        </div>
+        <IssueFields v-model="issue" id-prefix="i" />
         <div>
           <label class="field-label" for="i-doc">Document</label>
-          <select id="i-doc" v-model="form.document_id" class="input" required>
-            <option value="" disabled>Which document is this about?</option>
-            <option v-for="d in documentOptions" :key="d.id" :value="d.id">{{ d.tracking_number }} · {{ d.title }}</option>
-          </select>
+          <div v-if="selectedDoc" class="flex items-center gap-3 rounded-xl border border-line bg-white/70 p-3">
+            <FIcon name="file-text" :size="16" class="shrink-0 text-ink-2" />
+            <span class="min-w-0 flex-1">
+              <span class="block truncate text-sm font-semibold">{{ selectedDoc.title }}</span>
+              <span class="block truncate text-xs text-ink-2"><span class="mono">{{ selectedDoc.qr_code ?? selectedDoc.tracking_number }}</span> · submitted {{ formatDateTime(selectedDoc.submitted_at) }}</span>
+            </span>
+            <button type="button" class="btn btn-ghost btn-sm" @click="clearDocument">Change</button>
+          </div>
+          <template v-else>
+            <div class="relative">
+              <FIcon name="search" :size="16" class="absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-2" />
+              <input id="i-doc" v-model="docSearch" type="search" class="input pl-10" placeholder="Search by title, QR code, tracking no. or date (MMDDYY)" autocomplete="off" />
+            </div>
+            <p class="field-hint">Newest first. Choose the document this issue is about.</p>
+            <p v-if="docLoading" class="mt-2 flex items-center gap-2 text-sm text-ink-2"><span class="spinner" /> Searching…</p>
+            <p v-else-if="docError" class="mt-2 text-sm text-danger-ink">{{ docError }}</p>
+            <p v-else-if="!docResults.length" class="mt-2 text-sm text-ink-2">{{ docSearch ? 'No document matches.' : 'No documents yet.' }}</p>
+            <ul v-else class="mt-2 max-h-60 space-y-1 overflow-y-auto rounded-xl border border-line p-1" aria-label="Documents">
+              <li v-for="d in docResults" :key="d.id">
+                <button type="button" class="flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-ink/[0.04]" @click="pickDocument(d)">
+                  <span class="min-w-0 flex-1">
+                    <span class="block truncate text-sm font-medium">{{ d.title }}</span>
+                    <span class="block truncate text-xs text-ink-2"><span class="mono">{{ d.qr_code ?? d.tracking_number }}</span><template v-if="d.document_type"> · {{ d.document_type }}</template></span>
+                  </span>
+                  <span class="shrink-0 text-right text-xs text-ink-2">{{ formatDate(d.submitted_at) }}<br />{{ formatTime(d.submitted_at) }}</span>
+                </button>
+              </li>
+            </ul>
+          </template>
         </div>
       </form>
       <template #footer>

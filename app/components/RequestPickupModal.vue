@@ -2,7 +2,7 @@
 import type { FlowDocument, LiaisonProfile } from '~/types'
 
 interface LiaisonRow extends LiaisonProfile {
-  user: { id: string; first_name: string; last_name: string; phone: string | null; office?: { name: string; department_name: string } | null }
+  user: { id: string; first_name: string; last_name: string; phone: string | null; office?: { id: string; name: string } | null }
 }
 
 /**
@@ -25,7 +25,7 @@ const selected = ref<string | null>(null)
 const remarks = ref('')
 const loading = ref(false)
 
-const myDept = computed(() => auth.user?.office?.department_code)
+const myOfficeId = computed(() => auth.user?.office?.id)
 const filtered = computed(() => {
   const q = search.value.trim().toLowerCase()
   return liaisons.value.filter((l) => !q || `${l.user.first_name} ${l.user.last_name}`.toLowerCase().includes(q))
@@ -126,13 +126,13 @@ const availabilityLabel = { AVAILABLE: 'free', BUSY: 'busy', OFF_DUTY: 'off duty
         <span class="min-w-0 flex-1">
           <span class="flex items-center gap-2 text-sm font-semibold">
             {{ fullName(l.user) }}
-            <ToneBadge v-if="l.department_code === myDept" tone="primary">Your dept</ToneBadge>
+            <ToneBadge v-if="l.user.office?.id === myOfficeId" tone="primary">Your office</ToneBadge>
           </span>
           <span class="block truncate text-xs text-ink-body">
             <template v-if="l.user.id === currentId">Assigned now</template>
             <template v-else-if="l.availability === 'BUSY'">Has a document to deliver</template>
             <template v-else-if="l.availability === 'OFF_DUTY'">Off duty</template>
-            <template v-else>{{ l.user.office?.department_name }} · {{ l.success_rate }}% success · avg {{ formatDuration(l.avg_delivery_minutes) }}</template>
+            <template v-else>{{ l.user.office?.name }} · {{ l.success_rate }}% success · avg {{ formatDuration(l.avg_delivery_minutes) }}</template>
           </span>
         </span>
         <ToneBadge :tone="availabilityTone[l.availability]" dot>{{ availabilityLabel[l.availability] }}</ToneBadge>

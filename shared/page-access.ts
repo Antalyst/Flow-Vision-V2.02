@@ -35,6 +35,8 @@ export const GRANTABLE_PAGES: Record<PageRole, GrantablePage[]> = {
     { path: '/documents', label: 'Office documents', group: 'Documents' },
     { path: '/documents/new', label: 'Upload document', group: 'Documents' },
     { path: '/employee/team', label: 'Staff & messengers', group: 'Team' },
+    { path: '/employee/umbrellas', label: 'Umbrella offices', group: 'Team' },
+    { path: '/employee/internal-routes', label: 'Internal routes', group: 'Team' },
     ...COLLABORATE,
   ],
   STAFF: [

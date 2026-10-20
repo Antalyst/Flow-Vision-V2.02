@@ -37,6 +37,8 @@ export const Organization = define('organizations', {
 export const Office = define('offices', {
   id: uuidPk,
   org_id: { type: DataTypes.CHAR(36), allowNull: false },
+  // NULL = an office; set = an umbrella office (a division or unit) under that office.
+  parent_office_id: DataTypes.CHAR(36),
   name: { type: DataTypes.STRING(255), allowNull: false },
   // Globally unique and printed on QR labels: {ORGCODE}-{DEPT}-{OFFICE}, e.g. BAG-HR-HRMSO
   code: { type: DataTypes.STRING(50), allowNull: false, unique: true },
@@ -74,6 +76,10 @@ export const User = define(
     two_factor_enabled: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     // JSON list of the pages the account may open, set by whoever manages it. NULL = every page of its role.
     page_access: DataTypes.TEXT,
+    // Delegated Department Heads (shared/dh-permissions.ts): who assigned them, when, and what they may do.
+    assigned_by: DataTypes.CHAR(36),
+    assigned_at: DataTypes.DATE,
+    permissions: DataTypes.TEXT,
   },
   {
     defaultScope: { attributes: { exclude: ['password_hash'] } },
@@ -151,9 +157,12 @@ export const DocumentTracking = define('document_tracking', {
   status: { type: DataTypes.ENUM(...DOCUMENT_STATUSES), allowNull: false },
   handler_id: DataTypes.CHAR(36),
   liaison_id: DataTypes.CHAR(36),
-  arrived_at: DataTypes.DATE,
-  completed_at: DataTypes.DATE,
+  // Milliseconds (timestamp(3), 2026-10-22 migration): visits created in the same second keep their order.
+  arrived_at: DataTypes.DATE(3),
+  completed_at: DataTypes.DATE(3),
   notes: DataTypes.TEXT,
+  created_at: { type: DataTypes.DATE(3), allowNull: false },
+  updated_at: { type: DataTypes.DATE(3), allowNull: false },
 })
 
 /** One row per (document, staff, office). PENDING rows feed the pending_approvals view. */
@@ -286,14 +295,88 @@ export const DocumentFile = define(
 )
 
 /** Organization Settings: the document types offered when uploading (and given to the AI). */
+/** History of delegated Department Head assignments, permission changes and revocations. */
+export const DepartmentHeadAssignment = define(
+  'department_head_assignments',
+  {
+    id: uuidPk,
+    org_id: { type: DataTypes.CHAR(36), allowNull: false },
+    user_id: { type: DataTypes.CHAR(36), allowNull: false },
+    office_id: DataTypes.CHAR(36),
+    action: { type: DataTypes.ENUM('ASSIGNED', 'UPDATED', 'REVOKED', 'REINSTATED'), allowNull: false },
+    permissions: DataTypes.TEXT,
+    changed_by: DataTypes.CHAR(36),
+    note: DataTypes.STRING(500),
+    created_at: { type: DataTypes.DATE(3), allowNull: false, defaultValue: DataTypes.NOW },
+  },
+  { timestamps: false },
+)
+
+/** An office's internal transaction route: an ordered path through its umbrella offices (internal-routes.ts). */
+export const InternalRoute = define('internal_routes', {
+  id: uuidPk,
+  org_id: { type: DataTypes.CHAR(36), allowNull: false },
+  office_id: { type: DataTypes.CHAR(36), allowNull: false },
+  name: { type: DataTypes.STRING(120), allowNull: false },
+  description: DataTypes.STRING(500),
+  is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+  created_by: DataTypes.CHAR(36),
+  created_at: { type: DataTypes.DATE(3), allowNull: false },
+  updated_at: { type: DataTypes.DATE(3), allowNull: false },
+})
+
+export const InternalRouteStep = define(
+  'internal_route_steps',
+  {
+    id: uuidPk,
+    route_id: { type: DataTypes.CHAR(36), allowNull: false },
+    step_number: { type: DataTypes.INTEGER, allowNull: false },
+    office_id: { type: DataTypes.CHAR(36), allowNull: false },
+    action_label: DataTypes.STRING(255),
+    created_at: { type: DataTypes.DATE(3), allowNull: false },
+  },
+  createdOnly,
+)
+
+export const INTERNAL_TRANSACTION_STATUSES = ['ACTIVE', 'COMPLETED', 'CANCELLED'] as const
+
+/** A document following an internal route; it stays on its organization route step meanwhile. */
+export const DocumentInternalTransaction = define('document_internal_transactions', {
+  id: uuidPk,
+  org_id: { type: DataTypes.CHAR(36), allowNull: false },
+  document_id: { type: DataTypes.CHAR(36), allowNull: false },
+  internal_route_id: DataTypes.CHAR(36),
+  route_name: { type: DataTypes.STRING(120), allowNull: false },
+  parent_office_id: { type: DataTypes.CHAR(36), allowNull: false },
+  route_step_number: { type: DataTypes.INTEGER, allowNull: false },
+  steps: { type: DataTypes.TEXT, allowNull: false },
+  current_index: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  status: { type: DataTypes.ENUM(...INTERNAL_TRANSACTION_STATUSES), allowNull: false, defaultValue: 'ACTIVE' },
+  started_by: DataTypes.CHAR(36),
+  started_at: { type: DataTypes.DATE(3), allowNull: false },
+  ended_by: DataTypes.CHAR(36),
+  ended_at: DataTypes.DATE(3),
+  created_at: { type: DataTypes.DATE(3), allowNull: false },
+  updated_at: { type: DataTypes.DATE(3), allowNull: false },
+})
+
+export const SERVICE_CATEGORIES = ['INTERNAL', 'EXTERNAL'] as const
+
 export const DocumentType = define('document_types', {
   id: uuidPk,
   org_id: { type: DataTypes.CHAR(36), allowNull: false },
+  // NULL = Global (offered to every office, e.g. Payroll); set = only that office (or umbrella office).
+  office_id: DataTypes.CHAR(36),
   name: { type: DataTypes.STRING(100), allowNull: false },
   description: DataTypes.STRING(500),
-  // How long a document of this type may take, from submission: days + hours. 0 + 0 = no deadline.
+  // How long a document of this type may take, from submission: days + hours + minutes. All 0 = no deadline.
   processing_days: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   processing_hours: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  processing_minutes: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
+  // As labelled in the Citizen's Charter it was imported from (null = not from a charter).
+  service_category: DataTypes.ENUM(...SERVICE_CATEGORIES),
+  source_file_id: DataTypes.CHAR(36),
+  source_page: DataTypes.INTEGER,
   is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
   sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   created_by: DataTypes.CHAR(36),
@@ -407,17 +490,27 @@ Office.belongsTo(Organization, { foreignKey: 'org_id', as: 'organization' })
 User.belongsTo(Organization, { foreignKey: 'org_id', as: 'organization' })
 
 Office.hasMany(User, { foreignKey: 'office_id', as: 'members' })
+Office.belongsTo(Office, { foreignKey: 'parent_office_id', as: 'parent' })
+User.belongsTo(User, { foreignKey: 'assigned_by', as: 'assigner' })
+DepartmentHeadAssignment.belongsTo(User, { foreignKey: 'changed_by', as: 'changedBy' })
+Office.hasMany(Office, { foreignKey: 'parent_office_id', as: 'umbrellas' })
+DocumentType.belongsTo(Office, { foreignKey: 'office_id', as: 'office' })
 User.belongsTo(Office, { foreignKey: 'office_id', as: 'office' })
 
 OrganizationRoute.hasMany(RouteStep, { foreignKey: 'route_id', as: 'steps' })
 RouteStep.belongsTo(OrganizationRoute, { foreignKey: 'route_id', as: 'route' })
 RouteStep.belongsTo(Office, { foreignKey: 'office_id', as: 'office' })
+InternalRoute.hasMany(InternalRouteStep, { foreignKey: 'route_id', as: 'steps' })
+InternalRoute.belongsTo(Office, { foreignKey: 'office_id', as: 'office' })
+InternalRouteStep.belongsTo(InternalRoute, { foreignKey: 'route_id', as: 'route' })
+InternalRouteStep.belongsTo(Office, { foreignKey: 'office_id', as: 'office' })
 
 Document.belongsTo(OrganizationRoute, { foreignKey: 'route_id', as: 'route' })
 Document.belongsTo(Office, { foreignKey: 'current_office_id', as: 'currentOffice' })
 Document.belongsTo(User, { foreignKey: 'submitted_by', as: 'submitter' })
 Document.hasMany(DocumentTracking, { foreignKey: 'document_id', as: 'visits' })
 Document.hasOne(QrCode, { foreignKey: 'document_id', as: 'qr' })
+QrCode.belongsTo(Document, { foreignKey: 'document_id', as: 'document' })
 Document.hasMany(DocumentFile, { foreignKey: 'document_id', as: 'files' })
 
 DocumentTracking.belongsTo(Document, { foreignKey: 'document_id', as: 'document' })

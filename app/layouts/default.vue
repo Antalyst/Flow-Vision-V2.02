@@ -62,7 +62,16 @@ const ROLE_NAV: Record<AccountType, NavGroup[]> = {
         { to: '/documents/new', label: 'Upload document', icon: 'plus-circle' },
       ],
     },
-    { id: 'team', title: 'Team', items: [{ to: '/employee/team', label: 'Staff & messengers', icon: 'users' }] },
+    {
+      id: 'team',
+      title: 'Team',
+      items: [
+        { to: '/employee/team', label: 'Staff & messengers', icon: 'users' },
+        // Only an office's head adds umbrella offices; an umbrella office has none of its own.
+        { to: '/employee/umbrellas', label: 'Umbrella offices', icon: 'git-branch', hidden: !auth.user?.office || Boolean(auth.user.office.parent_office_id) || !auth.user.permissions?.includes('MANAGE_UMBRELLAS') },
+        { to: '/employee/internal-routes', label: 'Internal routes', icon: 'shuffle', hidden: !auth.user?.office || Boolean(auth.user.office.parent_office_id) || !auth.user.permissions?.includes('MANAGE_INTERNAL_ROUTES') },
+      ],
+    },
   ],
   STAFF: [
     { id: 'overview', title: null, items: [{ to: '/staff/dashboard', label: 'Dashboard', icon: 'home' }, { to: '/ai/chat', label: 'AI Assistant', icon: 'zap' }] },

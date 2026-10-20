@@ -125,8 +125,13 @@ export async function routeHoursOf(routeId: string, transaction?: Transaction) {
   return days * 24 + hours
 }
 
-/** Validate submitted steps against the organization's active offices. The last step is the final checkpoint. */
-async function readSteps(orgId: string, steps: unknown, transaction: Transaction): Promise<StepRow[]> {
+/**
+ * Validate submitted steps against the organization's active offices. The last step is the final checkpoint.
+ * Umbrella offices are units of their office, not route steps: a document reaches one through its office's
+ * hand-off (documents.ts handToUmbrella). Only a route that already had an umbrella step (built before this
+ * rule) may keep that one — `legacyUmbrellaIds` — so existing routes and their documents keep working.
+ */
+async function readSteps(orgId: string, steps: unknown, transaction: Transaction, legacyUmbrellaIds: string[] = []): Promise<StepRow[]> {
   if (!Array.isArray(steps) || steps.length === 0) throw badRequest('A route needs at least one step')
   if (steps.length > 30) throw badRequest('A route can have at most 30 steps')
   const list = steps as StepInput[]
@@ -137,8 +142,12 @@ async function readSteps(orgId: string, steps: unknown, transaction: Transaction
     if (officeIds[i] === officeIds[i - 1]) throw badRequest(`Steps ${i} and ${i + 1} use the same office back to back`)
   }
   const unique = [...new Set(officeIds as string[])]
-  const offices = await Office.count({ where: { id: { [Op.in]: unique }, org_id: orgId, status: 'active' }, transaction })
-  if (offices !== unique.length) throw badRequest('One or more offices are invalid or inactive')
+  const offices = await Office.findAll({ where: { id: { [Op.in]: unique }, org_id: orgId, status: 'active' }, attributes: ['id', 'name', 'parent_office_id'], transaction })
+  if (offices.length !== unique.length) throw badRequest('One or more offices are invalid or inactive')
+  const umbrella = offices.find((o) => o.parent_office_id && !legacyUmbrellaIds.includes(o.id as string))
+  if (umbrella) {
+    throw badRequest(`${umbrella.name} is an umbrella office: use its office as the step, and that office hands the document to ${umbrella.name} when needed`, { field: 'steps' })
+  }
 
   return list.map((step, index) => ({
     step_number: index + 1,
@@ -240,7 +249,8 @@ export async function updateRoute(orgId: string, routeId: string, input: RouteIn
     let stepsChanged = false
     let movedDocuments = 0
     if (input.steps !== undefined) {
-      const next = await readSteps(orgId, input.steps, transaction)
+      // Umbrella steps the route already had (built before umbrellas became units) may stay.
+      const next = await readSteps(orgId, input.steps, transaction, before.map((s) => s.office_id as string))
       if (!sameSteps(before, next)) {
         stepsChanged = true
         movedDocuments = await preserveStepsForDocuments(route, before, transaction)

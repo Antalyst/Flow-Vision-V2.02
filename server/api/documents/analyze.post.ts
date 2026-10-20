@@ -1,7 +1,7 @@
 import { Organization } from '~~/server/lib/models.ts'
 import { SUBMITTER_TYPES } from '~~/server/lib/documents.ts'
 import { extractText, suggestDocumentDetails } from '~~/server/lib/ai.ts'
-import { activeDocumentTypes, knowledgeContext } from '~~/server/lib/knowledge.ts'
+import { activeDocumentTypes, knowledgeContext, typeOfficeIds } from '~~/server/lib/knowledge.ts'
 import { resolveAiContext } from '~~/server/lib/ai-context.ts'
 import { badRequest, httpError } from '~~/server/lib/errors.ts'
 import { env } from '~~/server/lib/env.ts'
@@ -33,7 +33,8 @@ export default defineApiHandler(async (event) => {
 
   const [org, types, knowledge] = await Promise.all([
     Organization.findByPk(user.org_id, { attributes: ['name'] }),
-    activeDocumentTypes(user.org_id),
+    // Only the types this uploader is offered (Global + their office's).
+    typeOfficeIds(user.office_id).then((offices) => activeDocumentTypes(user.org_id, user.account_type === 'ADMIN' ? null : (offices ?? []))),
     // The uploader's own knowledge scope: organization-wide files plus their office's (ai-context.ts).
     knowledgeContext(resolveAiContext(user), text),
   ])

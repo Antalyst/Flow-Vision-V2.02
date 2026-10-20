@@ -1,6 +1,6 @@
 import { requestPickup, SUBMITTER_TYPES } from '~~/server/lib/documents.ts'
-import { loadDocumentDto } from '~~/server/lib/document-queries.ts'
 import * as v from '~~/server/lib/validate.ts'
+import { loadDocumentFor } from '~~/server/lib/qr-access.ts'
 
 /**
  * Assign the free messenger who carries the document to the next office: from its origin (the
@@ -15,5 +15,5 @@ export default defineApiHandler(async (event) => {
     remarks: v.str(body, 'remarks', { max: 2000 }),
   })
   setResponseStatus(event, reassigned ? 200 : 201)
-  return { document: await loadDocumentDto(doc.id), reassigned }
+  return { document: await loadDocumentFor(doc.id, user), reassigned }
 })
