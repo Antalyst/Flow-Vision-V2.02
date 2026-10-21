@@ -3,13 +3,16 @@ import { sequelize, Liaison, Office, User } from '~~/server/lib/models.ts'
 import { audit } from '~~/server/lib/audit.ts'
 import { conflict, notFound } from '~~/server/lib/errors.ts'
 import { readOffice } from '~~/server/lib/office-input.ts'
+import { withGeneratedCode } from '~~/server/lib/office-codes.ts'
 import { officeDto } from '~~/server/lib/serializers.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 
 /**
- * Edit an office or umbrella office (ADMIN): name, code, address, active. An umbrella's code keeps
- * its office's prefix; when an office's code changes, its umbrellas' codes follow
- * (CHO-SNTR → CHOX-SNTR). Codes already printed on QR labels don't change.
+ * Edit an office or umbrella office (ADMIN): name, address, active. The code never changes with the
+ * name: only `regenerate_code: true` gives the office a new code generated from its (new) name, and
+ * an explicit `code` still sets one by hand. An umbrella's code keeps its office's prefix; when an
+ * office's code changes, its umbrellas' codes follow (CHO-SNTR → CHOX-SNTR). Codes already printed on
+ * QR labels keep working.
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'ADMIN')
@@ -18,15 +21,20 @@ export default defineApiHandler(async (event) => {
   if (!office) throw notFound('Office')
 
   const before = office.toJSON()
-  const updates = readOffice(await readJson(event), true, { parentCode: (office.parent?.code as string | undefined) ?? null })
-  const codeChanged = typeof updates.code === 'string' && updates.code !== before.code
+  const parentCode = (office.parent?.code as string | undefined) ?? null
+  const { regenerate, ...updates } = readOffice(await readJson(event), true, { parentCode })
 
   await sequelize.transaction(async (transaction) => {
-    await office.update(updates, { transaction })
+    if (regenerate) {
+      await withGeneratedCode((updates.name as string | undefined) ?? (office.name as string), parentCode, (code) => office.update({ ...updates, code }, { transaction }), { excludeId: office.id, transaction })
+    } else {
+      await office.update(updates, { transaction })
+    }
+    const codeChanged = office.code !== before.code
     if (codeChanged && !office.parent_office_id) {
       const umbrellas = await Office.findAll({ where: { parent_office_id: office.id }, transaction })
       for (const u of umbrellas) {
-        const next = `${updates.code}${String(u.code).slice(String(before.code).length)}`
+        const next = `${office.code}${String(u.code).slice(String(before.code).length)}`
         if (await Office.count({ where: { code: next, id: { [Op.ne]: u.id } }, transaction })) throw conflict(`The umbrella code ${next} is already in use`, 'DUPLICATE')
         await u.update({ code: next }, { transaction })
       }

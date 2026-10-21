@@ -170,7 +170,7 @@ onBeforeUnmount(() => {
   <AppModal
     :open="open"
     title="Take a picture of the document"
-    :description="separate ? 'Photograph each page. Every photo is added as its own file.' : 'Photograph each page. Several pages are joined into one PDF.'"
+    :description="separate ? 'Take a photo of each page. Every photo is added as its own file.' : 'Take a photo of each page. Several pages are joined into one PDF.'"
     width="lg"
     @close="close"
   >

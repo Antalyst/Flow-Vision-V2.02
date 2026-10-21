@@ -7,11 +7,16 @@ export const normalizeOfficeCode = (raw: string) => raw.trim().toUpperCase().rep
 /**
  * Map the API's office fields onto the offices table. `parentCode`: the parent office's code, when
  * the office is an umbrella office — its code must then start with it (CHO → CHO-SNTR).
+ *
+ * The code is optional: without one, the caller generates it from the name (office-codes.ts). A code
+ * given explicitly (scripts, the API) is still accepted and checked here; the app's forms no longer
+ * send one. `regenerate`: the caller should give the office a new generated code.
  */
 export function readOffice(body: Record<string, unknown>, partial: boolean, { parentCode = null as string | null } = {}) {
-  const out: Record<string, unknown> = {}
+  const out: Record<string, unknown> & { regenerate?: boolean } = {}
   if (!partial || 'name' in body) out.name = v.reqStr(body, 'name', { max: 255, label: 'Office name' })
-  if (!partial || 'code' in body) {
+  if (body.regenerate_code === true) out.regenerate = true
+  else if (body.code != null && body.code !== '') {
     const code = normalizeOfficeCode(v.reqStr(body, 'code', { max: 50, label: 'Office code' }))
     if (!OFFICE_CODE_RE.test(code)) throw badRequest('Office code may only use letters, digits and dashes, e.g. BAG-HR-HRMSO', { field: 'code' })
     if (parentCode && !code.startsWith(`${parentCode}-`)) {

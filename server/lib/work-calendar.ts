@@ -33,13 +33,13 @@ export const isMissingTable = (err: unknown) => {
 export function settingsUnavailable() {
   if (!warned) {
     warned = true
-    console.warn('[settings] organization_settings / organization_holidays / document_templates are missing — run `npm run db:add-settings` (add --remote for the hosted database)')
+    console.warn('[settings] organization_settings / organization_holidays are missing — run `npm run db:add-settings` (add --remote for the hosted database)')
   }
 }
 
 /** For a change that needs the settings tables, while they don't exist yet. */
 export const settingsTablesMissing = () =>
-  httpError(503, 'Working hours, holidays and templates need their database tables first. Run: npm run db:add-settings', 'SETTINGS_TABLES_MISSING')
+  httpError(503, 'Working hours and holidays need their database tables first. Run: npm run db:add-settings', 'SETTINGS_TABLES_MISSING')
 
 export const parseWorkDays = (raw: unknown) =>
   [...new Set(String(raw ?? '').split(',').map((s) => Number(s.trim())).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort((a, b) => a - b)

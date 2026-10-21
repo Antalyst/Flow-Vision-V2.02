@@ -7,6 +7,7 @@ const props = withDefaults(
   { height: 'h-[420px]', placeholder: 'Write a message…' },
 )
 
+const emit = defineEmits<{ sent: [message: Message] }>()
 const api = useApi()
 const auth = useAuthStore()
 const { on, joinDocument } = useRealtime()
@@ -57,8 +58,9 @@ async function send() {
     if (props.kind === 'DOCUMENT') payload.document_id = props.targetId
     if (props.kind === 'DIRECT') payload.recipient_id = props.targetId
     const { message } = await api.post<{ message: Message }>('/messages', payload)
-    // The socket echo may arrive first; avoid duplicates.
+    // The socket echo may arrive first; avoid duplicates. The time shown is the server's.
     if (!messages.value.some((m) => m.id === message.id)) messages.value.push(message)
+    emit('sent', message)
     draft.value = ''
     scrollToEnd()
   } catch (err) {
@@ -82,15 +84,40 @@ on<Message>('message', (m) => {
   }
 })
 
+/** Merge newer messages fetched in the background (hosts without live sockets), keeping order by time. */
+async function catchUp() {
+  if (loading.value || document.hidden) return
+  try {
+    const latest = (await api.get<{ data: Message[] }>(path.value)).data
+    const fresh = latest.filter((m) => !messages.value.some((x) => x.id === m.id))
+    if (!fresh.length) return
+    messages.value = [...messages.value, ...fresh].sort((a, b) => Date.parse(a.created_at) - Date.parse(b.created_at))
+    scrollToEnd()
+  } catch {
+    /* the next try, or the live socket, catches up */
+  }
+}
+
 // Messages are live and per-viewer, so they load in the browser rather than during SSR.
 watch(() => [props.kind, props.targetId], load)
+let poll: ReturnType<typeof setInterval> | undefined
 onMounted(() => {
   load()
   if (props.kind === 'DOCUMENT' && props.targetId) joinDocument(props.targetId)
+  poll = setInterval(catchUp, 20_000)
 })
+onBeforeUnmount(() => clearInterval(poll))
+
+/** Today: the time only; earlier: the date too (Philippine time, like the rest of the app). */
+const stamp = (v: string) => (formatDate(v) === formatDate(new Date().toISOString()) ? formatTime(v) : formatDateTime(v))
 
 const isMine = (m: Message) => m.sender_id === auth.user?.id
-const showHeader = (i: number) => i === 0 || messages.value[i - 1]!.sender_id !== messages.value[i]!.sender_id
+// Messages from one sender within 5 minutes form a run: the name heads it, the time closes it — so
+// the latest message always shows its time, even after several in a row from the same person.
+const RUN_GAP_MS = 5 * 60_000
+const sameRun = (a: Message | undefined, b: Message | undefined) => Boolean(a && b && a.sender_id === b.sender_id && Math.abs(Date.parse(b.created_at) - Date.parse(a.created_at)) < RUN_GAP_MS)
+const showHeader = (i: number) => !sameRun(messages.value[i - 1], messages.value[i])
+const showTime = (i: number) => !sameRun(messages.value[i], messages.value[i + 1])
 </script>
 
 <template>
@@ -107,15 +134,14 @@ const showHeader = (i: number) => i === 0 || messages.value[i - 1]!.sender_id !=
         <UserAvatar v-if="showHeader(i) && !isMine(m)" :user="m.sender" size="sm" />
         <span v-else-if="!isMine(m)" class="w-7 shrink-0" />
         <div class="flex max-w-[78%] flex-col" :class="isMine(m) ? 'items-end' : 'items-start'">
-          <p v-if="showHeader(i)" class="mb-1 text-[11px] text-ink-2">
-            <template v-if="!isMine(m)">{{ fullName(m.sender) }} · </template>{{ formatTime(m.created_at) }}
-          </p>
+          <p v-if="showHeader(i) && !isMine(m)" class="mb-1 text-[11px] text-ink-2">{{ fullName(m.sender) }}</p>
           <p
             class="rounded-2xl px-3.5 py-2 text-[14px] leading-relaxed break-words whitespace-pre-wrap"
             :class="isMine(m) ? 'rounded-br-md bg-terracotta text-white' : 'rounded-bl-md bg-card text-ink shadow-sm ring-1 ring-line/60'"
           >
             {{ m.body }}
           </p>
+          <time v-if="showTime(i)" class="mt-1 text-[11px] text-ink-2" :datetime="m.created_at" :title="formatDateTime(m.created_at)">{{ stamp(m.created_at) }}</time>
         </div>
       </div>
     </div>

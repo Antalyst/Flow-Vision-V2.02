@@ -13,17 +13,18 @@ type TabKey = 'incoming' | 'arrived' | 'process' | 'pickup' | 'outbound'
 const TABS: Array<{ key: TabKey; label: string; icon: string; empty: string }> = [
   { key: 'incoming', label: 'Incoming', icon: 'navigation', empty: 'Nothing is on its way to your office.' },
   { key: 'arrived', label: 'To receive', icon: 'inbox', empty: 'Nothing is waiting to be scanned in.' },
-  { key: 'process', label: 'In process', icon: 'edit-3', empty: 'Nothing received and waiting to be released.' },
-  { key: 'pickup', label: 'Awaiting pickup', icon: 'package', empty: 'Nothing is waiting for a messenger.' },
+  { key: 'process', label: 'In progress', icon: 'edit-3', empty: 'Nothing received and waiting to be released.' },
+  { key: 'pickup', label: 'Pending pickup', icon: 'package', empty: 'Nothing is waiting for a messenger.' },
   { key: 'outbound', label: 'Outbound', icon: 'send', empty: 'Nothing has left your office recently.' },
 ]
 const tab = ref<TabKey>((TABS.find((t) => t.key === route.query.tab)?.key ?? 'arrived') as TabKey)
 watch(tab, (t) => router.replace({ query: { tab: t } }))
 
-const [{ data: atOffice, refresh: r1 }, { data: incoming, refresh: r2 }] = await Promise.all([
-  useAsyncData('queue-office', () => docsApi.list({ scope: 'office', limit: 100 })),
-  useAsyncData('queue-incoming', () => docsApi.list({ scope: 'incoming', limit: 100 })),
+const [{ data: atOffice, refresh: r1, status: s1, error: e1 }, { data: incoming, refresh: r2, status: s2, error: e2 }] = await Promise.all([
+  useAsyncData('queue-office', () => docsApi.list({ scope: 'office', limit: 100 }), { lazy: true }),
+  useAsyncData('queue-incoming', () => docsApi.list({ scope: 'incoming', limit: 100 }), { lazy: true }),
 ])
+const pageStatus = computed(() => (s1.value === 'pending' || s2.value === 'pending' ? 'pending' : e1.value || e2.value ? 'error' : 'success'))
 const refreshAll = () => Promise.all([r1(), r2()])
 useLiveRefresh(refreshAll)
 
@@ -50,6 +51,8 @@ async function cancelPickup(d: FlowDocument) {
 <template>
   <div class="fv-rise">
     <PageHeader eyebrow="B2 · Queue" title="Office queue" description="Scan in what arrives, then release it to a free messenger for the next office on the Document Route." />
+
+    <AsyncState :status="pageStatus" :ready="Boolean(atOffice && incoming)" :error="e1 || e2" variant="list" what="the queue" :messages="['Loading the queue…']" @retry="refreshAll()">
 
     <div class="mb-5 flex gap-1 overflow-x-auto rounded-xl bg-ink/[0.04] p-1" role="tablist">
       <button
@@ -98,6 +101,7 @@ async function cancelPickup(d: FlowDocument) {
       </DocumentCard>
     </div>
 
+    </AsyncState>
     <RequestPickupModal :open="Boolean(pickupDoc)" :doc="pickupDoc" @close="pickupDoc = null" @requested="refreshAll" />
     <PassToStaffModal :open="Boolean(passDoc)" :doc="passDoc" @close="passDoc = null" @passed="refreshAll" />
   </div>

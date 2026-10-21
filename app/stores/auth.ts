@@ -29,12 +29,6 @@ export const useAuthStore = defineStore('auth', () => {
     ready.value = true
   }
 
-  async function register(payload: Record<string, string>) {
-    const res = await useApi().post<{ user: CurrentUser }>('/auth/register', payload)
-    user.value = res.user
-    ready.value = true
-  }
-
   async function fetchMe() {
     const res = await useApi().get<{ user: CurrentUser }>('/auth/me')
     user.value = res.user
@@ -67,5 +61,5 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { user, ready, signingOut, isAuthenticated, role, homePath, clear, login, register, fetchMe, init, signOut }
+  return { user, ready, signingOut, isAuthenticated, role, homePath, clear, login, fetchMe, init, signOut }
 })

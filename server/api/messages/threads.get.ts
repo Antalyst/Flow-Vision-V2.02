@@ -3,7 +3,11 @@ import { sequelize, Document, Message, Office, User, type Row } from '~~/server/
 import { senderInclude } from '~~/server/lib/messages.ts'
 import { messageDto, trackingNumber, userSummary } from '~~/server/lib/serializers.ts'
 
-/** B4 sidebar: direct conversations, office channel and document threads I'm part of. */
+/**
+ * B4 sidebar: direct conversations, office channel and document threads I'm part of — each with its
+ * latest message (its time is the conversation's time; message times keep milliseconds, so two
+ * messages sent in the same second are still told apart).
+ */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event)
   const me = user.id
@@ -36,7 +40,16 @@ export default defineApiHandler(async (event) => {
     { replacements: { me, org: user.org_id, office: user.office_id ?? null }, type: QueryTypes.SELECT },
   )
 
-  const [partners, docs, directLast, docLast] = await Promise.all([
+  // The office channel's latest message: OFFICE messages from anyone now in my office (as in messages/office.get.ts).
+  const officeLastPromise = user.office_id
+    ? Message.findOne({
+        where: { conversation_type: 'OFFICE', [Op.and]: [sequelize.literal(`(SELECT u.office_id FROM users u WHERE u.id = messages.sender_id) = ${sequelize.escape(user.office_id)}`)] },
+        include: [senderInclude],
+        order: [['created_at', 'DESC'], ['id', 'DESC']],
+      })
+    : Promise.resolve(null)
+
+  const [partners, docs, directLast, docLast, officeLast] = await Promise.all([
     directRows.length
       ? User.findAll({ where: { id: { [Op.in]: directRows.map((r) => r.partner_id) }, org_id: user.org_id }, include: [{ model: Office, as: 'office' }] })
       : [],
@@ -52,7 +65,7 @@ export default defineApiHandler(async (event) => {
             ]),
           },
           include: [senderInclude],
-          order: [['created_at', 'DESC']],
+          order: [['created_at', 'DESC'], ['id', 'DESC']],
           limit: 500,
         })
       : [],
@@ -60,10 +73,11 @@ export default defineApiHandler(async (event) => {
       ? Message.findAll({
           where: { conversation_type: 'GROUP', document_id: { [Op.in]: docRows.map((r) => r.document_id) } },
           include: [senderInclude],
-          order: [['created_at', 'DESC']],
+          order: [['created_at', 'DESC'], ['id', 'DESC']],
           limit: 500,
         })
       : [],
+    officeLastPromise,
   ])
 
   const firstBy = (rows: Row[], key: (m: Row) => string) => {
@@ -90,6 +104,6 @@ export default defineApiHandler(async (event) => {
         const last = lastDoc.get(r.document_id)
         return { document: { id: d.id, tracking_number: trackingNumber(d.id), title: d.title, status: d.status }, last_message: last ? messageDto(last) : null }
       }),
-    office: user.office ? { id: user.office.id, name: user.office.name } : null,
+    office: user.office ? { id: user.office.id, name: user.office.name, last_message: officeLast ? messageDto(officeLast) : null } : null,
   }
 })

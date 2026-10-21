@@ -1,5 +1,5 @@
-// Adds only the Organization Settings tables — working hours (organization_settings), holidays
-// (organization_holidays) and document templates (document_templates) — to an existing database.
+// Adds only the Organization Settings tables — working hours (organization_settings) and holidays
+// (organization_holidays) — to an existing database.
 // Creates what's missing and touches nothing else (no existing table or row is changed), so it's
 // safe on the hosted database. Refuses remote hosts unless --remote.
 //   node scripts/db-add-settings.ts [--remote]
@@ -20,7 +20,7 @@ const connection = await mysql.createConnection({ host: env.db.host, port: env.d
 const schemaSql = await fs.readFile(path.resolve(import.meta.dirname, '../database/flowvision-complete-schema.sql'), 'utf8')
 
 try {
-  for (const table of ['organization_settings', 'organization_holidays', 'document_templates']) {
+  for (const table of ['organization_settings', 'organization_holidays']) {
     const [rows] = await connection.query('SELECT 1 FROM information_schema.TABLES WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?', [env.db.name, table])
     if ((rows as unknown[]).length) {
       console.log(`[settings] ${table} already present`)

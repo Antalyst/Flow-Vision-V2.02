@@ -24,10 +24,18 @@ const routesApi = useRoutes()
 const auth = useAuthStore()
 const { busy, run } = useAction()
 
-const [{ data, refresh }, { data: officeData }] = await Promise.all([
-  useAsyncData('team', () => api.get<{ data: TeamMember[] }>('/users')),
-  useAsyncData('team-offices', () => routesApi.offices()),
+const [{ data, refresh: refreshList, status, error }, { data: officeData }] = await Promise.all([
+  useAsyncData('team', () => api.get<{ data: TeamMember[] }>('/users'), { lazy: true }),
+  useAsyncData('team-offices', () => routesApi.offices(), { lazy: true }),
 ])
+
+// Two views: office cards (each opens that office's accounts) and the full list.
+const view = ref<'offices' | 'all'>('offices')
+const browser = ref<{ refresh: () => void } | null>(null)
+function refresh() {
+  refreshList()
+  browser.value?.refresh()
+}
 const offices = computed(() => officeData.value?.data ?? [])
 
 const filter = ref<AccountType | ''>('')
@@ -114,12 +122,20 @@ async function copyCredentials() {
 
 <template>
   <div class="fv-rise">
-    <PageHeader eyebrow="A4 · Team" title="Team accounts" description="Invite people and give each one a role. Department heads, staff and messengers work from a specific office.">
+    <PageHeader eyebrow="A4 · Team" title="Team accounts" description="Add people and give each one a role. Department heads, staff and messengers work from a specific office.">
       <template #actions>
-        <button class="btn btn-primary" @click="openForm()"><FIcon name="user-plus" :size="16" /> Invite member</button>
+        <button class="btn btn-primary" @click="openForm()"><FIcon name="user-plus" :size="16" /> Add member</button>
       </template>
     </PageHeader>
 
+    <div class="mb-5 flex w-fit gap-1 rounded-xl bg-ink/[0.04] p-1" role="tablist" aria-label="View">
+      <button class="tab" role="tab" :class="view === 'offices' && 'tab-active'" :aria-selected="view === 'offices'" @click="view = 'offices'"><FIcon name="grid" :size="15" /> By office</button>
+      <button class="tab" role="tab" :class="view === 'all' && 'tab-active'" :aria-selected="view === 'all'" @click="view = 'all'"><FIcon name="list" :size="15" /> All accounts</button>
+    </div>
+
+    <OfficeUsersBrowser v-if="view === 'offices'" ref="browser" @edit="(m) => openForm(m as unknown as TeamMember)" />
+
+    <template v-else>
     <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex gap-1 overflow-x-auto rounded-xl bg-ink/[0.04] p-1" role="tablist">
         <button class="tab shrink-0" :class="!filter && 'tab-active'" role="tab" :aria-selected="!filter" @click="filter = ''">All {{ data?.data.length ?? 0 }}</button>
@@ -141,7 +157,12 @@ async function copyCredentials() {
       </div>
     </div>
 
-    <section class="card overflow-hidden">
+    <PageSkeleton v-if="status === 'pending' && !data" variant="list" :rows="6" :messages="['Loading accounts…']" />
+    <div v-else-if="error && !data" class="card card-pad flex flex-wrap items-center justify-between gap-3 text-sm text-danger-ink" role="alert">
+      {{ apiErrorMessage(error, 'Could not load the accounts') }}
+      <button class="btn btn-sm btn-ghost" @click="refreshList()"><FIcon name="refresh-cw" :size="14" /> Try again</button>
+    </div>
+    <section v-else class="card overflow-hidden">
       <EmptyState v-if="!members.length" icon="users" title="No one matches" />
       <ul v-else class="divide-y divide-line/60">
         <li v-for="m in members" :key="m.id" class="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center">
@@ -173,8 +194,9 @@ async function copyCredentials() {
         </li>
       </ul>
     </section>
+    </template>
 
-    <AppModal :open="formOpen" :title="editing ? `Edit ${fullName(editing)}` : 'Invite a team member'" description="They'll sign in with a temporary password and be asked to set their own." @close="formOpen = false">
+    <AppModal :open="formOpen" :title="editing ? `Edit ${fullName(editing)}` : 'Add a team member'" description="They'll sign in with a temporary password and be asked to set their own." @close="formOpen = false">
       <form id="member-form" class="space-y-4" @submit.prevent="save">
         <fieldset>
           <legend class="field-label">Role</legend>
@@ -209,9 +231,9 @@ async function copyCredentials() {
           <label class="field-label" for="m-office">Office</label>
           <select id="m-office" v-model="form.office_id" class="input" required>
             <option value="" disabled>Select an office</option>
-            <option v-for="o in offices" :key="o.id" :value="o.id">{{ o.name }} ({{ o.code }}){{ o.is_final_checkpoint ? ' · final checkpoint' : '' }}</option>
+            <option v-for="o in offices" :key="o.id" :value="o.id">{{ o.name }} ({{ o.code }}){{ o.is_final_checkpoint ? ' · last office' : '' }}</option>
           </select>
-          <p v-if="form.account_type === 'STAFF'" class="field-hint">Staff only have approval authority at the final checkpoint office.</p>
+          <p v-if="form.account_type === 'STAFF'" class="field-hint">Staff can only approve documents at the last office on a route.</p>
           <p v-if="form.account_type === 'LIAISON'" class="field-hint">Messengers carry the documents released from this office.</p>
         </div>
         <div v-if="editing && editing.id !== auth.user?.id">
@@ -225,7 +247,7 @@ async function copyCredentials() {
       </form>
       <template #footer>
         <button class="btn btn-ghost" @click="formOpen = false">Cancel</button>
-        <button class="btn btn-primary" form="member-form" :disabled="busy === 'save'" :aria-busy="busy === 'save'">{{ editing ? 'Save changes' : 'Send invite' }}</button>
+        <button class="btn btn-primary" form="member-form" :disabled="busy === 'save'" :aria-busy="busy === 'save'">{{ editing ? 'Save changes' : 'Create account' }}</button>
       </template>
     </AppModal>
 

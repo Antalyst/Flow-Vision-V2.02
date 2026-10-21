@@ -4,9 +4,9 @@ import type { FlowDocument, Message, UserSummary } from '~/types'
 useHead({ title: 'Messages · FlowVision' })
 
 interface Threads {
-  direct: Array<{ user: UserSummary; last_message: Message; unread: number }>
-  documents: Array<{ document: Pick<FlowDocument, 'id' | 'tracking_number' | 'title' | 'status'>; last_message: Message }>
-  office: { id: string; name: string } | null
+  direct: Array<{ user: UserSummary; last_message: Message | null; unread: number }>
+  documents: Array<{ document: Pick<FlowDocument, 'id' | 'tracking_number' | 'title' | 'status'>; last_message: Message | null }>
+  office: { id: string; name: string; last_message: Message | null } | null
 }
 type Active = { kind: 'OFFICE'; id: string; title: string } | { kind: 'DIRECT'; id: string; title: string; user: UserSummary } | { kind: 'DOCUMENT'; id: string; title: string }
 
@@ -15,11 +15,68 @@ const auth = useAuthStore()
 const route = useRoute()
 const { on } = useRealtime()
 
-const { data, refresh } = await useAsyncData('message-threads', () => api.get<Threads>('/messages/threads'))
+const { data, refresh, status, error } = await useAsyncData('message-threads', () => api.get<Threads>('/messages/threads'), { lazy: true })
 const active = ref<Active | null>(null)
 
-// Refresh the sidebar when anything new arrives.
-on('message', () => refresh())
+const timeOf = (m: Message | null | undefined) => (m ? Date.parse(m.created_at) : 0)
+const newestFirst = <T extends { last_message: Message | null }>(rows: T[]) => rows.sort((a, b) => timeOf(b.last_message) - timeOf(a.last_message))
+
+/**
+ * Put a new message into the conversation list right away — its preview, its time and its place at
+ * the top — without waiting for a reload. Used for messages sent here and messages received live.
+ */
+function applyMessage(m: Message) {
+  const threads = data.value
+  if (!threads) return
+  const me = auth.user?.id
+  if (m.thread_type === 'OFFICE') {
+    if (threads.office && timeOf(m) >= timeOf(threads.office.last_message)) threads.office.last_message = m
+    return
+  }
+  if (m.thread_type === 'DOCUMENT') {
+    const row = threads.documents.find((d) => d.document.id === m.document_id)
+    if (!row) return scheduleRefresh() // a thread not listed yet: the server knows its title
+    if (timeOf(m) >= timeOf(row.last_message)) row.last_message = m
+    newestFirst(threads.documents)
+    return
+  }
+  const partnerId = m.sender_id === me ? m.recipient_id : m.sender_id
+  if (!partnerId) return
+  let row = threads.direct.find((d) => d.user.id === partnerId)
+  if (!row) {
+    // A first message in a new conversation: the partner is the sender, or the person open here.
+    const partner = m.sender_id === me ? (active.value?.kind === 'DIRECT' && active.value.id === partnerId ? active.value.user : null) : (m.sender ?? null)
+    if (!partner) return scheduleRefresh()
+    row = { user: partner, last_message: null, unread: 0 }
+    threads.direct.unshift(row)
+  }
+  if (timeOf(m) >= timeOf(row.last_message)) row.last_message = m
+  const reading = active.value?.kind === 'DIRECT' && active.value.id === partnerId
+  if (m.sender_id !== me && !reading) row.unread += 1
+  newestFirst(threads.direct)
+}
+
+// Reconcile with the server shortly after live changes (unread counts, threads not listed yet).
+let refreshTimer: ReturnType<typeof setTimeout> | undefined
+function scheduleRefresh() {
+  clearTimeout(refreshTimer)
+  refreshTimer = setTimeout(() => refresh(), 1500)
+}
+on<Message>('message', (m) => {
+  applyMessage(m)
+  scheduleRefresh()
+})
+// Hosts without live sockets (e.g. serverless) still catch up: a quiet reload while the tab is visible.
+let poll: ReturnType<typeof setInterval> | undefined
+onMounted(() => {
+  poll = setInterval(() => {
+    if (!document.hidden && status.value !== 'pending') refresh()
+  }, 30_000)
+})
+onBeforeUnmount(() => {
+  clearInterval(poll)
+  clearTimeout(refreshTimer)
+})
 
 function openDirect(user: UserSummary) {
   active.value = { kind: 'DIRECT', id: user.id, title: fullName(user), user }
@@ -27,13 +84,21 @@ function openDirect(user: UserSummary) {
   if (row) row.unread = 0
 }
 
-onMounted(() => {
+// Open the conversation asked for in the link (or the office channel on wide screens) once the list is here.
+const opened = ref(false)
+function openInitial() {
+  if (opened.value || !data.value) return
+  opened.value = true
   if (typeof route.query.user === 'string') {
-    const row = data.value?.direct.find((d) => d.user.id === route.query.user)
+    const row = data.value.direct.find((d) => d.user.id === route.query.user)
     if (row) openDirect(row.user)
-  } else if (data.value?.office && window.matchMedia('(min-width: 1024px)').matches) {
+  } else if (data.value.office && window.matchMedia('(min-width: 1024px)').matches) {
     active.value = { kind: 'OFFICE', id: data.value.office.id, title: data.value.office.name }
   }
+}
+onMounted(() => {
+  openInitial()
+  watch(data, openInitial)
 })
 
 // New conversation
@@ -58,7 +123,7 @@ async function openPicker() {
 }
 const filteredPeople = computed(() => people.value.filter((p) => !search.value || fullName(p).toLowerCase().includes(search.value.toLowerCase())))
 
-const preview = (m?: Message) => (m ? `${m.sender_id === auth.user?.id ? 'You: ' : ''}${m.body}` : '')
+const preview = (m?: Message | null) => (m ? `${m.sender_id === auth.user?.id ? 'You: ' : ''}${m.body}` : '')
 </script>
 
 <template>
@@ -70,17 +135,35 @@ const preview = (m?: Message) => (m ? `${m.sender_id === auth.user?.id ? 'You: '
     </PageHeader>
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-      <aside class="card overflow-hidden" :class="active && 'hidden lg:block'">
+      <aside class="card overflow-hidden" :class="active && 'hidden lg:block'" :aria-busy="status === 'pending'">
+        <!-- First load: rows shaped like conversations -->
+        <div v-if="status === 'pending' && !data" class="space-y-1 p-2" role="status" aria-label="Loading conversations">
+          <div v-for="i in 6" :key="i" class="flex items-center gap-3 rounded-xl p-3" aria-hidden="true">
+            <div class="skeleton size-9 shrink-0 rounded-full" />
+            <div class="flex-1 space-y-2">
+              <div class="flex justify-between gap-2"><div class="skeleton h-3.5 w-2/5" /><div class="skeleton h-3 w-10" /></div>
+              <div class="skeleton h-3" :style="{ width: `${70 - (i % 3) * 15}%` }" />
+            </div>
+          </div>
+        </div>
+        <div v-else-if="error && !data" class="p-4 text-sm text-danger-ink" role="alert">
+          {{ apiErrorMessage(error, 'Could not load your conversations') }}
+          <button class="btn btn-sm btn-ghost mt-2" @click="refresh()"><FIcon name="refresh-cw" :size="14" /> Try again</button>
+        </div>
+        <template v-else>
         <div v-if="data?.office" class="border-b border-line/60 p-2">
           <button
             class="flex w-full items-center gap-3 rounded-xl p-3 text-left"
             :class="active?.kind === 'OFFICE' ? 'bg-terracotta/[0.07]' : 'hover:bg-ink/[0.03]'"
             @click="active = { kind: 'OFFICE', id: data.office.id, title: data.office.name }"
           >
-            <span class="grid size-9 place-items-center rounded-full bg-terracotta/12 text-terracotta-ink"><FIcon name="hash" :size="16" /></span>
-            <span class="min-w-0">
-              <span class="block truncate text-sm font-semibold">Office channel</span>
-              <span class="block truncate text-xs text-ink-2">{{ data.office.name }}</span>
+            <span class="grid size-9 shrink-0 place-items-center rounded-full bg-terracotta/12 text-terracotta-ink"><FIcon name="hash" :size="16" /></span>
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center justify-between gap-2">
+                <span class="truncate text-sm font-semibold">Office channel</span>
+                <RelativeTime class="shrink-0 text-[11px] text-ink-2" :value="data.office.last_message?.created_at" />
+              </span>
+              <span class="block truncate text-xs text-ink-2">{{ data.office.last_message ? preview(data.office.last_message) : data.office.name }}</span>
             </span>
           </button>
         </div>
@@ -98,7 +181,7 @@ const preview = (m?: Message) => (m ? `${m.sender_id === auth.user?.id ? 'You: '
               <span class="min-w-0 flex-1">
                 <span class="flex items-center justify-between gap-2">
                   <span class="truncate text-sm font-semibold">{{ fullName(t.user) }}</span>
-                  <span class="shrink-0 text-[11px] text-ink-2">{{ timeAgo(t.last_message?.created_at) }}</span>
+                  <RelativeTime class="shrink-0 text-[11px] text-ink-2" :value="t.last_message?.created_at" />
                 </span>
                 <span class="block truncate text-xs" :class="t.unread ? 'font-semibold text-ink' : 'text-ink-2'">{{ preview(t.last_message) }}</span>
               </span>
@@ -118,12 +201,16 @@ const preview = (m?: Message) => (m ? `${m.sender_id === auth.user?.id ? 'You: '
               >
                 <span class="grid size-9 shrink-0 place-items-center rounded-full bg-info/12 text-info-ink"><FIcon name="file-text" :size="16" /></span>
                 <span class="min-w-0 flex-1">
-                  <span class="block truncate text-sm font-semibold">{{ t.document.title }}</span>
+                  <span class="flex items-center justify-between gap-2">
+                    <span class="truncate text-sm font-semibold">{{ t.document.title }}</span>
+                    <RelativeTime class="shrink-0 text-[11px] text-ink-2" :value="t.last_message?.created_at" />
+                  </span>
                   <span class="block truncate text-xs text-ink-2">{{ preview(t.last_message) }}</span>
                 </span>
               </button>
             </li>
           </ul>
+        </template>
         </template>
       </aside>
 
@@ -143,7 +230,7 @@ const preview = (m?: Message) => (m ? `${m.sender_id === auth.user?.id ? 'You: '
             </div>
             <NuxtLink v-if="active.kind === 'DOCUMENT'" :to="`/documents/${active.id}`" class="btn btn-sm btn-ghost">Open document</NuxtLink>
           </div>
-          <MessageThread :key="`${active.kind}-${active.id}`" :kind="active.kind" :target-id="active.id" height="h-[calc(100dvh-420px)] min-h-[320px]" />
+          <MessageThread :key="`${active.kind}-${active.id}`" :kind="active.kind" :target-id="active.id" height="h-[calc(100dvh-420px)] min-h-[320px]" @sent="applyMessage" />
         </template>
       </section>
     </div>

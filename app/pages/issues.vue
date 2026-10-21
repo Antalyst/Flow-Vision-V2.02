@@ -16,10 +16,10 @@ const q = ref('')
 const debouncedQ = refDebounced(q, 300)
 // Arriving from a document (/issues?document=…): its issues only, until the filter is cleared.
 const documentFilter = ref(typeof route.query.document === 'string' ? route.query.document : '')
-const { data, refresh, status: loadStatus } = await useAsyncData(
+const { data, refresh, status: loadStatus, error: loadError } = await useAsyncData(
   'issues',
   () => api.get<{ data: Issue[] }>('/issues', { status: status.value || undefined, q: debouncedQ.value.trim() || undefined, document_id: documentFilter.value || undefined }),
-  { watch: [status, debouncedQ, documentFilter] },
+  { watch: [status, debouncedQ, documentFilter], lazy: true },
 )
 const filterTitle = ref<string | null>(null)
 watch(
@@ -132,6 +132,8 @@ async function setStatus(i: Issue, next: Issue['status'], extra: Record<string, 
       </template>
     </PageHeader>
 
+    <AsyncState :status="loadStatus" :ready="Boolean(data)" :error="loadError" variant="list" what="the issues" :messages="['Loading issues…']" @retry="refresh()">
+
     <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center">
       <div class="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-ink/[0.04] p-1" role="tablist">
         <button v-for="s in ['', 'OPEN', 'IN_PROGRESS', 'RESOLVED', 'CLOSED'] as const" :key="s" class="tab shrink-0" :class="status === s && 'tab-active'" role="tab" :aria-selected="status === s" @click="status = s">
@@ -181,6 +183,7 @@ async function setStatus(i: Issue, next: Issue['status'], extra: Record<string, 
       </article>
     </div>
 
+    </AsyncState>
     <AppModal :open="formOpen" title="Report an issue" @close="formOpen = false">
       <form id="issue-form" class="space-y-4" @submit.prevent="report">
         <IssueFields v-model="issue" id-prefix="i" />

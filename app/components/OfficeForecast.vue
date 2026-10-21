@@ -65,8 +65,9 @@ interface OfficeForecastData {
 const api = useApi()
 const days = ref(30)
 const horizon = ref(7)
-const { data, pending, refresh } = await useAsyncData('employee-office-forecast', () => api.get<OfficeForecastData>('/forecast/office', { days: days.value, horizon: horizon.value }), {
+const { data, pending, refresh, error } = await useAsyncData('employee-office-forecast', () => api.get<OfficeForecastData>('/forecast/office', { days: days.value, horizon: horizon.value }), {
   watch: [days, horizon],
+  lazy: true,
 })
 useLiveRefresh(refresh)
 
@@ -82,36 +83,46 @@ const backlogTone = computed<Tone>(() => (f.value?.backlog.trend === 'growing' ?
 const backlogHint = computed(() => {
   const b = f.value?.backlog
   if (!b) return ''
-  if (!b.now) return 'Desk is clear right now'
-  if (b.clearance_days == null) return 'Arrivals outpace clearances — backlog won’t clear at this pace'
+  if (!b.now) return 'No documents waiting right now'
+  if (b.clearance_days == null) return 'More documents are arriving than are being cleared, so the backlog will keep growing'
   return `Clears in about ${b.clearance_days} day${b.clearance_days === 1 ? '' : 's'} at the predicted pace`
 })
 
 const LOAD: Record<StaffForecast['load_level'], { label: string; tone: Tone }> = {
-  high: { label: 'Heavy load ahead', tone: 'danger' },
+  high: { label: 'High workload ahead', tone: 'danger' },
   normal: { label: 'Normal', tone: 'neutral' },
-  light: { label: 'Has capacity', tone: 'success' },
+  light: { label: 'Low workload', tone: 'success' },
 }
 const maxLoad = computed(() => Math.max(1, ...(f.value?.staff ?? []).map((s) => s.predicted_load)))
 </script>
 
 <template>
-  <section v-if="f" class="mt-8">
+  <section v-if="pending && !data" class="mt-8" role="status" aria-label="Loading the forecast">
+    <div class="skeleton h-5 w-40" aria-hidden="true" />
+    <div class="mt-4 grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4" aria-hidden="true">
+      <div v-for="i in 4" :key="i" class="card card-pad"><div class="skeleton h-3.5 w-28" /><div class="skeleton mt-4 h-8 w-16" /><div class="skeleton mt-4 h-14 w-full rounded-xl" /></div>
+    </div>
+  </section>
+  <section v-else-if="error && !data" class="card card-pad mt-8 flex flex-wrap items-center justify-between gap-3 text-sm text-danger-ink" role="alert">
+    {{ apiErrorMessage(error, 'Could not load the forecast') }}
+    <button class="btn btn-sm btn-ghost" @click="refresh()"><FIcon name="refresh-cw" :size="14" /> Try again</button>
+  </section>
+  <section v-else-if="f" class="mt-8">
     <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div>
-        <h2 class="flex items-center gap-2 text-lg"><FIcon name="trending-up" :size="18" /> Forecast &amp; predictive analytics</h2>
+        <h2 class="flex items-center gap-2 text-lg"><FIcon name="trending-up" :size="18" /> Forecast</h2>
         <p class="mt-1 text-sm text-ink-body">
           Projected from the last {{ f.range.days }} days of documents at {{ f.office!.name }} — weekday patterns included. Dashed lines are forecasts.
         </p>
       </div>
       <div class="flex items-center gap-2">
-        <label class="sr-only" for="fc-days">History window</label>
+        <label class="sr-only" for="fc-days">Past period</label>
         <select id="fc-days" v-model.number="days" class="input w-auto py-1.5 text-sm">
           <option :value="30">Last 30 days</option>
           <option :value="60">Last 60 days</option>
           <option :value="90">Last 90 days</option>
         </select>
-        <label class="sr-only" for="fc-horizon">Forecast horizon</label>
+        <label class="sr-only" for="fc-horizon">Forecast period</label>
         <select id="fc-horizon" v-model.number="horizon" class="input w-auto py-1.5 text-sm">
           <option :value="7">Next 7 days</option>
           <option :value="14">Next 14 days</option>
@@ -145,7 +156,7 @@ const maxLoad = computed(() => Math.max(1, ...(f.value?.staff ?? []).map((s) => 
       <!-- Backlog -->
       <article class="card card-pad">
         <div class="flex items-start justify-between gap-3">
-          <p class="text-[13px] font-medium text-ink-body">Backlog outlook</p>
+          <p class="text-[13px] font-medium text-ink-body">Backlog forecast</p>
           <ToneBadge :tone="backlogTone" dot>{{ f.backlog.trend }}</ToneBadge>
         </div>
         <p class="mt-3 font-display text-[32px] leading-none font-semibold tracking-tight">
@@ -265,7 +276,7 @@ const maxLoad = computed(() => Math.max(1, ...(f.value?.staff ?? []).map((s) => 
             <div class="flex justify-between gap-2"><dt class="text-ink-2">Will receive</dt><dd class="font-medium">≈{{ num(s.expected_received) }} <span :class="TONE_CLASSES[changeTone(s.change_pct)]" class="rounded px-1">{{ pct(s.change_pct) }}</span></dd></div>
             <div class="flex justify-between gap-2"><dt class="text-ink-2">Received ({{ f.range.days }}d)</dt><dd class="font-medium">{{ s.received_total }}</dd></div>
             <div class="flex justify-between gap-2"><dt class="text-ink-2">Released ({{ f.range.days }}d)</dt><dd class="font-medium">{{ s.released_total }}</dd></div>
-            <div class="flex justify-between gap-2"><dt class="text-ink-2">Avg processing</dt><dd class="font-medium">{{ formatDuration(s.avg_processing_minutes) }}</dd></div>
+            <div class="flex justify-between gap-2"><dt class="text-ink-2">Average processing</dt><dd class="font-medium">{{ formatDuration(s.avg_processing_minutes) }}</dd></div>
             <div class="flex justify-between gap-2"><dt class="text-ink-2">Uploads → next</dt><dd class="font-medium">{{ s.uploads_total }} → ≈{{ num(s.expected_uploads) }}</dd></div>
           </dl>
         </div>

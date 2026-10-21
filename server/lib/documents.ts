@@ -478,7 +478,7 @@ export async function requestPickup(documentId: string, actor: Actor, { liaisonU
     if (!visit.handler_id) throw conflict('Scan the document’s QR code to receive it before releasing it')
     await assertReceiver(doc, visit, actor, transaction)
     // A send-back is fetched by the liaisons of the office it goes back to (claimReturnPickup), not released here.
-    if (sendBackTarget(visit)) throw conflict('This document is being sent back: the liaisons of the office it goes back to pick it up. Cancel the send-back to release it another way.', 'SENDING_BACK')
+    if (sendBackTarget(visit)) throw conflict('This document is being sent back: the messengers of the office it goes back to will pick it up. Cancel the send-back to release it another way.', 'SENDING_BACK')
     const previousId = visit.liaison_id as string | null
     if (previousId === liaisonUserId) throw conflict('That messenger is already assigned to this document')
 
@@ -487,7 +487,7 @@ export async function requestPickup(documentId: string, actor: Actor, { liaisonU
     if (!atOrigin && !step) throw conflict('Document route is missing this step')
     // Reassigning the messenger of a send-back keeps it going back to the previous office.
     const back = previousId ? sendBackTarget(visit) : null
-    if (!back && step?.is_final_checkpoint) throw conflict('This is the final checkpoint — it is completed by approval, not released')
+    if (!back && step?.is_final_checkpoint) throw conflict('This is the last office — it is completed by approval, not released')
     const nextStep = back ? await stepAt(doc, back.step, back.officeId, transaction) : await getStep(doc.route_id, doc.current_step_number + 1, transaction)
     if (!nextStep) throw conflict('This is the last office on the route')
 
@@ -680,16 +680,16 @@ async function announceReturnPickup(doc: Row, officeId: string, eventId: string,
  * carry, and belong to that office or one of its umbrella offices — knowing the document's id is not enough.
  */
 export async function claimReturnPickup(documentId: string, actor: Actor) {
-  if (actor.account_type !== 'LIAISON') throw forbidden('Only a liaison can claim a return pickup')
+  if (actor.account_type !== 'LIAISON') throw forbidden('Only a messenger can claim a return pickup')
   return sequelize.transaction({ isolationLevel: Transaction.ISOLATION_LEVELS.READ_COMMITTED }, async (transaction) => {
     const doc = await lockDocument(documentId, actor, transaction)
     if (!AT_OFFICE.includes(doc.status)) throw conflict('This document is no longer waiting for a pickup', 'RETURN_NOT_OPEN')
     const visit = await requireVisit(doc, transaction)
     const back = sendBackTarget(visit)
     if (!back) throw conflict('This document is not being sent back', 'RETURN_NOT_OPEN')
-    if (visit.liaison_id) throw conflict(visit.liaison_id === actor.id ? 'You already claimed this pickup' : 'Another liaison already claimed this pickup', 'RETURN_ALREADY_CLAIMED')
+    if (visit.liaison_id) throw conflict(visit.liaison_id === actor.id ? 'You already claimed this pickup' : 'Another messenger already claimed this pickup', 'RETURN_ALREADY_CLAIMED')
     const officeIds = await returnOfficeIds(actor.org_id, back.officeId, transaction)
-    if (!actor.office_id || !officeIds.includes(actor.office_id)) throw forbidden('Only the liaisons of the office it goes back to can claim this pickup')
+    if (!actor.office_id || !officeIds.includes(actor.office_id)) throw forbidden('Only the messengers of the office it goes back to can claim this pickup')
     const liaison = await claimFreeMessenger(actor.id, actor.org_id, null, transaction)
 
     visit.liaison_id = liaison.id
@@ -724,7 +724,7 @@ export async function claimReturnPickup(documentId: string, actor: Actor) {
 
 /** The liaison who claimed a return can't go after all (before picking it up): it is open again, and the others are told. */
 export async function releaseReturnClaim(documentId: string, actor: Actor) {
-  if (actor.account_type !== 'LIAISON') throw forbidden('Only the liaison who claimed it can give it up')
+  if (actor.account_type !== 'LIAISON') throw forbidden('Only the messenger who claimed it can cancel the claim')
   return sequelize.transaction(async (transaction) => {
     const doc = await lockDocument(documentId, actor, transaction)
     if (!AT_OFFICE.includes(doc.status)) throw conflict('It was already picked up — report a failed delivery instead if you can’t deliver it')
@@ -827,7 +827,7 @@ export async function sendBack(documentId: string, actor: Actor, { issueId, rema
       {
         type: 'DOCUMENT_SENT_BACK',
         title: `Sent back to your office: ${doc.title}`,
-        body: `${here} flagged an issue and is sending ${trackingNumber(doc.id)} back: ${issue.title}. Your office’s liaisons were told to pick it up; scan its QR code when it arrives.`,
+        body: `${here} flagged an issue and is sending ${trackingNumber(doc.id)} back: ${issue.title}. Your office’s messengers were told to pick it up; scan its QR code when it arrives.`,
         documentId: doc.id,
         link: docLink(doc.id),
       },
@@ -1257,7 +1257,7 @@ function resolveScanAction(doc: Row, visit: Row | null, actor: Actor, at: string
   if (doc.status === 'CREATED') return deny('This document is still a draft. It has to be submitted before it can be routed.')
   // Approved at the last office: its QR label is retired, a scan only says so.
   if (doc.status === 'COMPLETED') return inform('This document is already completed: it was approved at the last office on its route. Its QR label no longer works, so there is nothing to pick up or receive.')
-  if (doc.status === 'RETURNED') return inform('This document was returned to its submitter.')
+  if (doc.status === 'RETURNED') return inform('This document was returned to its uploader.')
   if (!visit) return deny('This document has no tracking record for its current step')
   const atOffice = AT_OFFICE.includes(doc.status)
 
@@ -1561,7 +1561,7 @@ export async function decideApproval(
 ) {
   requirePermission(actor, 'DECIDE_APPROVALS')
   if (!isOfficeStaff(actor) || !actor.office_id) throw forbidden('Only the last office on the document’s route can approve it')
-  if (decision === 'RETURNED' && !remarks) throw badRequest('Remarks are required when returning a document')
+  if (decision === 'RETURNED' && !remarks) throw badRequest('Comments are required when returning a document')
 
   return sequelize.transaction(async (transaction) => {
     const approval = await Approval.findByPk(approvalId, { transaction, lock: transaction.LOCK.UPDATE })

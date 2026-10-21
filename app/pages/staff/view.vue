@@ -8,8 +8,9 @@ const auth = useAuthStore()
 
 const q = ref('')
 const debouncedQ = refDebounced(q, 300)
-const { data, refresh } = await useAsyncData('staff-view-list', () => docsApi.list({ scope: 'all', q: debouncedQ.value || undefined, limit: 50 }), {
+const { data, refresh, status: listStatus } = await useAsyncData('staff-view-list', () => docsApi.list({ scope: 'all', q: debouncedQ.value || undefined, limit: 50 }), {
   watch: [debouncedQ],
+  lazy: true,
 })
 
 const selectedId = ref<string | null>(null)
@@ -47,7 +48,12 @@ useLiveRefresh(() => {
           </div>
         </div>
         <ul class="flex-1 divide-y divide-line/50 overflow-y-auto">
-          <li v-if="!data?.data.length" class="p-6 text-center text-sm text-ink-2">No documents found.</li>
+          <template v-if="listStatus === 'pending' && !data">
+            <li v-for="i in 6" :key="i" class="flex items-center gap-3 p-4" aria-hidden="true">
+              <div class="flex-1 space-y-2"><div class="skeleton h-3.5" :style="{ width: `${70 - (i % 3) * 12}%` }" /><div class="skeleton h-3 w-1/3" /></div>
+            </li>
+          </template>
+          <li v-else-if="!data?.data.length" class="p-6 text-center text-sm text-ink-2">No documents found.</li>
           <li v-for="d in data?.data" :key="d.id">
             <button
               class="w-full px-4 py-3 text-left transition-colors"

@@ -19,7 +19,7 @@ const demoAccounts = [
   { email: 'client@bago.gov.ph', role: 'ADMIN', note: 'Org admin · submits' },
   { email: 'records@bago.gov.ph', role: 'DEPARTMENT_HEAD', note: 'Records Section' },
   { email: 'hr@bago.gov.ph', role: 'DEPARTMENT_HEAD', note: 'HRMSO' },
-  { email: 'mayor.staff@bago.gov.ph', role: 'STAFF', note: 'Final checkpoint' },
+  { email: 'mayor.staff@bago.gov.ph', role: 'STAFF', note: 'Last office' },
   { email: 'hr.staff@bago.gov.ph', role: 'STAFF', note: 'View-only' },
   { email: 'liaison.adm@bago.gov.ph', role: 'LIAISON', note: 'Admin dept' },
   { email: 'liaison.fin@bago.gov.ph', role: 'LIAISON', note: 'Finance dept' },
@@ -94,10 +94,7 @@ function useDemo(addr: string) {
       </button>
     </form>
 
-    <p class="mt-6 text-center text-sm text-ink-body">
-      Setting up a new organization?
-      <NuxtLink to="/register" class="font-medium text-terracotta-ink hover:underline">Create an account</NuxtLink>
-    </p>
+    <p class="mt-6 text-center text-sm text-ink-body">Accounts are created by your organization's administrator. Ask them if you need one.</p>
 
     
   </div>

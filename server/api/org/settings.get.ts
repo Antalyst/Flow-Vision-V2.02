@@ -5,17 +5,16 @@ import { userAttrs } from '~~/server/lib/document-queries.ts'
 import { env } from '~~/server/lib/env.ts'
 import { requirePage } from '~~/server/lib/team.ts'
 import { imageKey, imageVersion } from '~~/server/lib/org-assets.ts'
-import { listTemplates, templateDto } from '~~/server/lib/templates.ts'
 import { holidayDto, isMissingTable, settingsUnavailable, workCalendarDto } from '~~/server/lib/work-calendar.ts'
 
 /**
  * Organization Settings (ADMIN only): profile and logo, working hours and holidays, document
- * types (with how many documents use each), document templates, AI knowledge files.
+ * types (with how many documents use each), AI knowledge files.
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'ADMIN')
   requirePage(user, '/client/settings')
-  const [org, types, usage, files, calendar, templates] = await Promise.all([
+  const [org, types, usage, files, calendar] = await Promise.all([
     Organization.findByPk(user.org_id),
     DocumentType.findAll({ where: { org_id: user.org_id }, include: [{ model: Office, as: 'office', attributes: ['id', 'name', 'code'] }], order: [['sort_order', 'ASC'], ['name', 'ASC']] }),
     Document.findAll({ where: { org_id: user.org_id }, attributes: ['category', [fn('COUNT', col('id')), 'count']], group: ['category'], raw: true }) as unknown as Promise<
@@ -40,7 +39,6 @@ export default defineApiHandler(async (event) => {
       settingsUnavailable()
       return null
     }),
-    listTemplates(user.org_id),
   ])
   const usageByName = new Map(usage.map((u) => [u.category, Number(u.count)]))
   const [settings, holidays] = calendar ?? [null, []]
@@ -55,7 +53,6 @@ export default defineApiHandler(async (event) => {
     work_calendar: workCalendarDto(settings, Boolean(calendar)),
     holidays: holidays.map(holidayDto),
     document_types: types.map((t) => documentTypeDto(t, usageByName.get(t.name) ?? 0)),
-    templates: templates.map(templateDto),
     knowledge_files: files.map(knowledgeDto),
     limits: { knowledge_max_bytes: env.maxKnowledgeBytes },
     ai_configured: Boolean(process.env.GROQ_API_KEY),

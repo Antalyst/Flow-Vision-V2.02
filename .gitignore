@@ -19,6 +19,7 @@ dist
 .env.*
 !.env.example
 
+
 # Logs & OS / editor files
 logs
 *.log

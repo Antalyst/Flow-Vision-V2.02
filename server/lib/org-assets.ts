@@ -4,16 +4,15 @@ import { badRequest, httpError } from './errors.ts'
 import { deleteFile, getFile, putFile } from './file-store.ts'
 
 /**
- * Images of Organization Settings: the organization logo (QR labels, document letterheads) and
- * template signatures. Stored like every other file (see file-store.ts) under
+ * Images of Organization Settings: the organization logo, printed on QR labels. Stored like every
+ * other file (see file-store.ts) under
  *   org/<uuid>/logo.<png|jpg>          organizations.logo_url
- *   templates/<uuid>/signature.<ext>   document_templates.signature_url
- * Only PNG and JPEG, checked by their bytes — they print, go into Word and PDF exports, and are
- * served from our own origin (an SVG could carry script).
+ * Only PNG and JPEG, checked by their bytes — they print and are served from our own origin (an
+ * SVG could carry script).
  */
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024
-const KEY_RE = /^(org|templates)\/[0-9a-f-]{36}\/(logo|signature)\.(png|jpg)$/
+const KEY_RE = /^org\/[0-9a-f-]{36}\/logo\.(png|jpg)$/
 
 function imageKind(data: Buffer): 'png' | 'jpg' | null {
   if (data.length > 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47) return 'png'
@@ -35,7 +34,7 @@ export async function readImagePart(event: H3Event) {
   return part
 }
 
-export async function saveImage(folder: 'org' | 'templates', name: 'logo' | 'signature', data: Buffer) {
+export async function saveImage(folder: 'org', name: 'logo', data: Buffer) {
   if (data.length > MAX_IMAGE_BYTES) throw httpError(413, 'Images can be up to 2 MB', 'PAYLOAD_TOO_LARGE')
   const kind = imageKind(data)
   if (!kind) throw badRequest('Use a PNG or JPG image')

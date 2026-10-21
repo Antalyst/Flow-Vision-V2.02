@@ -230,7 +230,10 @@ export const Message = define('messages', {
   content: { type: DataTypes.TEXT, allowNull: false },
   attachment_url: DataTypes.STRING(500),
   is_read: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
-  read_at: DataTypes.DATE,
+  // Milliseconds, so the latest of two messages sent in the same second is known (2026-10-25 migration).
+  read_at: DataTypes.DATE(3),
+  created_at: { type: DataTypes.DATE(3), allowNull: false },
+  updated_at: { type: DataTypes.DATE(3), allowNull: false },
 })
 
 export const Notification = define(
@@ -432,27 +435,6 @@ export const OrganizationHoliday = define('organization_holidays', {
   name: { type: DataTypes.STRING(150), allowNull: false },
   // Same month and day every year (e.g. Christmas Day).
   recurring: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
-  created_by: DataTypes.CHAR(36),
-})
-
-/** Organization Settings: letterheads (logo, header, signature, footer) the AI drafts formal documents on. */
-export const DocumentTemplate = define('document_templates', {
-  id: uuidPk,
-  org_id: { type: DataTypes.CHAR(36), allowNull: false },
-  name: { type: DataTypes.STRING(100), allowNull: false },
-  // When to use it — the AI reads this to choose a template.
-  description: DataTypes.STRING(500),
-  show_logo: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
-  header_text: DataTypes.TEXT,
-  body_guide: DataTypes.TEXT,
-  signatory_name: DataTypes.STRING(150),
-  signatory_title: DataTypes.STRING(150),
-  // "templates/<uuid>/<original name>" under UPLOAD_DIR (see file-store.ts)
-  signature_url: DataTypes.STRING(500),
-  footer_text: DataTypes.STRING(500),
-  is_default: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
-  is_active: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
-  sort_order: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
   created_by: DataTypes.CHAR(36),
 })
 

@@ -108,7 +108,7 @@ async function removeHoliday(h: HolidayItem) {
   <div class="space-y-6">
     <div v-if="!calendar.available" class="flex items-start gap-3 rounded-2xl border border-amber/40 bg-amber/12 p-4 text-sm text-amber-ink">
       <FIcon name="alert-triangle" :size="18" class="mt-0.5 shrink-0" />
-      <span>Working hours, holidays and templates need their database tables first. Run <code class="mono">npm run db:add-settings</code> on the server, then reload this page.</span>
+      <span>Working hours and holidays need their database tables first. Run <code class="mono">npm run db:add-settings</code> on the server, then reload this page.</span>
     </div>
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -117,7 +117,7 @@ async function removeHoliday(h: HolidayItem) {
         <div class="flex flex-wrap items-start justify-between gap-2">
           <div>
             <h2 class="text-lg">Working hours</h2>
-            <p class="mt-1 text-sm text-ink-body">Processing time only counts while the organization works. After hours and on days off a document's clock pauses, and it picks up again at the next start of work.</p>
+            <p class="mt-1 text-sm text-ink-body">Processing time only counts during working hours. Outside working hours and on days off, the timer pauses and continues at the next start of work.</p>
           </div>
           <ToneBadge :tone="calendar.configured ? 'success' : 'neutral'" dot>{{ calendar.configured ? 'In use' : 'Not set' }}</ToneBadge>
         </div>

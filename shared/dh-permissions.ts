@@ -30,7 +30,7 @@ export const DH_PERMISSION_META: Record<DhPermission, { label: string; descripti
   UMBRELLA_HANDOFF: { label: 'Hand to umbrella offices', description: 'Hand a received document to one of the office’s umbrella units, or return it from the unit to its office', group: 'Documents' },
   RELEASE_DOCUMENTS: { label: 'Release to a messenger', description: 'Assign, change or cancel the messenger who carries a document onward', group: 'Documents' },
   SEND_BACK_DOCUMENTS: { label: 'Flag and send back', description: 'Send a document back to the previous office with a flagged issue', group: 'Documents' },
-  DECIDE_APPROVALS: { label: 'Approve or return', description: 'Decide on documents waiting at the final checkpoint (only where the office is one)', group: 'Documents' },
+  DECIDE_APPROVALS: { label: 'Approve or return', description: 'Decide on documents waiting at the last office on a route (only where the office is one)', group: 'Documents' },
   UPLOAD_DOCUMENTS: { label: 'Upload documents', description: 'Upload and submit new documents', group: 'Documents' },
   MANAGE_TEAM: { label: 'Manage staff and messengers', description: 'Add, edit, suspend and reset staff and messenger accounts', group: 'Management' },
   MANAGE_UMBRELLAS: { label: 'Manage umbrella offices', description: 'Add, rename and deactivate umbrella offices (main office only)', group: 'Management' },

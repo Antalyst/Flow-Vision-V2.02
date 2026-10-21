@@ -46,7 +46,7 @@ async function changePassword() {
         <div class="mt-2 flex flex-wrap gap-2">
           <ToneBadge v-if="auth.role" :tone="ROLE_META[auth.role].tone" dot>{{ ROLE_META[auth.role].label }}</ToneBadge>
           <ToneBadge v-if="auth.user?.office">{{ auth.user.office.name }}</ToneBadge>
-          <ToneBadge v-if="auth.user?.has_approval_authority" tone="success" icon="shield">Approval authority</ToneBadge>
+          <ToneBadge v-if="auth.user?.has_approval_authority" tone="success" icon="shield">Can approve documents</ToneBadge>
         </div>
       </div>
     </section>

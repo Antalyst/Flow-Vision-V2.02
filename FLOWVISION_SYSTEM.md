@@ -59,16 +59,16 @@ Flow-Vision-V2.02/
 ├── app/                      Nuxt front end
 │   ├── app.vue               Root: loading bar, layout, page, ToastHost, ConfirmHost
 │   ├── assets/               logo, styles (index.css, lumio.css, glassmorphic.css)
-│   ├── components/           33 shared components (+ settings/OrgLogo, Templates, WorkHours)
+│   ├── components/           34 shared components (+ settings/OrgLogo, WorkHours)
 │   ├── composables/          useApi, useAuth/useAction, useDocuments, useRoutes, useQR,
-│   │                         useRealtime, useCanvasExport, useDocTemplates, useMotion, refDebounced
-│   ├── layouts/              default.vue (sidebar app shell), auth.vue (login/register)
+│   │                         useRealtime, useCanvasExport, useMotion, refDebounced
+│   ├── layouts/              default.vue (sidebar app shell), auth.vue (login)
 │   ├── middleware/           auth.global.ts (the route guard)
 │   ├── pages/                every route (see §16)
 │   ├── plugins/gsap.ts       page-enter animation, v-reveal, v-magnetic directives
 │   ├── stores/               auth, ui, notifications, documents, assistant
 │   ├── types/                index.ts (shared front-end types), shims.d.ts
-│   └── utils/                format, markdown, letterhead, print, photo-pdf
+│   └── utils/                format, markdown, canvas-print, print, photo-pdf
 ├── server/
 │   ├── api/                  REST endpoints, one file per route (see §12)
 │   ├── lib/                  business logic (documents, routes, auth, AI, forecasts…)
@@ -137,13 +137,17 @@ Flow-Vision-V2.02/
 | `npm run build` / `npm run preview` | Production build / preview it |
 | `npm start` | `node --env-file-if-exists=.env .output/server/index.mjs` |
 | `npm run typecheck` | `nuxt typecheck` |
-| `npm run db:schema` | **Drops and recreates** all 24 tables and 3 views from `database/flowvision-complete-schema.sql` |
-| `npm run db:seed` | Loads Bago City demo data by running the real workflow functions |
+| `npm run db:schema` | **Drops and recreates** all 28 tables and 3 views from `database/flowvision-complete-schema.sql` |
+| `npm run db:seed` | Loads Bago City demo data by running the real workflow functions. Local only: it refuses `--remote` (the demo accounts, an ADMIN among them, share a published password) |
 | `npm run db:reset` | `db:schema` followed by `db:seed` |
 | `npm run db:migrate` | Additive, idempotent migrations (see below) |
-| `npm run db:add-settings` | Creates only `organization_settings`, `organization_holidays` and `document_templates` if they're missing |
+| `npm run db:add-settings` | Creates only `organization_settings` and `organization_holidays` if they're missing |
+| `npm run admin:bootstrap` | Creates the **one** initial ADMIN of a new installation (see §6). `-- --status` reports whether it already ran |
+| `npm run backup -- …` | Backups: `init`, `full` (= `npm run backup:full`), `list`, `verify`, `copy`, `restore`, Restic `snapshot` / `snapshots` / `check` / `forget` / `restore-snapshot`. See `docs/BACKUP_AND_RECOVERY.md` |
 | `node scripts/db-add-ai-history.ts [--remote]` | Creates only `ai_conversations` and `ai_messages` |
 | `npm run test:flow` | End-to-end workflow test (the app must be running) |
+| `npm run test:backup` | Backups end to end on a throwaway local database (`FV_TEST_DB_*`, `FV_TEST_DUMP_BIN`, optional `FV_TEST_RESTIC_BIN`) |
+| `npm run test:admin-bootstrap` | The initial-administrator bootstrap on a throwaway database it creates on a **local** server (`FV_TEST_DB_HOST/PORT/USER/PASS`) |
 
 **Safety guard (`scripts/guard.ts`).** Every DB script refuses to run unless `DB_HOST` is local (`localhost`, `127.0.0.1`, `::1`, `host.docker.internal`). To run against another host, add `--remote`. Never run `db:schema` against the hosted database, because it drops every table.
 
@@ -154,6 +158,7 @@ Flow-Vision-V2.02/
 - Backfills default document types for organizations that have none.
 - Makes `qr_codes.qr_code_data` unique.
 - **Backfills routing codes** in the current format for documents that don't have one, and corrects the prefix for ADMIN uploads. Those labels need reprinting.
+- Widens the message times to milliseconds (`database/migrations/2026-10-25-message-precision.sql`).
 
 ---
 
@@ -164,20 +169,37 @@ Flow-Vision-V2.02/
 | **Organization** | One LGU (tenant). Every row is scoped to an organization. |
 | **Office** | A unit inside the organization, e.g. Records Section. It has a globally unique `code` (the QR prefix, e.g. `BAG-ADM-RECORDS`) and a `department`. |
 | **Document Route** | An ordered list of offices (steps, at most 30). An organization can have any number. The uploader picks one. |
-| **Final checkpoint** | The last step of a route. That office approves or returns the document. |
+| **Last office** (stored as `is_final_checkpoint`) | The last step of a route. That office approves or returns the document. The app says "last office"; the database and code keep the name `final_checkpoint`. |
 | **Origin / step 0** | Where a document starts: the uploader's office, or for an ADMIN upload (no office) the organization itself. |
 | **Visit** | One `document_tracking` row per office stop, with an event log in its `notes` column. |
 | **Receive** | Office staff scan the QR. This records the `handler_id`. |
 | **Release / pickup request** | The receiver assigns a free messenger (`liaison_id`) to carry the document onward. |
-| **Messenger / liaison** | A LIAISON account that belongs to one office and carries documents. |
+| **Messenger** (stored as `LIAISON`) | A LIAISON account that belongs to one office and carries documents. The app always says "messenger"; `liaison` is only a code name. |
 | **Desk-to-desk pass** | Inside one office, the receiver passes the document to a colleague, who must scan it in. |
 | **Send back** | Flag an issue and send the document back to the previous office. |
 | **Tracking number** | `FV-` + the first 8 characters of the document UUID, uppercased (e.g. `FV-1A2B3C4D`). |
 | **Routing code** | The QR payload `{OFFICE_CODE}{MMDDYY}{6 digits}`, e.g. `BCC100726123456` |
 | **Processing time** | Days + hours from the document type. It sets the deadline (`target_completion_date`) and counts working time only. |
 | **Canvas** | A report, table or letter the AI produces in a `<canvas>` block, which the user can print or export. |
-| **Template** | A letterhead (logo, header, signature, footer) that AI canvases are laid out on. |
 | **Knowledge file** | A file uploaded by the ADMIN whose text the AI can search. |
+
+**Wording used on screen.** Text shown to people uses plain, common system words; the same thing always has the same name:
+
+| Say | Not |
+|---|---|
+| last office | final checkpoint |
+| messenger | liaison, courier |
+| uploader | submitter (in labels and messages) |
+| comments | remarks (in labels and messages; the stored field is still `remarks`) |
+| people, staff | personnel |
+| can approve / cannot approve | approval authority |
+| Pending, In progress, In transit, Overdue | Awaiting, In process, Moving, Past target date |
+| High / Medium / Low | Heavy / Moderate / Light |
+| Add, Create (accounts) | Invite (nothing is sent; the admin creates the account and shares the temporary password) |
+| Loading… | Fetching…, Crunching…, Reading the audit trail… |
+| Take a photo of | Photograph |
+
+Domain terms are kept as they are: Document Route, Office, Umbrella office, Department Head, Citizen's Charter, Canvas, Processing time.
 
 Time zone: everything that involves days is computed in **Philippine time (UTC+8, no DST)**: routing-code dates, working hours, forecasts and messenger "deliveries today". The database stores UTC (`timezone: '+00:00'`).
 
@@ -196,7 +218,19 @@ Time zone: everything that involves days is computed in **Philippine time (UTC+8
 
 These are the values stored in `users.account_type`, with the labels the app shows in parentheses. Before the October 2026 rename, ADMIN was stored as `CLIENT` and DEPARTMENT_HEAD as `EMPLOYEE` (see `database/migrations/2026-10-13-rename-roles.sql`). The URL paths still use the old names (`/client/…`, `/employee/…`), so bookmarks and saved page access keep working.
 
-Registering (`/register`) creates a **new organization and its first ADMIN**. Other accounts are created by managers and start as `pending` with a 12-character temporary password from an unambiguous alphabet. They must set their own password.
+There is **no public registration**. A new installation gets exactly **one initial ADMIN** from the command line, by someone who holds the database credentials:
+
+```
+npm run admin:bootstrap                    # interactive: organization name (if none), email, name, password (typed hidden, 12+ characters)
+npm run admin:bootstrap -- --remote        # against a non-local database, e.g. the hosted one
+npm run admin:bootstrap -- --status        # has it run?
+```
+
+Without a terminal (a deployment job), set `FV_BOOTSTRAP_ADMIN_EMAIL`, `FV_BOOTSTRAP_ADMIN_FIRST_NAME`, `FV_BOOTSTRAP_ADMIN_LAST_NAME`, `FV_BOOTSTRAP_ADMIN_PASSWORD` and `FV_BOOTSTRAP_ORG_NAME` (or `FV_BOOTSTRAP_ORG_ID` when the database already holds several organizations) for that one command, then remove them; that account must choose a new password at first sign-in. The password is never taken as an argument and never printed.
+
+It runs once (`server/lib/bootstrap.ts`). In one transaction it first inserts the only row the `system_bootstrap` table can hold (primary key `id` = 1, `CHECK (id = 1)`), so a second or simultaneous run fails on that key; it also refuses while any ADMIN exists. It then creates the organization when there is none (with the default document types), the ADMIN account (bcrypt, like every account) and an `ADMIN_BOOTSTRAP` audit entry. Any failure rolls all of it back. Existing installations are marked as bootstrapped by the migration (`method = 'EXISTING'`).
+
+That ADMIN then creates everything else in the app: the organization profile and settings, offices, routes, and the accounts (Accounts page, `POST /api/users`). Other accounts start as `pending` with a 12-character temporary password from an unambiguous alphabet. They must set their own password.
 
 **User status:** `active`, `pending` (temporary password: can sign in, `must_change_password` is true), or `inactive` (suspended: signed out immediately, can't sign in). The API exposes these as `ACTIVE` / `SUSPENDED`.
 
@@ -223,7 +257,7 @@ Nobody can suspend or demote themselves, or change their own page access. LIAISO
 
 ### 6.4 Route guard (`app/middleware/auth.global.ts`)
 
-- Public pages: `/`, `/login` and `/register`. Signed-in users who open them are sent to their home page.
+- Public pages: `/` and `/login`. Signed-in users who open them are sent to their home page. There is no sign-up page.
 - Everything else requires sign-in. Otherwise the user goes to `/login?redirect=…`.
 - Portal prefixes `/client`, `/employee`, `/staff` and `/liaison` are reserved for their role.
 - Pages outside the account's page access redirect home.
@@ -421,7 +455,7 @@ The uploader **does not choose** priority. It is computed from the document:
 
 | Table | Key columns and meaning |
 |---|---|
-| `organizations` | `name`, `description`, `logo_url` (`org/<uuid>/logo.<png\|jpg>`), `website`, `status`, `created_by` (the registering ADMIN) |
+| `organizations` | `name`, `description`, `logo_url` (`org/<uuid>/logo.<png\|jpg>`), `website`, `status`, `created_by` (its first ADMIN) |
 | `offices` | `org_id`, `name`, `code` (**globally unique** QR prefix), `address`, `phone`, `email`, `latitude`, `longitude`, `manager_id`, `is_final_checkpoint` (kept in sync), `department` (liaison scope), `status` active/inactive |
 | `users` | `org_id`, `email` (unique), `password_hash` (excluded by default scope and stripped by `toJSON`), `first_name`, `last_name`, `full_name` (kept in sync; the views use it), `account_type` enum(`ADMIN`,`DEPARTMENT_HEAD`,`STAFF`,`LIAISON`), `office_id`, `avatar_url`, `phone`, `position`, `department`, `status` active/inactive/pending, `last_login`, `email_verified`, `two_factor_enabled` (both unused), `page_access` (JSON text) |
 | `organization_routes` | `org_id`, `name`, `description`, `is_active` (1 = offered; 0 = retired or a snapshot), `created_by` |
@@ -442,7 +476,8 @@ The uploader **does not choose** priority. It is computed from the document:
 | `knowledge_files` | `org_id`, `title`, `description`, `file_url` (`knowledge/<uuid>/<name>`), `file_name`, `file_type`, `file_size`, `content` (extracted text, LONGTEXT, up to 5 M chars), `char_count`, `status` READY/NO_TEXT/FAILED, `error`, `is_active`, `uploaded_by` |
 | `organization_settings` | PK `org_id`, `work_start`, `work_end`, `work_days` ("1,2,3,4,5"), `updated_by` |
 | `organization_holidays` | `org_id`, `holiday_date`, `name`, `recurring`, `created_by` |
-| `document_templates` | `org_id`, `name`, `description`, `show_logo`, `header_text`, `body_guide`, `signatory_name`, `signatory_title`, `signature_url` (`templates/<uuid>/signature.<png\|jpg>`), `footer_text`, `is_default`, `is_active`, `sort_order`, `created_by` |
+| `system_bootstrap` | One row at most (`id` = 1): `org_id`, `admin_user_id`, `method` (`CLI` / `EXISTING`), `completed_at`. Present = the initial ADMIN exists and `admin:bootstrap` refuses |
+| ~~`document_templates`~~ | Removed with the template feature (2026-10-24). Not created by new installs; an existing one is left alone until `database/migrations/2026-10-24-drop-document-templates.sql` is run |
 | `ai_conversations` | `org_id`, `user_id` (**private to the owner**), `title` (from the first question), `updated_at` = last activity. Only the newest 200 per user are kept. |
 | `ai_messages` | `conversation_id` (cascade delete), `role` user/assistant, `content`, `model` (label), `tools` (JSON list of lookups and found documents), `is_error`, `failed`, `created_at` (DATETIME(3), millisecond order) |
 
@@ -490,13 +525,13 @@ ai_conversations 1─* ai_messages
 | `routes.ts` | Route CRUD, snapshots, final-checkpoint sync |
 | `tracking-log.ts` | Visit event log helpers, send-back target, pending pass |
 | `qr.ts` | Routing-code format, parsing, organization code, rendering |
-| `uploads.ts`, `file-store.ts`, `document-files.ts`, `org-assets.ts` | File validation, storage (disk or DB), staged multi-part uploads, logo and signature images |
+| `uploads.ts`, `file-store.ts`, `document-files.ts`, `org-assets.ts` | File validation, storage (disk or DB), staged multi-part uploads, the organization logo |
 | `notifications.ts`, `realtime.ts`, `messages.ts` | Notifications plus socket push, topic registry, message paging |
 | `liaisons.ts`, `team.ts`, `office-input.ts`, `issues.ts` | Messenger metrics, account management rules, office input mapping, issue includes |
 | `priority.ts` | Automatic priority |
 | `knowledge.ts` | Document types, knowledge file upload and extraction, keyword retrieval for document analysis |
 | `work-calendar.ts` | Calendar load, cache, rescheduling |
-| `templates.ts` | Document templates: DTO, validation, starter set, AI catalog |
+| `bootstrap.ts` | The one-time initial ADMIN (`npm run admin:bootstrap`) |
 | `ai.ts`, `ai-groq.ts`, `ai-prompt.ts`, `ai-tools.ts`, `ai-knowledge.ts`, `ai-history.ts` | AI subsystem (§14) |
 | `dashboard.ts`, `forecast.ts`, `office-forecast.ts`, `activity.ts` | Analytics (§15) |
 
@@ -506,7 +541,7 @@ ai_conversations 1─* ai_messages
 - Up to **50 files per document**, `MAX_UPLOAD_MB` (24 MB) in total. Stored as `<uuid>/<safe original name>`. `file_type` holds the MIME type, or the extension if the MIME type is longer than 50 characters.
 - **Disk mode:** `UPLOAD_DIR/<uuid>/<name>`. **DB mode:** `file_blobs` in parts of ≤ 3 MB, streamed part by part. Reads check both places, so a local server can open files uploaded on the live site. DB reads retry once on dropped connections.
 - **Staged uploads** (for Vercel's 4.5 MB request limit): `POST /uploads` sends the first part and returns a key; `POST /uploads/part` sends parts 1, 2, … in order; the document form then references the key in an `upload` field. Staged parts belong to the uploader and are deleted after a day if never attached.
-- **Images** (logo, signature): PNG or JPEG only, **checked by magic bytes** (no SVG, since it could carry script), up to 2 MB. Served with a version tag in the URL and `Cache-Control: private, max-age=86400`.
+- **Images** (the logo): PNG or JPEG only, **checked by magic bytes** (no SVG, since it could carry script), up to 2 MB. Served with a version tag in the URL and `Cache-Control: private, max-age=86400`.
 - **Knowledge files:** PDF, DOCX, TXT, MD and CSV, up to `KNOWLEDGE_MAX_MB`. Text is extracted at upload.
 
 ---
@@ -518,7 +553,6 @@ All endpoints are under `/api`, same origin, authenticated by the `fv_session` c
 ### Auth
 | Method | Path | Role | Notes |
 |---|---|---|---|
-| POST | `/auth/register` | public | `organization_name, first_name, last_name, email, password`. Creates the organization, the first ADMIN and the default document types, and sets the cookie. Rate-limited per IP. |
 | POST | `/auth/login` | public | `email, password`. 20 **failed** attempts per IP per 15 min. A dummy hash compare hides which emails exist. Audited `LOGIN`. |
 | POST | `/auth/logout` | All | Revokes the session and clears the cookie |
 | GET | `/auth/me` | All | Current user with office, organization (+ logo URL), `has_approval_authority`, `liaison`, `page_access`, `must_change_password` |
@@ -581,8 +615,11 @@ All endpoints are under `/api`, same origin, authenticated by the `fv_session` c
 | Method | Path | Role | Notes |
 |---|---|---|---|
 | GET | `/offices` | All | `active=all` includes inactive offices; includes `member_count` |
-| POST / PATCH | `/offices`, `/offices/:id` | A + page | `name`, `code`, `department`, `location`, (`is_active`) |
+| POST / PATCH | `/offices`, `/offices/:id` | A + page | `name`, `location`, (`is_active`). The code is **generated from the name** (2–4 letters/digits: Human Resources → HR, City Planning Office → CPO; `shared/office-code.ts`). An edit keeps the code unless `regenerate_code: true`; an explicit `code` is still accepted (scripts). Unique across all offices (`uq_offices_code`): a concurrent clash moves to the next candidate |
+| GET / POST / PATCH | `/offices/umbrellas`, `/offices/umbrellas/:id` | D (main office, "Manage umbrella offices") | `name`, `is_active`, optional `head`: `{ mode: 'existing', user_id }` (move a delegated Department Head of the office family there; main-office-only permissions are dropped, recorded) or `{ mode: 'new', first_name, last_name, email, phone?, permissions }` (create the delegated head there, temporary password returned once). Needs "Assign Department Heads". No address is asked for. Code = office code + generated suffix (CHO-SU). GET also returns `eligible_heads`, `codes_in_use`, `can_assign_heads` |
 | GET | `/users` | All | ADMIN gets the full roster. Others get a directory (`id`, name, role, office), active users only. `managed=true` gives managers their own office's managed accounts with full details. Filters: `account_type`, `q`. |
+| GET | `/users/directory/offices` | A (Team accounts page), D (Staff & messengers page) | Office cards: the families this account may browse (ADMIN: every main office + accounts without an office; D: its own office and its umbrella offices), with account counts per role |
+| GET | `/users/directory` | A, D | One page of the users of a family: `office_id` (or `none`, ADMIN), optional `umbrella_id` (`main` or an umbrella of that office), `account_type`, `q`, `page`, `limit` ≤ 100. Filters combine; scope from the session (`server/lib/directory.ts`); other offices → 404. Rows carry `can_manage` |
 | POST | `/users` | A, D, S + team page | `account_type`, `email`, `first_name`, `last_name`, `phone`, `office_id`, `page_access` → `{ user, temporary_password }`. E and S can only create their managed types in their own office. |
 | PATCH | `/users/:id` | A, D, S + team page | Name, phone, role, office, `status` ACTIVE/SUSPENDED, `page_access` (within the rules in §6.2) |
 | POST | `/users/:id/reset-password` | A, D, S + team page | New temporary password; signs the user out everywhere |
@@ -594,18 +631,15 @@ All endpoints are under `/api`, same origin, authenticated by the `fv_session` c
 ### Organization settings (ADMIN + page `/client/settings` unless noted)
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/org/settings` | Profile, logo, `work_calendar`, `holidays`, document types (with usage), templates, knowledge files |
+| GET | `/org/settings` | Profile, logo, `work_calendar`, `holidays`, document types (with usage), knowledge files |
+| GET / POST | `/backups` | Backups page: availability, destinations, running job, history / start a full backup (202; 409 while one runs; 503 where unavailable). ADMIN with the Backups page only |
+| POST / GET | `/backups/:name/verify` · `/backups/:name/download` | Re-verify / stream a backup package (name checked against the naming pattern; no paths) |
 | PATCH | `/org` | `name`, `description`, `website` |
 | POST / DELETE | `/org/logo` | Upload (PNG/JPG ≤ 2 MB) / remove. **GET `/org/logo`** is open to all signed-in users. |
 | POST | `/org/document-types` | `name`, `description`, `processing_days`, `processing_hours` |
 | PATCH / DELETE | `/org/document-types/:id` | Also `is_active`, `sort_order` |
 | PUT / DELETE | `/org/work-hours` | `{ work_start, work_end, work_days[] }` / back to around the clock → `{ work_calendar, rescheduled }` |
 | POST / DELETE | `/org/holidays`, `/org/holidays/:id` | `{ date, name, recurring }` → `{ holiday, rescheduled }` |
-| GET | `/org/templates` | **C, E, S**: active templates with the organization name and logo (for canvases) |
-| POST | `/org/templates` | Template fields, `is_default` |
-| POST | `/org/templates/starter` | Adds Memorandum (default), Official Letter and Report |
-| PATCH / DELETE | `/org/templates/:id` | Edit (also `is_active`, `sort_order`) / delete |
-| POST / DELETE | `/org/templates/:id/signature` | Signature image. **GET** is open to C, E, S. |
 | POST | `/org/knowledge` | multipart `file`, `title`, `description` → text extracted (READY / NO_TEXT / FAILED) |
 | PATCH / DELETE | `/org/knowledge/:id` | `title`, `description`, `is_active` / delete |
 | GET | `/org/knowledge/:id/file` | Download the original file |
@@ -613,7 +647,7 @@ All endpoints are under `/api`, same origin, authenticated by the `fv_session` c
 ### Collaboration
 | Method | Path | Role | Notes |
 |---|---|---|---|
-| GET | `/messages/threads` | All | `{ direct[], documents[], office }` with the last message and unread counts |
+| GET | `/messages/threads` | All | `{ direct[], documents[], office }`, each with its latest message (and its time) and unread counts. Message times keep milliseconds (2026-10-25 migration) |
 | GET | `/messages/:documentId` | openable | A document thread, paged with `before` (ISO timestamp) and `limit` (≤ 200) |
 | GET | `/messages/direct/:userId` | All | A direct conversation; marks incoming messages read |
 | GET | `/messages/office` | users with an office | The office channel |
@@ -682,7 +716,7 @@ The AI is available to ADMIN, DEPARTMENT_HEAD and STAFF accounts. The provider i
 
 ### 14.3 Assistant chat (`/api/ai/chat`)
 
-- **System prompt** (`ai-prompt.ts`), rebuilt fresh on every message. It contains the current date and time (Manila), the user's name, role brief and office, an explanation of how FlowVision works, the organization's live document types (with processing times), active routes (★ marks the final checkpoint), offices (ADMIN only), the knowledge-file catalog, the templates, and eight rules:
+- **System prompt** (`ai-prompt.ts`), rebuilt fresh on every message. It contains the current date and time (Manila), the user's name, role brief and office, an explanation of how FlowVision works, the organization's live document types (with processing times), active routes (★ marks the final checkpoint), offices (ADMIN only), the knowledge-file catalog, and eight rules:
   1. Use tools before stating any fact.
   2. Use `findDocuments` to find documents.
   3. Use `searchOrgKnowledge` for policies and cite the file.
@@ -700,7 +734,7 @@ The AI is available to ADMIN, DEPARTMENT_HEAD and STAFF accounts. The provider i
 - **AI scope** per role: ADMIN gets the whole organization; DEPARTMENT_HEAD gets the same as `visibleWhere`; STAFF gets their own uploads plus documents with an approval row assigned to them, and only their own profile.
 - **Loop:** up to 4 tool rounds, then a forced plain-text answer. History is the last 12 answered turns. User text is capped at 4,000 characters and assistant text at 8,000. Canvases in older answers are collapsed to save tokens. Tool results are capped at 12,000 characters, and long lists are shortened (with a note) while totals stay exact.
 - **Streaming:** the response is `application/x-ndjson`, with events `saved` (conversation and question ids), `tool_start`, `tool_done`, then `reply` or `error`. The server saves the question and the answer itself, so an answer is kept even if the page is closed. A failure marks the question `failed` and saves an error notice; `retryOf` deletes both.
-- **Canvases:** for reports, tables and letters the model returns `<canvas type="table|document" title="…" template="…">Markdown</canvas>`. The browser renders it in `CanvasPanel`, laid out on the chosen **document template** (logo, header lines, signature block with an optional image, footer, and always "This document was created with FlowVision."). It can be printed or exported to **Word (docx), Excel (exceljs; each table becomes a sheet) or PDF (jspdf)**. The Markdown parser (`utils/markdown.ts`) escapes all HTML.
+- **Canvases:** for reports, tables and summaries the model returns `<canvas type="table|document" title="…">Markdown</canvas>`. The browser renders it in `CanvasPanel` with its title and always "This document was created with FlowVision." (document templates and letterheads were removed in 2026-10). It can be printed or exported to **Word (docx), Excel (exceljs; each table becomes a sheet) or PDF (jspdf)**. The Markdown parser (`utils/markdown.ts`) escapes all HTML.
 - **History:** conversations are private per user (not just per organization), kept to 200 per user, and grouped by day in the sidebar. Chats stored in the browser by older versions are imported once, then removed. Signing out clears any local assistant storage.
 
 ---
@@ -722,7 +756,7 @@ The AI is available to ADMIN, DEPARTMENT_HEAD and STAFF accounts. The provider i
 
 The log merges three sources: visit event logs, document creation, and `audit_logs`. Login events and duplicates are skipped. Categories: documents, messengers, approvals, admin. Scopes: everyone can see `mine`; ADMIN can see `organization` (optionally filtered by office); DEPARTMENT_HEAD can see `office` (everything at the office, done by its people, or done by messengers they created). Filters: 1–365 days and search. Paging uses a cursor (`before`). Up to 3,000 visits are scanned per request.
 
-**Audited admin actions:** `ORG_REGISTER`, `ORG_UPDATE`, `ORG_LOGO_UPDATE/DELETE`, `ORG_WORK_HOURS_UPDATE`, `HOLIDAY_CREATE/DELETE`, `OFFICE_CREATE/UPDATE`, `USER_INVITE`, `USER_UPDATE`, `USER_PASSWORD_RESET`, `PASSWORD_CHANGE`, `ROUTE_*` (create, update, delete or retire, add steps), `DOCUMENT_TYPE_*`, `KNOWLEDGE_*`, `TEMPLATE_*`, `ISSUE_CREATE/UPDATE`, `DOCUMENT_CREATE/UPDATE/DELETE/SUBMIT`, `APPROVAL_APPROVED/RETURNED`, `LOGIN`.
+**Audited admin actions:** `ADMIN_BOOTSTRAP` (and `ORG_REGISTER` on older entries), `ORG_UPDATE`, `ORG_LOGO_UPDATE/DELETE`, `ORG_WORK_HOURS_UPDATE`, `HOLIDAY_CREATE/DELETE`, `OFFICE_CREATE/UPDATE`, `USER_INVITE`, `USER_UPDATE`, `USER_PASSWORD_RESET`, `PASSWORD_CHANGE`, `ROUTE_*` (create, update, delete or retire, add steps), `DOCUMENT_TYPE_*`, `KNOWLEDGE_*`, `TEMPLATE_*` (older entries only), `ISSUE_CREATE/UPDATE`, `DOCUMENT_CREATE/UPDATE/DELETE/SUBMIT`, `APPROVAL_APPROVED/RETURNED`, `LOGIN`.
 
 ---
 
@@ -733,16 +767,17 @@ The log merges three sources: visit event logs, document creation, and `audit_lo
 | Path | Who | Purpose |
 |---|---|---|
 | `/` | public | Animated marketing landing page (GSAP; the intro plays once per session via `sessionStorage`) |
-| `/login`, `/register` | public | Sign in (optionally showing demo accounts) / create an organization (layout `auth`) |
+| `/login` | public | Sign in (layout `auth`). There is no sign-up page: the ADMIN creates accounts |
 | `/client/dashboard` | A | KPI cards, completed-by-type carousel, forecast carousel (Highcharts), recent documents |
 | `/client/routes` | A | Build and edit Document Routes (`RouteFlow` visual) |
 | `/client/offices` | A | Offices grouped by department |
-| `/client/accounts` | A | Team accounts: invite, edit, suspend, reset password, page access |
-| `/client/settings` | A | Profile and logo, working hours and holidays, document types (processing time, order, hide), templates (editor and preview), knowledge files |
+| `/client/accounts` | A | Team accounts: by office (office cards → users modal with umbrella office, role and search filters) or all accounts; add, edit, suspend, reset password, page access |
+| `/client/settings` | A | Profile and logo, working hours and holidays, document types (processing time, order, hide), knowledge files |
+| `/client/backups` | A | Create, verify and download full backups; history and where copies exist (see `docs/BACKUP_AND_RECOVERY.md`) |
 | `/employee/dashboard` | D | Office counts, documents, staff uploads, office forecast |
 | `/employee/queue` | D | Office queue: scan in, release |
 | `/employee/liaison` | D | Release received documents to free messengers |
-| `/employee/team` | D | Manage the office's STAFF and messengers |
+| `/employee/team` | D | By office (its office and umbrella offices, same browser as the ADMIN's, scoped by the server) and the accounts it manages (STAFF, messengers, delegated heads) |
 | `/staff/dashboard` | S | Office overview and approval stats |
 | `/staff/approval` | S with authority | Approve or return (`ApprovalCard`) |
 | `/staff/view` | S | Read-only tracking of their uploads (`AuthorityBanner` when they lack authority) |
@@ -762,11 +797,12 @@ The log merges three sources: visit event logs, document creation, and `audit_lo
 
 ### 16.2 Layouts and shared UI
 
-- **`layouts/default.vue`:** the app shell with a per-role sidebar (`ROLE_NAV`, grouped and foldable, filtered by page access; the Approvals item is hidden without authority), a notification badge, and the user menu. **`layouts/auth.vue`:** login and register. The landing page and the AI chat use no layout.
-- **Components:** modals (`AppModal`, `ConfirmHost`, `RequestPickupModal`, `PassToStaffModal`, `SendBackModal`), document UI (`DocumentCard`, `DocumentTimeline`, `OfficeRouting`, `RouteFlow`, `QRDisplay`, `DocumentSheet`, `StatusBadge`, `PriorityBadge`), analytics (`ForecastCarousel`, `ForecastChart`, `OfficeForecast`, `CompletedTypesCard`, `StatCard`), plus `MessageThread`, `PhotoCapture`, `PageAccessPicker`, `ProcessingTimeInput`, `PageSkeleton`, `EmptyState`, `ToastHost`, `UserAvatar` (a deterministic warm hue per person), `FIcon` (Feather), `BrandMark`, `SiteNav`, and `settings/OrgLogo`, `settings/Templates`, `settings/WorkHours`.
+- **`layouts/default.vue`:** the app shell with a per-role sidebar (`ROLE_NAV`, grouped and foldable, filtered by page access; the Approvals item is hidden without authority), a notification badge, and the user menu. **`layouts/auth.vue`:** login. The landing page and the AI chat use no layout.
+- **Loading states:** pages fetch with `useAsyncData({ lazy: true })`. The first, server-rendered load already has its data; navigating inside the app opens the page at once with a skeleton shaped like its content (`AsyncState` / `PageSkeleton`), then the content. A failed load shows the error and "Try again"; refreshes and filter changes keep the content on screen (marked `aria-busy`). Skeleton shapes are `aria-hidden` and stop animating with reduced motion. Inventory: `docs/TEAM_OFFICES_MESSAGING_SKELETON_REPORT.md`.
+- **Components:** modals (`AppModal`, `ConfirmHost`, `RequestPickupModal`, `PassToStaffModal`, `SendBackModal`), document UI (`DocumentCard`, `DocumentTimeline`, `OfficeRouting`, `RouteFlow`, `QRDisplay`, `StatusBadge`, `PriorityBadge`), analytics (`ForecastCarousel`, `ForecastChart`, `OfficeForecast`, `CompletedTypesCard`, `StatCard`), plus `OfficeUsersBrowser` (office cards → users modal, both team pages), `MessageThread`, `RelativeTime` (hydration-safe "5m ago"), `PhotoCapture`, `PageAccessPicker`, `ProcessingTimeInput`, `PageSkeleton`, `AsyncState` (skeleton → error + retry → content, for every data-driven page), `EmptyState`, `ToastHost`, `UserAvatar` (a deterministic warm hue per person), `FIcon` (Feather), `BrandMark`, `SiteNav`, and `settings/OrgLogo`, `settings/WorkHours`.
 - **Stores:** `auth` (user filled during SSR; `clear()` also resets notifications, clears assistant storage and disconnects the socket), `ui` (toasts and a promise-based `confirm()`), `notifications`, `documents` (a version counter for refetching), and `assistant` (conversations, streaming, canvases, model status).
-- **Composables:** `useApi` (`useRequestFetch` forwards the cookie during SSR; a 401 clears state and redirects to login), `useAction` (busy flag plus an error toast), `useDocuments`, `useRoutes`, `useQR` (label printing), `useRealtime`, `useCanvasExport`, `useDocTemplates`, `useMotion` (GSAP modal and toast transitions, count-up numbers).
-- **Utils:** `format.ts` (status, priority and role labels and tones), `markdown.ts` (a safe Markdown parser shared by chat and exports), `letterhead.ts` (template HTML), `print.ts` (prints from a hidden, **sandboxed iframe with no scripts**), `photo-pdf.ts` (JPEG photos → A4 PDF without a library).
+- **Composables:** `useApi` (`useRequestFetch` forwards the cookie during SSR; a 401 clears state and redirects to login), `useAction` (busy flag plus an error toast), `useDocuments`, `useRoutes`, `useQR` (label printing), `useRealtime`, `useCanvasExport`, `useMotion` (GSAP modal and toast transitions, count-up numbers).
+- **Utils:** `format.ts` (status, priority and role labels and tones), `markdown.ts` (a safe Markdown parser shared by chat and exports), `canvas-print.ts` (prints a canvas), `print.ts` (prints from a hidden, **sandboxed iframe with no scripts**), `photo-pdf.ts` (JPEG photos → A4 PDF without a library).
 - **Design** (`docs/DESIGN.md`, "Lumio"): warm ivory background, deep charcoal text, glassmorphic cards, Inter typography with tight tracking, large radii (pill buttons, 32 px cards), and signature gradients. The loading bar uses a red-orange gradient (`#E5322D` → `#FF7A45`). Everyone who prefers reduced motion gets no animations.
 
 ---
@@ -774,7 +810,7 @@ The log merges three sources: visit event logs, document creation, and `audit_lo
 ## 17. Security model
 
 - **Sessions:** a 32-byte random token in an httpOnly, SameSite=Lax cookie (Secure in production). Only its SHA-256 is stored. The 14-day expiry slides forward, renewed at most hourly. Logout deletes the row. Changing a password revokes the other sessions; a password reset revokes all of them.
-- **Passwords:** bcrypt with 12 rounds, 8–128 characters. Login takes the same time whether or not the email exists. Failed logins and registrations are rate-limited per IP, and password changes per user.
+- **Passwords:** bcrypt with 12 rounds, 8–128 characters. Login takes the same time whether or not the email exists. Failed logins are rate-limited per IP, and password changes per user.
 - **CSRF:** SameSite=Lax cookie plus a strict Origin check on mutating API calls.
 - **Multi-tenancy:** every query is filtered by `org_id`. Issues are scoped through their document. Records outside the organization return 404, so their existence isn't revealed.
 - **Authorization** is enforced on the server for every command (role, office, receiver, page access). The UI only mirrors it.
@@ -812,7 +848,8 @@ For each uploader role (ADMIN, DEPARTMENT_HEAD, STAFF), the test uploads 4 docum
 - **Classic Node server:** `npm run build`, then `npm start` (with `.env`). Use `FILE_STORAGE=disk` and a writable `UPLOAD_DIR`.
 - **Vercel / serverless:** detected through `VERCEL`. Files go to `file_blobs` in the database, knowledge files are limited to 4 MB, and uploads larger than 4.5 MB are sent in 3 MB parts. Native WebSockets and in-memory state depend on the platform's support for long-lived instances.
 - **Role rename (2026-10):** the hosted database needs `database/migrations/2026-10-13-rename-roles.sql`, run by hand in this order: step 1 (widen the enum), deploy the code, step 2 (rename), then step 3 (narrow). `database/migrations/2026-10-13-rename-roles.rollback.sql` reverses it.
-- **Hosted database:** MariaDB 11. Use `db:migrate`, `db:add-settings` and `db-add-ai-history` with `--remote`. **Never** run `db:schema` or `db:reset` there.
+- **Hosted database:** MariaDB 11. Use `db:migrate`, `db:add-settings` and `db-add-ai-history` with `--remote`. **Never** run `db:schema`, `db:reset` or `db:seed` there.
+- **New installation:** `db:schema` (or the schema file), then `npm run admin:bootstrap` once; sign in as that ADMIN and create the rest in the app. **Existing installation:** apply `database/migrations/2026-10-24-admin-bootstrap.sql` (or `db:migrate`) before deploying the code without public registration.
 - Set `NUXT_PUBLIC_SHOW_DEMO_ACCOUNTS=false` and `NODE_ENV=production` in production.
 - Health check: `GET /api/health`.
 

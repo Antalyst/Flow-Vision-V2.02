@@ -23,7 +23,7 @@ const ui = useUiStore()
 async function copy() {
   try {
     await navigator.clipboard.writeText(props.qr.payload)
-    ui.success('QR payload copied')
+    ui.success('QR code copied')
   } catch {
     ui.error('Could not copy', 'Select the text and copy it manually.')
   }

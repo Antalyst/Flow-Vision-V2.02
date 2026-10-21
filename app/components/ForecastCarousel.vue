@@ -71,9 +71,9 @@ defineExpose({ refresh })
 
 // ── Carousel ──────────────────────────────────────────────────────────────────
 const SLIDES = [
-  { key: 'incoming', title: 'Documents Coming In', icon: 'inbox' },
-  { key: 'busyness', title: 'Office Busyness', icon: 'activity' },
-  { key: 'pickups', title: 'Courier Pickup Times', icon: 'truck' },
+  { key: 'incoming', title: 'Incoming Documents', icon: 'inbox' },
+  { key: 'busyness', title: 'Office Workload', icon: 'activity' },
+  { key: 'pickups', title: 'Pickup Wait', icon: 'truck' },
 ] as const
 const slide = ref(0)
 const paused = ref(false)
@@ -156,7 +156,7 @@ function render() {
           series: [
             { type: 'column', name: d.incoming.basis === 'arrivals' ? 'Arrived' : 'Submitted', data: d.incoming.history, color: ink, opacity: 0.8, tooltip: { valueDecimals: 0 } },
             { type: 'spline', name: 'Trend', data: d.incoming.fitted, color: info, lineWidth: 1.5, opacity: 0.5, marker: { enabled: false }, enableMouseTracking: false },
-            { type: 'arearange', name: '80% range', data: d.incoming.band, color: info, fillOpacity: 0.15, lineWidth: 0, marker: { enabled: false }, linkedTo: ':previous' },
+            { type: 'arearange', name: 'Likely range (80%)', data: d.incoming.band, color: info, fillOpacity: 0.15, lineWidth: 0, marker: { enabled: false }, linkedTo: ':previous' },
             { type: 'spline', name: 'Forecast', data: d.incoming.forecast, color: info, dashStyle: 'ShortDash', lineWidth: 2.5, marker: { enabled: true, radius: 3, symbol: 'circle' } },
           ],
         }),
@@ -189,8 +189,8 @@ function render() {
           yAxis: { labels: { format: '{value}m' } },
           tooltip: { xDateFormat: '%a, %b %e', valueDecimals: 0, valueSuffix: ' min' },
           series: [
-            { type: 'line', name: 'Avg wait (request → pickup)', data: d.pickups.history, color: success, lineWidth: 2, connectNulls: true, marker: { enabled: true, radius: 2.5, symbol: 'circle' } },
-            { type: 'arearange', name: '80% range', data: d.pickups.band, color: success, fillOpacity: 0.15, lineWidth: 0, marker: { enabled: false }, linkedTo: ':next' },
+            { type: 'line', name: 'Average wait (request to pickup)', data: d.pickups.history, color: success, lineWidth: 2, connectNulls: true, marker: { enabled: true, radius: 2.5, symbol: 'circle' } },
+            { type: 'arearange', name: 'Likely range (80%)', data: d.pickups.band, color: success, fillOpacity: 0.15, lineWidth: 0, marker: { enabled: false }, linkedTo: ':next' },
             { type: 'spline', name: 'Predicted wait', data: d.pickups.forecast, color: success, dashStyle: 'ShortDash', lineWidth: 2.5, marker: { enabled: true, radius: 3, symbol: 'circle' } },
           ],
         }),
@@ -216,16 +216,16 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`
 const waitingText = (n: number) => (n ? `${plural(n, 'document')} waiting now` : 'Nothing waiting now')
 function expectedText(predicted: number) {
   const n = Math.round(predicted)
-  if (predicted <= 0) return 'no new ones expected'
-  if (n === 0) return 'maybe 1 more on the way'
+  if (predicted <= 0) return 'none expected'
+  if (n === 0) return 'about 1 more expected'
   return `about ${n} more expected`
 }
 const loadMax = computed(() => Math.max(1, ...(data.value?.busyness.offices ?? []).map((o) => o.queue + o.predicted)))
 function loadLevel(o: { queue: number; predicted: number; score: number }) {
-  if (o.queue + o.predicted < 0.5) return { label: 'Free', tone: 'neutral' as const }
-  if (o.score >= 75) return { label: 'Heavy', tone: 'danger' as const }
-  if (o.score >= 45) return { label: 'Moderate', tone: 'warning' as const }
-  return { label: 'Light', tone: 'success' as const }
+  if (o.queue + o.predicted < 0.5) return { label: 'None', tone: 'neutral' as const }
+  if (o.score >= 75) return { label: 'High', tone: 'danger' as const }
+  if (o.score >= 45) return { label: 'Medium', tone: 'warning' as const }
+  return { label: 'Low', tone: 'success' as const }
 }
 </script>
 
@@ -233,7 +233,7 @@ function loadLevel(o: { queue: number; predicted: number; score: number }) {
   <section class="card card-pad" @mouseenter="paused = true" @mouseleave="paused = false" @focusin="paused = true" @focusout="paused = false">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <p class="eyebrow">Predictive analytics</p>
+        <p class="eyebrow">Analytics</p>
         <h2 class="mt-1.5 text-lg">Forecasts</h2>
       </div>
       <div class="flex items-center gap-1.5">
@@ -260,7 +260,7 @@ function loadLevel(o: { queue: number; predicted: number; score: number }) {
         <input v-model="to" type="date" class="input !min-h-10 !text-sm" :min="from" :max="phToday()" />
       </label>
       <label class="block">
-        <span class="field-label">Predict</span>
+        <span class="field-label">Forecast period</span>
         <select v-model.number="horizon" class="input !min-h-10 !text-sm">
           <option :value="7">Next 7 days</option>
           <option :value="14">Next 14 days</option>
@@ -300,7 +300,7 @@ function loadLevel(o: { queue: number; predicted: number; score: number }) {
     <p v-if="error" class="mt-6 rounded-2xl bg-danger/10 px-4 py-3 text-sm text-danger-ink">{{ apiErrorMessage(error, 'Could not load forecasts') }}</p>
 
     <div v-else class="relative mt-4 overflow-hidden" @touchstart.passive="onTouchStart" @touchend.passive="onTouchEnd">
-      <div v-if="status === 'pending'" class="absolute inset-0 z-10 grid place-items-center bg-white/40 text-sm text-ink-2 backdrop-blur-[1px]"><span class="flex items-center gap-2"><span class="spinner" /> Crunching forecast…</span></div>
+      <div v-if="status === 'pending'" class="absolute inset-0 z-10 grid place-items-center bg-white/40 text-sm text-ink-2 backdrop-blur-[1px]"><span class="flex items-center gap-2"><span class="spinner" /> Loading forecast…</span></div>
 
       <div class="flex transition-transform duration-500 ease-out" :style="{ transform: `translateX(-${slide * 100}%)` }">
         <!-- 1. Documents coming in -->
@@ -311,13 +311,13 @@ function loadLevel(o: { queue: number; predicted: number; score: number }) {
               <p class="mt-1 font-display text-2xl font-semibold">{{ data ? Math.round(data.incoming.expected_next) : '—' }}</p>
             </div>
             <div class="rounded-2xl bg-ink/[0.03] p-3">
-              <p class="text-xs text-ink-2">vs. last {{ data?.range.horizon ?? horizon }} days</p>
+              <p class="text-xs text-ink-2">Compared to the last {{ data?.range.horizon ?? horizon }} days</p>
               <p class="mt-1 font-display text-2xl font-semibold" :class="trendTone(data?.incoming.change_pct ?? 0)">
                 {{ data ? `${data.incoming.change_pct > 0 ? '+' : ''}${data.incoming.change_pct}%` : '—' }}
               </p>
             </div>
             <div class="rounded-2xl bg-ink/[0.03] p-3">
-              <p class="text-xs text-ink-2">Daily average (range)</p>
+              <p class="text-xs text-ink-2">Daily average</p>
               <p class="mt-1 font-display text-2xl font-semibold">{{ data?.incoming.avg_daily ?? '—' }}</p>
             </div>
             <div class="rounded-2xl bg-ink/[0.03] p-3">
@@ -328,7 +328,7 @@ function loadLevel(o: { queue: number; predicted: number; score: number }) {
           </div>
           <div ref="incomingEl" class="mt-4 h-[280px]" />
           <p class="text-xs text-ink-2">
-            {{ data?.incoming.basis === 'arrivals' ? `Documents arriving at ${scope}` : 'New documents submitted across the organization' }} — forecast uses trend + day-of-week patterns. Shaded band is the 80% likely range.
+            {{ data?.incoming.basis === 'arrivals' ? `Documents arriving at ${scope}` : 'New documents submitted across the organization' }} — the forecast is based on past trends and weekday patterns. The shaded area is the likely range (80%).
           </p>
         </div>
 
@@ -342,7 +342,7 @@ function loadLevel(o: { queue: number; predicted: number; score: number }) {
                   <p class="mt-1 font-display text-2xl font-semibold">{{ hourLabel(data?.busyness.peak_hour ?? null) }}</p>
                 </div>
                 <div class="rounded-2xl bg-sage/10 p-3">
-                  <p class="text-xs text-sage-ink">Quietest work hour</p>
+                  <p class="text-xs text-sage-ink">Quietest hour</p>
                   <p class="mt-1 font-display text-2xl font-semibold">{{ hourLabel(data?.busyness.quiet_hour ?? null) }}</p>
                 </div>
               </div>
@@ -350,7 +350,7 @@ function loadLevel(o: { queue: number; predicted: number; score: number }) {
             </div>
             <div>
               <p class="text-sm font-semibold">Expected workload · next {{ data?.range.horizon ?? horizon }} days</p>
-              <p class="mt-0.5 text-xs text-ink-2">How much each office will have to handle: the documents already waiting there, plus the ones likely to arrive.</p>
+              <p class="mt-0.5 text-xs text-ink-2">Documents waiting at each office, plus those expected to arrive.</p>
               <div class="mt-2 flex flex-wrap gap-3 text-[11px] text-ink-2">
                 <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-ink/70" /> Waiting now</span>
                 <span class="inline-flex items-center gap-1.5"><span class="size-2.5 rounded-sm bg-info/40" /> Expected to arrive</span>
@@ -385,7 +385,7 @@ function loadLevel(o: { queue: number; predicted: number; score: number }) {
         <div class="w-full shrink-0" :aria-hidden="slide !== 2">
           <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <div class="rounded-2xl bg-ink/[0.03] p-3">
-              <p class="text-xs text-ink-2">Avg wait for courier</p>
+              <p class="text-xs text-ink-2">Average wait</p>
               <p class="mt-1 font-display text-2xl font-semibold">{{ minutesLabel(data?.pickups.avg_wait ?? null) }}</p>
             </div>
             <div class="rounded-2xl bg-ink/[0.03] p-3">
@@ -393,19 +393,19 @@ function loadLevel(o: { queue: number; predicted: number; score: number }) {
               <p class="mt-1 font-display text-2xl font-semibold text-sage-ink">{{ minutesLabel(data?.pickups.predicted_wait ?? null) }}</p>
             </div>
             <div class="rounded-2xl bg-ink/[0.03] p-3">
-              <p class="text-xs text-ink-2">Usual pickup window</p>
+              <p class="text-xs text-ink-2">Usual pickup time</p>
               <p class="mt-1 font-display text-lg font-semibold">
                 {{ data?.pickups.busiest_hour != null ? `${hourLabel(data.pickups.busiest_hour)} – ${hourLabel((data.pickups.busiest_hour + 1) % 24)}` : '—' }}
               </p>
             </div>
             <div class="rounded-2xl bg-ink/[0.03] p-3">
-              <p class="text-xs text-ink-2">Pickups in range</p>
+              <p class="text-xs text-ink-2">Total pickups</p>
               <p class="mt-1 font-display text-2xl font-semibold">{{ data?.pickups.count ?? '—' }}</p>
               <p class="text-xs text-ink-2">median {{ minutesLabel(data?.pickups.median_wait ?? null) }}</p>
             </div>
           </div>
           <div ref="pickupsEl" class="mt-4 h-[280px]" />
-          <p class="text-xs text-ink-2">Time from a pickup request to the courier collecting the document{{ data?.office ? ` at ${data.office.name}` : '' }}.</p>
+          <p class="text-xs text-ink-2">Time from the pickup request until the messenger collects the document{{ data?.office ? ` at ${data.office.name}` : '' }}.</p>
         </div>
       </div>
     </div>

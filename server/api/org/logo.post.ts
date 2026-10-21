@@ -5,7 +5,7 @@ import { imageVersion, readImagePart, removeImage, saveImage } from '~~/server/l
 
 /**
  * Upload the organization logo (ADMIN only). multipart/form-data: file (PNG or JPG, up to 2 MB).
- * It goes on every QR label and on the letterhead of document templates.
+ * It goes on every QR label.
  */
 export default defineApiHandler(async (event) => {
   const user = await requireUser(event, 'ADMIN')

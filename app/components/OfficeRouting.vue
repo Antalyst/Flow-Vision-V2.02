@@ -78,7 +78,7 @@ function stageText(v: RoutingVisit, e: RoutingVisit['events'][number]) {
     case 'APPROVED':
       return `Approved${who ? ` by ${who}` : ''}`
     case 'RETURNED':
-      return `Returned to the submitter${who ? ` by ${who}` : ''}`
+      return `Returned to the uploader${who ? ` by ${who}` : ''}`
     case 'HANDED_TO_UMBRELLA':
       return `Handed to an umbrella office${who ? ` by ${who}` : ''}`
     case 'RETURNED_FROM_UMBRELLA':
@@ -114,7 +114,7 @@ function handOver(v: RoutingVisit): { icon: string; tone: Tone; text: string } {
     case 'APPROVED':
       return { icon: 'award', tone: 'success', text: 'Final approval given — route complete' }
     case 'RETURNED':
-      return { icon: 'corner-up-left', tone: 'danger', text: 'Returned to the submitter' }
+      return { icon: 'corner-up-left', tone: 'danger', text: 'Returned to the uploader' }
     case 'AT_OFFICE':
       if (v.pending_pass) {
         const by = v.pending_pass.by ? ` by ${fullName(v.pending_pass.by)}` : ''
@@ -137,7 +137,7 @@ function handOver(v: RoutingVisit): { icon: string; tone: Tone; text: string } {
       if (v.received_at) return { icon: 'edit-3', tone: 'primary', text: 'Being processed at this office' }
       return { icon: 'inbox', tone: 'warning', text: 'Waiting to be received (QR scan)' }
     default:
-      return { icon: 'minus-circle', tone: 'neutral', text: 'Visit closed' }
+      return { icon: 'minus-circle', tone: 'neutral', text: 'Done at this office' }
   }
 }
 

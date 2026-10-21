@@ -35,6 +35,8 @@ onBeforeUnmount(() => {
 
 <template>
   <div ref="root" role="status" aria-live="polite" :aria-label="messages[msgIndex]">
+    <!-- The shapes are decoration: screen readers hear the status text only. -->
+    <div aria-hidden="true">
     <!-- Dashboard: stat tiles + a list -->
     <template v-if="variant === 'dashboard'">
       <div class="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
@@ -115,6 +117,8 @@ onBeforeUnmount(() => {
         </div>
         <div class="skeleton hidden h-6 w-20 rounded-full sm:block" />
       </div>
+    </div>
+
     </div>
 
     <p class="mt-4 flex items-center justify-center gap-2 text-[13px] text-ink-2">

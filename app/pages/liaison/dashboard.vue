@@ -8,26 +8,25 @@ const auth = useAuthStore()
 const docsApi = useDocuments()
 const { busy, run } = useAction()
 
-const [{ data: dash, refresh: r1 }, { data: pickups, refresh: r2 }, { data: carrying, refresh: r3 }, { data: me, refresh: r4 }] = await Promise.all([
-  useAsyncData('liaison-dash', () =>
-    api.get<{ profile: LiaisonProfile; counts: { available_pickups: number; carrying: number; delivered_today: number } }>('/dashboard'),
-  ),
-  useAsyncData('liaison-pickups', () => docsApi.list({ scope: 'pickups', limit: 100 })),
-  useAsyncData('liaison-carrying', () => docsApi.list({ scope: 'carrying', limit: 100 })),
-  // Flagged documents going back to my office: any of its liaisons may claim them.
-  useAsyncData('liaison-returns', () => api.get<{ returns: FlowDocument[] }>('/liaisons/me')),
+const [{ data: dash, refresh: r1, status: s1, error: e1 }, { data: pickups, refresh: r2, status: s2, error: e2 }, { data: carrying, refresh: r3, status: s3, error: e3 }, { data: me, refresh: r4, status: s4, error: e4 }] = await Promise.all([
+  useAsyncData('liaison-dash', () => api.get<{ profile: LiaisonProfile; counts: { available_pickups: number; carrying: number; delivered_today: number } }>('/dashboard'), { lazy: true }),
+  useAsyncData('liaison-pickups', () => docsApi.list({ scope: 'pickups', limit: 100 }), { lazy: true }),
+  useAsyncData('liaison-carrying', () => docsApi.list({ scope: 'carrying', limit: 100 }), { lazy: true }),
+  // Flagged documents going back to my office: any of its messengers may claim them.
+  useAsyncData('liaison-returns', () => api.get<{ returns: FlowDocument[] }>('/liaisons/me'), { lazy: true }),
 ])
+const pageStatus = computed(() => ([s1, s2, s3, s4].some((s) => s.value === 'pending') ? 'pending' : e1.value || e2.value || e3.value || e4.value ? 'error' : 'success'))
 const refreshAll = () => Promise.all([r1(), r2(), r3(), r4()])
 const returns = computed(() => me.value?.returns ?? [])
 
 async function claim(d: FlowDocument) {
-  const ok = await run(`claim-${d.id}`, () => api.post(`/documents/${d.id}/return-claim`), 'Pickup claimed — it is now in "Released to you"')
+  const ok = await run(`claim-${d.id}`, () => api.post(`/documents/${d.id}/return-claim`), 'Pickup claimed. It is now under "Released to you"')
   // Lost the race, or it changed meanwhile: show the current state either way.
   refreshAll()
   return ok
 }
 async function giveUp(d: FlowDocument) {
-  if (await run(`unclaim-${d.id}`, () => api.del(`/documents/${d.id}/return-claim`), 'Pickup given up — the other liaisons were told')) refreshAll()
+  if (await run(`unclaim-${d.id}`, () => api.del(`/documents/${d.id}/return-claim`), 'Claim cancelled. Other messengers have been notified')) refreshAll()
 }
 useLiveRefresh(refreshAll)
 
@@ -51,11 +50,13 @@ async function startTransit(id: string) {
 
 <template>
   <div class="fv-rise">
-    <PageHeader eyebrow="D1 · Messenger" :title="`Hi, ${auth.user?.first_name}`" description="Documents released to you. Scan a document's QR at the office to pick it up, then bring it to the office shown; their staff scan it to receive it from you.">
+    <PageHeader eyebrow="D1 · Messenger" :title="`Hi, ${auth.user?.first_name}`" description="Documents released to you. Scan the document's QR code at the office to pick it up, then take it to the office shown. Staff there will scan it to receive it.">
       <template #actions>
         <NuxtLink to="/scan" class="btn btn-primary"><FIcon name="maximize" :size="16" /> Scan QR</NuxtLink>
       </template>
     </PageHeader>
+
+    <AsyncState :status="pageStatus" :ready="Boolean(dash && pickups && carrying && me)" :error="e1 || e2 || e3 || e4" variant="dashboard" what="your pickups" :messages="['Loading your pickups…']" @retry="refreshAll()">
 
     <div class="mb-6 flex flex-wrap items-center gap-3">
       <div class="flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-ink/[0.04] p-1" role="radiogroup" aria-label="Availability">
@@ -72,7 +73,7 @@ async function startTransit(id: string) {
           <span class="size-2 rounded-full" :class="TONE_DOT[a.tone]" /> {{ a.label }}
         </button>
       </div>
-      <ToneBadge v-if="dash?.profile.availability === 'BUSY'" tone="warning" icon="truck">Busy — offices can't give you another document until this one is received</ToneBadge>
+      <ToneBadge v-if="dash?.profile.availability === 'BUSY'" tone="warning" icon="truck">Busy — you cannot be given another document until this one is received</ToneBadge>
     </div>
 
     <section class="grid grid-cols-3 gap-3 sm:gap-4">
@@ -86,7 +87,7 @@ async function startTransit(id: string) {
       <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <DocumentCard v-for="d in carrying.data" :key="d.id" :doc="d">
           <template #actions>
-            <ToneBadge tone="info" icon="map-pin">Bring to {{ d.next_office_name }} — staff there scan to receive</ToneBadge>
+            <ToneBadge tone="info" icon="map-pin">Take to {{ d.next_office_name }} — staff there will scan it to receive it</ToneBadge>
             <button v-if="d.status === 'PICKED_UP'" class="btn btn-sm btn-secondary" :disabled="busy === `transit-${d.id}`" :aria-busy="busy === `transit-${d.id}`" @click="startTransit(d.id)">
               <FIcon name="navigation" :size="14" /> Start transit
             </button>
@@ -97,7 +98,7 @@ async function startTransit(id: string) {
 
     <section v-if="returns.length" class="mt-8" aria-labelledby="returns-title">
       <h2 id="returns-title" class="mb-1 text-lg">Returns to pick up</h2>
-      <p class="mb-3 text-sm text-ink-body">Flagged documents going back to your office. Any of your office’s liaisons may take one: claim it, then fetch it.</p>
+      <p class="mb-3 text-sm text-ink-body">Documents with issues that are being sent back to your office. Any messenger in your office can take one: claim it, then pick it up.</p>
       <div class="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <DocumentCard v-for="d in returns" :key="d.id" :doc="d">
           <template #actions>
@@ -116,7 +117,7 @@ async function startTransit(id: string) {
     <section class="mt-8">
       <h2 class="mb-3 text-lg">Released to you</h2>
       <div v-if="!pickups?.data.length" class="card">
-        <EmptyState icon="coffee" title="No pickups right now" description="You'll get a notification the moment an office releases a document to you." />
+        <EmptyState icon="coffee" title="No pickups right now" description="You will be notified when an office releases a document to you." />
       </div>
       <div v-else class="grid grid-cols-1 gap-3 lg:grid-cols-2">
         <DocumentCard v-for="d in pickups.data" :key="d.id" :doc="d">
@@ -125,11 +126,12 @@ async function startTransit(id: string) {
               <FIcon name="map-pin" :size="14" /> {{ d.currentOffice?.code ?? d.origin?.name }}
               <FIcon name="arrow-right" :size="14" class="text-ink-3" /> {{ d.next_office_name }}
             </span>
-            <button v-if="d.sent_back" class="btn btn-sm btn-ghost ml-auto" :disabled="busy === `unclaim-${d.id}`" :aria-busy="busy === `unclaim-${d.id}`" @click="giveUp(d)">Give up</button>
+            <button v-if="d.sent_back" class="btn btn-sm btn-ghost ml-auto" :disabled="busy === `unclaim-${d.id}`" :aria-busy="busy === `unclaim-${d.id}`" @click="giveUp(d)">Cancel claim</button>
             <NuxtLink to="/scan" class="btn btn-sm btn-primary" :class="!d.sent_back && 'ml-auto'"><FIcon name="maximize" :size="14" /> Scan to pick up</NuxtLink>
           </template>
         </DocumentCard>
       </div>
     </section>
+    </AsyncState>
   </div>
 </template>

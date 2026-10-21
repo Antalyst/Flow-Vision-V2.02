@@ -31,8 +31,8 @@ const foundation = [
     body: 'Every document gets one QR label on upload. Messengers scan to pick up, offices scan to receive, and each scan lands on the timeline.',
   },
   {
-    title: 'Final-checkpoint approval',
-    body: 'Only the last office on the route can approve or return a document, and the server enforces it. Returns carry remarks so the uploader can resubmit.',
+    title: 'Approval at the last office',
+    body: 'Only the last office on the route can approve or return a document, and the server enforces it. Returned documents carry comments so the uploader can resubmit.',
   },
 ]
 const activeFoundation = ref(0)
@@ -48,7 +48,7 @@ const activeTracking = ref(0)
 const roles = {
   Admin: [
     { title: 'Document Routes', body: 'Set the offices each document type moves through.', img: 'skyline' },
-    { title: 'Team accounts', body: 'Invite department heads, staff and messengers to your organization.', img: 'laptop-window' },
+    { title: 'Team accounts', body: 'Add department heads, staff and messengers to your organization.', img: 'laptop-window' },
     { title: 'Organization settings', body: 'Document types and AI knowledge files in one place.', img: 'monitors' },
     { title: 'Live overview', body: 'Every document across every office, as it moves.', img: 'building-night' },
   ],
@@ -59,9 +59,9 @@ const roles = {
     { title: 'Upload & route', body: 'Submit a document and pick the route it follows.', img: 'typing' },
   ],
   Staff: [
-    { title: 'Approvals', body: 'Approve or return documents at the final checkpoint.', img: 'signing' },
-    { title: 'Return with remarks', body: 'Tell the uploader exactly what to fix before resubmitting.', img: 'writing' },
-    { title: 'Read-only view', body: 'Follow documents in your office without approval authority.', img: 'macbook-dark' },
+    { title: 'Approvals', body: 'Approve or return documents at the last office.', img: 'signing' },
+    { title: 'Return with comments', body: 'Tell the uploader exactly what to fix before resubmitting.', img: 'writing' },
+    { title: 'Read-only view', body: 'Follow documents in your office without permission to approve.', img: 'macbook-dark' },
     { title: 'Full history', body: 'See who handled what, and when, at a glance.', img: 'monitors' },
   ],
   Messenger: [
@@ -217,8 +217,7 @@ function selectRole(r: Role) {
             FlowVision routes paperwork through your city hall, hands it off with a scan, and shows everyone exactly where it is.
           </p>
           <div data-hero-fade class="mt-8 flex flex-wrap justify-center gap-3">
-            <NuxtLink v-magnetic to="/register" class="btn btn-primary min-h-12 px-6">Create your organization</NuxtLink>
-            <NuxtLink v-magnetic to="/login" class="btn btn-secondary min-h-12 px-6">Sign in</NuxtLink>
+            <NuxtLink v-magnetic to="/login" class="btn btn-primary min-h-12 px-6">Sign in</NuxtLink>
           </div>
         </div>
 
@@ -324,7 +323,7 @@ function selectRole(r: Role) {
             <span class="grid size-9 place-items-center rounded-xl bg-sage/15 text-sage-ink"><FIcon name="check-circle" :size="16" /></span>
             <div>
               <p class="text-[12px] font-semibold">Approved</p>
-              <p class="text-[10.5px] text-ink-2">Final checkpoint</p>
+              <p class="text-[10.5px] text-ink-2">Last office</p>
             </div>
           </div>
         </div>
@@ -494,7 +493,7 @@ function selectRole(r: Role) {
       <section id="how" class="mx-auto max-w-6xl scroll-mt-24 px-4 py-16 sm:px-6">
         <div v-reveal class="flex items-end justify-between gap-4">
           <h2 class="text-[clamp(1.5rem,3vw,2rem)] font-semibold tracking-[-0.03em]">How a document moves</h2>
-          <NuxtLink to="/register" class="hidden text-[13px] font-medium text-ink-2 hover:text-ink sm:block">Get started →</NuxtLink>
+          <NuxtLink to="/login" class="hidden text-[13px] font-medium text-ink-2 hover:text-ink sm:block">Sign in →</NuxtLink>
         </div>
         <div v-reveal="{ stagger: 0.12, y: 40 }" class="mt-8 grid gap-6 md:grid-cols-3">
           <article v-for="(s, i) in steps" :key="s.tag" class="group">
@@ -518,8 +517,7 @@ function selectRole(r: Role) {
             Experience the future of document flow
           </h2>
           <div class="mt-10 flex flex-wrap justify-center gap-3">
-            <NuxtLink v-magnetic to="/register" class="btn btn-primary min-h-11 px-6 text-[12px] tracking-[0.06em] uppercase">Create organization</NuxtLink>
-            <NuxtLink v-magnetic to="/login" class="btn btn-secondary min-h-11 px-6 text-[12px] tracking-[0.06em] uppercase">Sign in</NuxtLink>
+            <NuxtLink v-magnetic to="/login" class="btn btn-primary min-h-11 px-6 text-[12px] tracking-[0.06em] uppercase">Sign in</NuxtLink>
           </div>
         </div>
       </section>
@@ -558,7 +556,6 @@ function selectRole(r: Role) {
           <p class="text-[11px] font-semibold tracking-[0.14em] text-night-text-2 uppercase">Account</p>
           <ul class="mt-4 space-y-2.5 text-[13px]">
             <li><NuxtLink to="/login" class="hover:text-white">Sign in</NuxtLink></li>
-            <li><NuxtLink to="/register" class="hover:text-white">Create organization</NuxtLink></li>
           </ul>
         </div>
       </div>

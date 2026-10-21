@@ -59,7 +59,7 @@ async function confirm() {
   error.value = ''
   try {
     const res = await api.post<{ document: FlowDocument }>(`/documents/${props.doc.id}/send-back`, issueBody(form.value))
-    ui.success('Issue flagged — the previous office’s liaisons were told to pick it up')
+    ui.success('Issue flagged — the previous office’s messengers were told to pick it up')
     emit('sent', res.document)
     emit('close')
   } catch (err) {
@@ -71,12 +71,18 @@ async function confirm() {
 </script>
 
 <template>
-  <AppModal :open="open" title="Flag issue & send back" :description="`The document goes back to ${target?.name ?? 'the previous office'}. Its liaisons are told, and one of them comes for it.`" @close="emit('close')">
+  <AppModal :open="open" title="Flag issue & send back" :description="`The document goes back to ${target?.name ?? 'the previous office'}. Its messengers are told, and one of them comes for it.`" @close="emit('close')">
     <form id="send-back-form" class="space-y-4" novalidate @submit.prevent="confirm">
       <IssueFields v-model="form" id-prefix="sb" />
       <div>
         <p class="field-label">Who will pick it up</p>
-        <p v-if="!liaisons.length" class="text-sm text-amber-ink">{{ target ? `${target.name} has no liaisons yet: the document waits here until one is added and claims it.` : 'Loading…' }}</p>
+        <div v-if="!target && !error" class="space-y-2" role="status" aria-label="Loading the messengers">
+          <div v-for="i in 3" :key="i" class="flex items-center gap-2 rounded-xl border border-line/70 px-3 py-2" aria-hidden="true">
+            <div class="skeleton h-3.5" :style="{ width: `${45 - i * 6}%` }" />
+            <div class="skeleton ml-auto h-5 w-20 rounded-full" />
+          </div>
+        </div>
+        <p v-else-if="!liaisons.length && target" class="text-sm text-amber-ink">{{ `${target.name} has no messengers yet: the document waits here until one is added and claims it.` }}</p>
         <template v-else>
           <p class="mb-2 text-sm text-ink-body">
             {{ onDuty.length }} liaison{{ onDuty.length === 1 ? '' : 's' }} of {{ target?.name }} on duty will be notified; any of them can claim it.

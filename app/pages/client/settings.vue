@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DocumentTemplateItem, DocumentTypeItem, HolidayItem, KnowledgeFileItem, WorkCalendarSettings } from '~/types'
+import type { DocumentTypeItem, HolidayItem, KnowledgeFileItem, WorkCalendarSettings } from '~/types'
 import { describeCalendar, parseClock } from '#shared/work-calendar'
 
 useHead({ title: 'Organization Settings · FlowVision' })
@@ -9,7 +9,6 @@ interface SettingsData {
   work_calendar: WorkCalendarSettings
   holidays: HolidayItem[]
   document_types: DocumentTypeItem[]
-  templates: DocumentTemplateItem[]
   knowledge_files: KnowledgeFileItem[]
   limits: { knowledge_max_bytes: number }
   ai_configured: boolean
@@ -20,16 +19,15 @@ const ui = useUiStore()
 const auth = useAuthStore()
 const { busy, run } = useAction()
 
-const { data, refresh } = await useAsyncData('org-settings', () => api.get<SettingsData>('/org/settings'))
+const { data, refresh, status: settingsStatus, error: settingsError } = await useAsyncData('org-settings', () => api.get<SettingsData>('/org/settings'), { lazy: true })
 
-type Tab = 'profile' | 'hours' | 'types' | 'templates' | 'knowledge'
+type Tab = 'profile' | 'hours' | 'types' | 'knowledge'
 const route = useRoute()
 const router = useRouter()
 const TABS: Array<{ key: Tab; label: string; icon: string }> = [
   { key: 'profile', label: 'Organization', icon: 'home' },
   { key: 'hours', label: 'Working hours', icon: 'clock' },
   { key: 'types', label: 'Document types', icon: 'tag' },
-  { key: 'templates', label: 'Templates', icon: 'layout' },
   { key: 'knowledge', label: 'AI knowledge', icon: 'book-open' },
 ]
 const tab = ref<Tab>((TABS.find((t) => t.key === route.query.tab)?.key ?? 'profile') as Tab)
@@ -347,14 +345,15 @@ const STATUS = {
     <PageHeader
       eyebrow="Administration"
       title="Organization Settings"
-      description="Your organization’s profile and logo, working hours, the document types offered when uploading, document templates, and the knowledge the AI uses."
+      description="Your organization’s profile and logo, working hours, the document types offered when uploading, and the knowledge the AI uses."
     />
+
+    <AsyncState :status="settingsStatus" :ready="Boolean(data)" :error="settingsError" variant="detail" what="the settings" :messages="['Loading settings…']" @retry="refresh()">
 
     <div class="mb-6 flex w-fit max-w-full gap-1 overflow-x-auto rounded-xl bg-ink/[0.04] p-1" role="tablist">
       <button v-for="t in TABS" :key="t.key" role="tab" class="tab shrink-0" :class="tab === t.key && 'tab-active'" :aria-selected="tab === t.key" @click="tab = t.key">
         <FIcon :name="t.icon" :size="15" /> {{ t.label }}
         <span v-if="t.key === 'types'" class="text-xs text-ink-2">{{ types.length }}</span>
-        <span v-else-if="t.key === 'templates'" class="text-xs text-ink-2">{{ data?.templates.length ?? 0 }}</span>
         <span v-else-if="t.key === 'knowledge'" class="text-xs text-ink-2">{{ files.length }}</span>
       </button>
     </div>
@@ -387,15 +386,6 @@ const STATUS = {
 
     <!-- Working hours and holidays: processing time pauses outside them -->
     <SettingsWorkHours v-else-if="tab === 'hours' && data" :calendar="data.work_calendar" :holidays="data.holidays" @changed="refresh()" />
-
-    <!-- Document templates for the AI Assistant's canvases -->
-    <SettingsTemplates
-      v-else-if="tab === 'templates' && data"
-      :templates="data.templates"
-      :organization="{ name: data.organization.name, logo_url: data.organization.logo_url }"
-      :available="data.work_calendar.available"
-      @changed="refresh()"
-    />
 
     <!-- Document types -->
     <div v-else-if="tab === 'types'" class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
@@ -635,6 +625,7 @@ const STATUS = {
         </ul>
       </section>
     </div>
+    </AsyncState>
     <AppModal :open="importOpen" title="Import from Citizen’s Charter" description="Services in the charter’s List of Services become document types. Processing times stay empty until you set them (or accept a suggestion)." width="lg" @close="importOpen = false">
       <div v-if="!charterFiles.length" class="text-sm text-ink-body">Upload the Citizen’s Charter first, in the AI knowledge tab.</div>
       <template v-else>

@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import type { Office } from '~/types'
+import { pickCode } from '#shared/office-code'
 
 useHead({ title: 'Offices · FlowVision' })
 
 const routesApi = useRoutes()
 const { busy, run } = useAction()
-const { data, refresh } = await useAsyncData('offices-all', () => routesApi.offices(true))
+const { data, refresh, status, error } = await useAsyncData('offices-all', () => routesApi.offices(true), { lazy: true })
 
 // Offices A–Z, each with its umbrella offices (added by the office's Department Head).
 const q = ref('')
@@ -20,16 +21,33 @@ const tree = computed(() => {
 
 const modalOpen = ref(false)
 const editing = ref<Office | null>(null)
-const form = reactive({ name: '', code: '', location: '' })
+const form = reactive({ name: '', location: '', regenerate: false })
 
 function openForm(office?: Office) {
   editing.value = office ?? null
-  Object.assign(form, { name: office?.name ?? '', code: office?.code ?? '', location: office?.location ?? '' })
+  Object.assign(form, { name: office?.name ?? '', location: office?.location ?? '', regenerate: false })
   modalOpen.value = true
 }
 
+/**
+ * The code the server will most likely give (shared/office-code.ts): made from the name, skipping
+ * codes already used by this organization's offices. Only a preview — the server decides. An edit
+ * keeps the current code unless "Make a new code" is ticked.
+ */
+const previewCode = computed(() => {
+  const current = editing.value
+  if (current && !form.regenerate) return current.code
+  const all = data.value?.data ?? []
+  const parent = current?.parent_office_id ? all.find((o) => o.id === current.parent_office_id) : null
+  const prefix = parent ? `${parent.code}-` : ''
+  const taken = all.filter((o) => o.id !== current?.id && (!prefix || o.code.startsWith(prefix))).map((o) => o.code.slice(prefix.length))
+  const code = pickCode(form.name, taken)
+  return code ? `${prefix}${code}` : null
+})
+
 async function save() {
-  const body = { ...form, code: form.code.trim().toUpperCase() }
+  const body: Record<string, unknown> = { name: form.name, location: form.location }
+  if (editing.value && form.regenerate) body.regenerate_code = true
   const ok = await run(
     'save',
     () => (editing.value ? routesApi.updateOffice(editing.value.id, body) : routesApi.createOffice(body)),
@@ -64,7 +82,12 @@ async function toggleActive(o: Office) {
       <input v-model="q" type="search" class="input pl-10" placeholder="Search offices by name or code" aria-label="Search offices" />
     </div>
 
-    <div v-if="!data?.data.length" class="card">
+    <PageSkeleton v-if="status === 'pending' && !data" variant="cards" :rows="6" :messages="['Loading offices…']" />
+    <div v-else-if="error && !data" class="card card-pad flex flex-wrap items-center justify-between gap-3 text-sm text-danger-ink" role="alert">
+      {{ apiErrorMessage(error, 'Could not load the offices') }}
+      <button class="btn btn-sm btn-ghost" @click="refresh()"><FIcon name="refresh-cw" :size="14" /> Try again</button>
+    </div>
+    <div v-else-if="!data?.data.length" class="card">
       <EmptyState icon="grid" title="No offices yet" description="Add the offices documents pass through — for example Records, HR, Budget and the Mayor's office.">
         <button class="btn btn-primary btn-sm" @click="openForm()">Add your first office</button>
       </EmptyState>
@@ -76,7 +99,7 @@ async function toggleActive(o: Office) {
         <div class="flex items-start justify-between gap-2">
           <span class="mono rounded-md bg-ink/[0.05] px-2 py-1 text-ink-body">{{ t.office.code }}</span>
           <div class="flex flex-wrap justify-end gap-1.5">
-            <ToneBadge v-if="t.office.is_final_checkpoint" tone="success" icon="award">Final checkpoint</ToneBadge>
+            <ToneBadge v-if="t.office.is_final_checkpoint" tone="success" icon="award">Last office</ToneBadge>
             <ToneBadge v-if="!t.office.is_active" tone="neutral">Inactive</ToneBadge>
           </div>
         </div>
@@ -115,12 +138,19 @@ async function toggleActive(o: Office) {
           <input id="o-name" v-model="form.name" class="input" required placeholder="City Health Office" />
         </div>
         <div>
-          <label class="field-label" for="o-code">Office code</label>
-          <input id="o-code" v-model="form.code" class="input font-mono uppercase" required maxlength="50" pattern="[A-Za-z0-9]+(-[A-Za-z0-9]+)*" placeholder="CHO" />
-          <p class="field-hint">
-            Short and unique. It starts every QR code of documents uploaded here (e.g. CHO-102026-123456) and the codes of its umbrella offices (e.g. CHO-SNTR).
-            <template v-if="editing && !editing.parent_office_id"> Changing it also changes its umbrella offices' codes; QR labels already printed keep working.</template>
+          <p class="field-label">Office code</p>
+          <p class="flex flex-wrap items-center gap-2">
+            <span class="mono rounded-md bg-ink/[0.05] px-2 py-1 text-ink-body" aria-live="polite">{{ previewCode ?? '—' }}</span>
+            <span class="text-xs text-ink-2">{{ editing && !form.regenerate ? 'Stays the same when you rename the office.' : 'Made from the name. The final code is confirmed when you save.' }}</span>
           </p>
+          <label v-if="editing" class="mt-2 flex items-center gap-2 text-sm">
+            <input v-model="form.regenerate" type="checkbox" class="size-4" /> Make a new code from the name
+          </label>
+          <p class="field-hint">
+            It starts every QR code of documents uploaded here (e.g. {{ previewCode ?? 'CHO' }}-102026-123456)<template v-if="!editing?.parent_office_id"> and the codes of its umbrella offices</template>.
+            <template v-if="editing && form.regenerate && !editing.parent_office_id"> A new code also changes its umbrella offices' codes; QR labels already printed keep working.</template>
+          </p>
+          <p v-if="!previewCode && form.name.trim()" class="field-hint text-amber-ink">Use letters or digits in the name so a code can be made.</p>
         </div>
         <div>
           <label class="field-label" for="o-loc">Address <span class="font-normal text-ink-2">(optional)</span></label>
@@ -129,7 +159,7 @@ async function toggleActive(o: Office) {
       </form>
       <template #footer>
         <button class="btn btn-ghost" @click="modalOpen = false">Cancel</button>
-        <button class="btn btn-primary" form="office-form" :disabled="busy === 'save'" :aria-busy="busy === 'save'">Save office</button>
+        <button class="btn btn-primary" form="office-form" :disabled="busy === 'save' || (!editing && !previewCode)" :aria-busy="busy === 'save'">Save office</button>
       </template>
     </AppModal>
   </div>

@@ -25,7 +25,7 @@ const auth = useAuthStore()
 const { busy, run } = useAction()
 const officeName = computed(() => auth.user?.office?.name ?? 'your office')
 
-const { data, refresh } = await useAsyncData('staff-team', () => api.get<{ data: TeamMember[] }>('/users', { managed: 1 }))
+const { data, refresh, status, error } = await useAsyncData('staff-team', () => api.get<{ data: TeamMember[] }>('/users', { managed: 1 }), { lazy: true })
 
 const q = ref('')
 const members = computed(() =>
@@ -99,6 +99,8 @@ async function copyCredentials() {
       </template>
     </PageHeader>
 
+    <AsyncState :status="status" :ready="Boolean(data)" :error="error" variant="list" what="the messengers" :messages="['Loading messengers…']" @retry="refresh()">
+
     <div class="mb-5 flex justify-end">
       <div class="relative w-full sm:w-64">
         <FIcon name="search" :size="16" class="absolute top-1/2 left-3.5 -translate-y-1/2 text-ink-2" />
@@ -138,6 +140,7 @@ async function copyCredentials() {
       </ul>
     </section>
 
+    </AsyncState>
     <AppModal
       :open="formOpen"
       :title="editing ? `Edit ${fullName(editing)}` : 'New messenger account'"

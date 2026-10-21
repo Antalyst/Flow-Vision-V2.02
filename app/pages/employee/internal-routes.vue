@@ -14,7 +14,7 @@ const auth = useAuthStore()
 const { busy, run } = useAction()
 const office = computed(() => auth.user?.office ?? null)
 
-const { data, refresh, error } = await useAsyncData('internal-routes', () => api.get<{ data: InternalRoute[]; units: Unit[] }>('/internal-routes'))
+const { data, refresh, error, status } = await useAsyncData('internal-routes', () => api.get<{ data: InternalRoute[]; units: Unit[] }>('/internal-routes'), { lazy: true })
 const routes = computed(() => data.value?.data ?? [])
 const units = computed(() => data.value?.units ?? [])
 
@@ -88,6 +88,8 @@ async function toggleActive(r: InternalRoute) {
       </template>
     </PageHeader>
 
+    <AsyncState :status="status" :ready="Boolean(data) || Boolean(error)" :error="null" variant="cards" :rows="3" :messages="['Loading internal routes…']" @retry="refresh()">
+
     <p v-if="error" class="card card-pad text-sm text-danger-ink">{{ apiErrorMessage(error, 'Could not load internal routes') }}</p>
 
     <template v-else>
@@ -126,6 +128,7 @@ async function toggleActive(r: InternalRoute) {
       </div>
     </template>
 
+    </AsyncState>
     <AppModal :open="modalOpen" :title="editing ? 'Edit internal route' : 'New internal route'" @close="modalOpen = false">
       <form id="internal-route-form" class="grid grid-cols-1 gap-4" @submit.prevent="save">
         <div>

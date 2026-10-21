@@ -25,6 +25,7 @@ export const GRANTABLE_PAGES: Record<PageRole, GrantablePage[]> = {
     { path: '/client/offices', label: 'Offices', group: 'Organization' },
     { path: '/client/accounts', label: 'Team accounts', group: 'Organization' },
     { path: '/client/settings', label: 'Organization settings', group: 'Organization' },
+    { path: '/client/backups', label: 'Backups', group: 'Organization' },
     ...COLLABORATE,
   ],
   DEPARTMENT_HEAD: [

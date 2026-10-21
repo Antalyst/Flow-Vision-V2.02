@@ -58,7 +58,7 @@ export interface CurrentUser {
   account_type: AccountType
   status: string
   must_change_password: boolean
-  /** logo_url: the organization logo (Organization Settings), printed on QR labels and letterheads. */
+  /** logo_url: the organization logo (Organization Settings), printed on QR labels. */
   organization: { id: string; name: string; logo_url?: string | null } | null
   office: Office | null
   has_approval_authority: boolean
@@ -357,26 +357,6 @@ export interface DocumentTypeItem {
   sort_order: number
   /** How many documents are filed under it (settings page only). */
   usage?: number
-}
-
-/** Organization Settings: the letterhead a document drafted by the AI is laid out on. */
-export interface DocumentTemplateItem {
-  id: string
-  name: string
-  /** When to use it: the AI reads this to choose a template. */
-  description: string | null
-  show_logo: boolean
-  /** Letterhead lines under the logo. */
-  header_text: string | null
-  /** Structure the AI follows for the body (Markdown). */
-  body_guide: string | null
-  signatory_name: string | null
-  signatory_title: string | null
-  signature_url: string | null
-  footer_text: string | null
-  is_default: boolean
-  is_active: boolean
-  sort_order: number
 }
 
 /** Organization Settings: working hours (Philippine time); processing time only runs inside them. */

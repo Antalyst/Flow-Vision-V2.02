@@ -11,11 +11,12 @@ const api = useApi()
 const docsApi = useDocuments()
 const auth = useAuthStore()
 
-const [{ data: docs, refresh: refreshDocs }, { data: liaisonData, refresh: refreshLiaisons }] = await Promise.all([
-  useAsyncData('liaison-page-docs', () => docsApi.list({ scope: 'office', limit: 100 })),
+const [{ data: docs, refresh: refreshDocs, status: docsStatus, error: docsError }, { data: liaisonData, refresh: refreshLiaisons, status: liaisonStatus, error: liaisonError }] = await Promise.all([
+  useAsyncData('liaison-page-docs', () => docsApi.list({ scope: 'office', limit: 100 }), { lazy: true }),
   // Each office releases documents with its own messengers.
-  useAsyncData('liaison-page-liaisons', () => api.get<{ data: LiaisonRow[] }>('/liaisons', { office_id: auth.user?.office?.id })),
+  useAsyncData('liaison-page-liaisons', () => api.get<{ data: LiaisonRow[] }>('/liaisons', { office_id: auth.user?.office?.id }), { lazy: true }),
 ])
+const pageStatus = computed(() => (docsStatus.value === 'pending' || liaisonStatus.value === 'pending' ? 'pending' : docsError.value || liaisonError.value ? 'error' : 'success'))
 useLiveRefresh(() => Promise.all([refreshDocs(), refreshLiaisons()]))
 
 const atOffice = computed(() => (docs.value?.data ?? []).filter((d) => ['START', 'ARRIVED_AT_OFFICE'].includes(d.status)))
@@ -39,6 +40,8 @@ const pickupDoc = ref<FlowDocument | null>(null)
 <template>
   <div class="fv-rise">
     <PageHeader eyebrow="B3 · Dispatch" title="Release to a messenger" description="Pick a received document and release it to a free messenger. They and the next office are notified; the messenger scans its QR label to pick it up." />
+
+    <AsyncState :status="pageStatus" :ready="Boolean(docs && liaisonData)" :error="docsError || liaisonError" variant="list" what="the documents and messengers" :messages="['Loading documents and messengers…']" @retry="refreshDocs(); refreshLiaisons()">
 
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
       <div class="space-y-6">
@@ -103,6 +106,7 @@ const pickupDoc = ref<FlowDocument | null>(null)
       </aside>
     </div>
 
+    </AsyncState>
     <RequestPickupModal :open="Boolean(pickupDoc)" :doc="pickupDoc" @close="pickupDoc = null" @requested="refreshDocs()" />
   </div>
 </template>

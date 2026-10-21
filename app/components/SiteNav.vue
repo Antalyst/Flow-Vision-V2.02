@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { gsap } from 'gsap'
 
-// Floating ink pill shared by the landing page and the sign-in / register screens.
+// Floating ink pill shared by the landing page and the sign-in screen.
 // Three equal columns keep the section links centred whatever the brand and actions measure.
 const links = [
   { label: 'Platform', href: '/#platform' },
@@ -67,16 +67,10 @@ const linkClass = 'h-9 items-center rounded-full px-3.5 text-[13px] leading-none
       <div class="flex items-center gap-1 justify-self-end">
         <NuxtLink
           to="/login"
-          :class="[linkClass, 'hidden sm:inline-flex', route.path === '/login' ? 'bg-white/10 text-white' : 'text-white/65 hover:bg-white/[0.06] hover:text-white']"
+          class="inline-flex h-9 items-center rounded-full bg-white px-4 text-[11.5px] leading-none font-semibold whitespace-nowrap tracking-[0.06em] text-ink uppercase transition-colors hover:bg-white/85"
+          :class="route.path === '/login' && 'ring-2 ring-terracotta ring-offset-2 ring-offset-ink'"
         >
           Sign in
-        </NuxtLink>
-        <NuxtLink
-          to="/register"
-          class="inline-flex h-9 items-center rounded-full bg-white px-4 text-[11.5px] leading-none font-semibold whitespace-nowrap tracking-[0.06em] text-ink uppercase transition-colors hover:bg-white/85"
-          :class="route.path === '/register' && 'ring-2 ring-terracotta ring-offset-2 ring-offset-ink'"
-        >
-          Get started
         </NuxtLink>
         <button class="grid size-9 place-items-center rounded-full text-white/70 hover:text-white sm:hidden" :aria-expanded="open" aria-label="Menu" @click="open = !open">
           <FIcon :name="open ? 'x' : 'menu'" :size="18" />

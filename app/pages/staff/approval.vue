@@ -10,7 +10,7 @@ const tab = ref<'PENDING' | 'APPROVED' | 'RETURNED'>('PENDING')
 const { data, refresh, status } = await useAsyncData(
   'staff-approvals',
   () => api.get<{ data: Approval[]; has_approval_authority: boolean }>('/approvals', { status: tab.value }),
-  { watch: [tab] },
+  { watch: [tab], lazy: true },
 )
 useLiveRefresh(refresh)
 
@@ -21,7 +21,7 @@ function onDecided(id: string) {
 
 <template>
   <div class="fv-rise">
-    <PageHeader eyebrow="C2 · Final checkpoint" title="Approvals" :description="`Documents that reached ${auth.user?.office?.name}. Approving completes them; returning sends them back to the submitter.`" />
+    <PageHeader eyebrow="C2 · Last office" title="Approvals" :description="`Documents that reached ${auth.user?.office?.name}. Approving completes them; returning sends them back to the uploader.`" />
 
     <AuthorityBanner authority :office-name="auth.user?.office?.name" class="mb-6" />
 
@@ -31,7 +31,7 @@ function onDecided(id: string) {
       </button>
     </div>
 
-    <PageSkeleton v-if="status === 'pending' && !data" variant="cards" :rows="3" :messages="['Loading approvals…', 'Checking the final checkpoint…']" />
+    <PageSkeleton v-if="status === 'pending' && !data" variant="cards" :rows="3" :messages="['Loading approvals…', 'Checking the last office…']" />
     <div v-else-if="!data?.data.length" class="card">
       <EmptyState
         :icon="tab === 'PENDING' ? 'check-square' : 'archive'"

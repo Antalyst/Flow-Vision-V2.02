@@ -26,7 +26,7 @@ export const TOOL_LABELS: Record<string, string> = {
   getDocumentsSummary: 'Checking documents',
   findDocuments: 'Finding documents',
   getPendingApprovals: 'Checking approvals',
-  getOfficeStaff: 'Looking up personnel',
+  getOfficeStaff: 'Looking up people',
   searchOrgKnowledge: 'Searching knowledge files',
   listCharterServices: "Reading the Citizen's Charter",
 }
@@ -92,7 +92,7 @@ export const ASSISTANT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'getPendingApprovals',
       description:
-        'Final-checkpoint approvals the user may see: which documents wait for approval, at which office, assigned to whom and for how long — or recent decisions (approved / returned with remarks).',
+        'Approvals at the last office that the user may see: which documents wait for approval, at which office, assigned to whom and for how long — or recent decisions (approved / returned with comments).',
       parameters: {
         type: 'object',
         properties: {
@@ -109,7 +109,7 @@ export const ASSISTANT_TOOLS: ChatCompletionTool[] = [
     function: {
       name: 'getOfficeStaff',
       description:
-        'Personnel the user may see: names, roles, positions, offices, contact details, approval authority, and for messengers (liaisons) whether they are on duty, free or carrying documents.',
+        'People the user may see: names, roles, positions, offices, contact details, whether they can approve, and for messengers whether they are on duty, free or carrying documents.',
       parameters: {
         type: 'object',
         properties: {
@@ -180,7 +180,7 @@ const STATUS_LABEL: Record<string, string> = {
   COMPLETED: 'Completed',
   RETURNED: 'Returned',
 }
-const ROLE_LABEL: Record<string, string> = { ADMIN: 'Organization administrator', DEPARTMENT_HEAD: 'Department head', STAFF: 'Staff', LIAISON: 'Messenger (liaison)' }
+const ROLE_LABEL: Record<string, string> = { ADMIN: 'Organization administrator', DEPARTMENT_HEAD: 'Department head', STAFF: 'Staff', LIAISON: 'Messenger' }
 const titleCase = (s: unknown) => (typeof s === 'string' && s ? s[0]!.toUpperCase() + s.slice(1).toLowerCase() : null)
 
 export const personName = (u: Row | null | undefined) => (u ? u.full_name || [u.first_name, u.last_name].filter(Boolean).join(' ') || 'Unnamed user' : null)
@@ -710,12 +710,12 @@ async function getOfficeStaff(actor: Actor, args: Args) {
 
   if (actor.account_type === 'STAFF') {
     where.id = actor.id
-    notes.push('Staff accounts can only see their own profile, not other personnel.')
+    notes.push('Staff accounts can only see their own profile, not other people.')
   } else if (actor.account_type === 'DEPARTMENT_HEAD') {
     if (!actor.office_id) return { scope: SCOPE_NOTE.DEPARTMENT_HEAD, note: 'Your account is not assigned to an office yet.', count: 0 }
     where.office_id = actor.office_id
     const own = String(actor.office?.name ?? '')
-    if (officeName && !own.toLowerCase().includes(officeName.toLowerCase())) notes.push(`Only personnel of ${own || 'your office'} are visible to this account.`)
+    if (officeName && !own.toLowerCase().includes(officeName.toLowerCase())) notes.push(`Only people of ${own || 'your office'} are visible to this account.`)
   } else if (actor.account_type === 'ADMIN') {
     if (officeName) {
       const offices = await officesMatching(actor.org_id, officeName)
@@ -781,7 +781,7 @@ async function getOfficeStaff(actor: Actor, args: Args) {
   for (const p of people) byRole[p.role] = (byRole[p.role] ?? 0) + 1
 
   return {
-    scope: actor.account_type === 'DEPARTMENT_HEAD' ? "Personnel of the user's office." : actor.account_type === 'STAFF' ? 'Own profile only.' : SCOPE_NOTE.ADMIN,
+    scope: actor.account_type === 'DEPARTMENT_HEAD' ? "People of the user's office." : actor.account_type === 'STAFF' ? 'Own profile only.' : SCOPE_NOTE.ADMIN,
     ...(notes.length && { note: notes.join(' ') }),
     count: people.length,
     by_role: byRole,

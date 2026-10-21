@@ -6,14 +6,15 @@ useHead({ title: 'Upload document · FlowVision' })
 const docsApi = useDocuments()
 const auth = useAuthStore()
 const query = useRoute().query
-const { data: routeData } = await useAsyncData('upload-routes', () => useRoutes().list())
+const { data: routeData, status: routeStatus, error: routeError, refresh: refreshRoutes } = await useAsyncData('upload-routes', () => useRoutes().list(), { lazy: true })
 const routes = computed<OrgRoute[]>(() => routeData.value?.data ?? [])
 
 const STEPS = ['Upload', 'Details', 'Route', 'Review']
 const step = ref(0)
 
 // The organization's own document types (Organization Settings); "Other" is always available.
-const { data: typeData } = await useAsyncData('upload-document-types', () => useApi().get<{ data: DocumentTypeItem[] }>('/document-types'))
+const { data: typeData, status: typeStatus, error: typeError, refresh: refreshTypes } = await useAsyncData('upload-document-types', () => useApi().get<{ data: DocumentTypeItem[] }>('/document-types'), { lazy: true })
+const pageStatus = computed(() => (routeStatus.value === 'pending' || typeStatus.value === 'pending' ? 'pending' : routeError.value || typeError.value ? 'error' : 'success'))
 const docTypes = computed(() => [...new Set((typeData.value?.data ?? []).map((t) => t.name))])
 // The types this account is offered, by office: its own office's first, then Global (offered to every office).
 const typeGroups = computed(() => {
@@ -35,6 +36,8 @@ const form = reactive({
   route_id: (typeof query.route === 'string' && query.route) || '',
 })
 watchEffect(() => {
+  // Only once the routes are here: a ?route= preselection must survive the loading moment.
+  if (!routeData.value) return
   if (!routes.value.some((r) => r.id === form.route_id)) form.route_id = routes.value.length === 1 ? routes.value[0]!.id : ''
 })
 const selectedRoute = computed(() => routes.value.find((r) => r.id === form.route_id) ?? null)
@@ -339,6 +342,8 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
   <div class="fv-rise mx-auto max-w-3xl">
     <PageHeader eyebrow="A5 · Submission" title="Upload a document" description="Pick the Document Route it should follow. When you save, the document prints with its QR code on it, and you can follow it live from there." />
 
+    <AsyncState :status="pageStatus" :ready="Boolean(routeData && typeData)" :error="routeError || typeError" variant="detail" what="the upload form" :messages="['Loading routes and document types…']" @retry="refreshRoutes(); refreshTypes()">
+
     <div v-if="!routes.length" class="mb-6 flex items-center gap-3 rounded-2xl border border-amber/40 bg-amber/12 p-4 text-sm text-amber-ink">
       <FIcon name="alert-triangle" :size="18" />
       <span class="flex-1">
@@ -387,7 +392,7 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
           <button
             v-for="opt in [
               { value: 'file', icon: 'upload-cloud', title: 'Upload a file', hint: 'PDF, Word, Excel or image from this device' },
-              { value: 'camera', icon: 'camera', title: 'Take a picture', hint: 'Photograph the paper, page by page' },
+              { value: 'camera', icon: 'camera', title: 'Take a picture', hint: 'Take a photo of each page of the paper' },
             ] as const"
             :key="opt.value"
             type="button"
@@ -410,7 +415,7 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
         <!-- Camera -->
         <div v-if="source === 'camera'" class="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-line px-6 py-12 text-center">
           <span class="grid size-12 place-items-center rounded-2xl bg-terracotta/12 text-terracotta-ink"><FIcon name="camera" /></span>
-          <span class="mt-4 text-sm font-semibold">Photograph the paper document</span>
+          <span class="mt-4 text-sm font-semibold">Take photos of the paper document</span>
           <span class="mt-1 max-w-sm text-xs text-ink-2">
             {{ mode === 'bulk' ? 'Take one picture per page. Each picture is added to this document as its own file.' : 'Take one picture per page. One page is saved as an image; several are joined into a single PDF.' }}
           </span>
@@ -599,6 +604,7 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
       </div>
     </section>
 
+    </AsyncState>
     <PhotoCapture :open="cameraOpen" :max-bytes="MAX_UPLOAD_BYTES" :separate="mode === 'bulk'" @close="cameraOpen = false" @done="onScanned" />
   </div>
 </template>

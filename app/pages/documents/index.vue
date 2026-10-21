@@ -41,11 +41,12 @@ const docType = ref('')
 
 const api = useApi()
 const [{ data: officeData }, { data: staffData }, { data: typeData }] = await Promise.all([
-  useAsyncData('documents-filter-offices', () => (everyone ? useRoutes().offices() : Promise.resolve(null))),
+  useAsyncData('documents-filter-offices', () => (everyone ? useRoutes().offices() : Promise.resolve(null)), { lazy: true }),
   useAsyncData('documents-filter-staff', () =>
     isEmployee ? api.get<{ data: Array<UserSummary & { status: string }> }>('/users', { managed: 1, account_type: 'STAFF' }) : Promise.resolve(null),
+    { lazy: true },
   ),
-  useAsyncData('documents-filter-types', () => api.get<{ data: DocumentTypeItem[] }>('/document-types')),
+  useAsyncData('documents-filter-types', () => api.get<{ data: DocumentTypeItem[] }>('/document-types'), { lazy: true }),
 ])
 const officeOptions = computed(() => officeData.value?.data ?? [])
 const staffOptions = computed(() => staffData.value?.data ?? [])
@@ -74,7 +75,7 @@ const { data, status, refresh } = await useAsyncData(
       page: page.value,
       limit: 20,
     }),
-  { watch: [tab, debouncedQ, page, scope, officeId, staffId, docType] },
+  { watch: [tab, debouncedQ, page, scope, officeId, staffId, docType], lazy: true },
 )
 watch([tab, debouncedQ, scope, officeId, staffId, docType], () => (page.value = 1))
 useLiveRefresh(refresh)
@@ -164,7 +165,7 @@ const totalPages = computed(() => Math.max(1, Math.ceil((data.value?.meta.total 
       <span v-if="data" class="ml-auto text-xs text-ink-2">{{ data.meta.total }} document{{ data.meta.total === 1 ? '' : 's' }}</span>
     </div>
 
-    <PageSkeleton v-if="status === 'pending' && !data" variant="list" :rows="6" :messages="['Loading documents…', 'Fetching routes and status…']" />
+    <PageSkeleton v-if="status === 'pending' && !data" variant="list" :rows="6" :messages="['Loading documents…', 'Loading routes and status…']" />
     <div v-else-if="!data?.data.length" class="card">
       <EmptyState
         icon="file-text"

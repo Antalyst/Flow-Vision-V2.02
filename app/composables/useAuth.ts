@@ -17,7 +17,6 @@ export function useAuth() {
     hasApprovalAuthority,
     is,
     login: store.login,
-    register: store.register,
     signOut: store.signOut,
     refreshUser: store.fetchMe,
   }

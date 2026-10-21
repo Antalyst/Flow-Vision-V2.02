@@ -13,15 +13,24 @@ const { busy, run } = useAction()
 const { joinDocument } = useRealtime()
 const qrApi = useQR()
 
-const { data, error, refresh } = await useAsyncData(`document-${id.value}`, () => docsApi.get(id.value), { watch: [id] })
+const { data, error, refresh, status } = await useAsyncData(`document-${id.value}`, () => docsApi.get(id.value), { watch: [id], lazy: true })
 useHead({ title: () => (data.value ? `${data.value.document.tracking_number} · FlowVision` : 'Document · FlowVision') })
 
 onMounted(() => {
   joinDocument(id.value)
-  // Just uploaded (?print=1): print the document with its QR label straight away, once.
+  // Just uploaded (?print=1): print the document with its QR label straight away, once — as soon as
+  // the document has loaded (navigating here no longer waits for it).
   if (route.query.print === '1') {
-    if (data.value?.active_qr && data.value.document) qrApi.printWithDocument(data.value.active_qr, data.value.document, data.value.files, data.value.routing_slip)
-    router.replace({ query: { ...route.query, print: undefined } })
+    const stop = watch(
+      data,
+      (d) => {
+        if (!d) return
+        if (d.active_qr && d.document) qrApi.printWithDocument(d.active_qr, d.document, d.files, d.routing_slip)
+        router.replace({ query: { ...route.query, print: undefined } })
+        queueMicrotask(() => stop())
+      },
+      { immediate: true },
+    )
   }
 })
 watch(
@@ -40,6 +49,7 @@ const routesApi = useRoutes()
 const canPickRoute = computed(() => Boolean(perms.value?.canSubmit || perms.value?.canResubmit))
 const { data: routeOptionData } = await useAsyncData(`document-${id.value}-routes`, () => (canPickRoute.value ? routesApi.list() : Promise.resolve(null)), {
   watch: [canPickRoute],
+  lazy: true,
 })
 const routeOptions = computed<OrgRoute[]>(() => routeOptionData.value?.data ?? [])
 const submitRouteId = ref('')
@@ -172,8 +182,12 @@ const processing = computed(() => doc.value?.processing ?? null)
       <FIcon name="arrow-left" :size="16" /> Back
     </button>
 
-    <div v-if="error" class="card">
-      <EmptyState icon="file-minus" title="Document not found" :description="apiErrorMessage(error)" />
+    <PageSkeleton v-if="!data && (status === 'pending' || status === 'idle')" variant="detail" :messages="['Opening document…', 'Loading the timeline…']" />
+
+    <div v-else-if="error && !data" class="card">
+      <EmptyState icon="file-minus" title="Document not found" :description="apiErrorMessage(error)">
+        <button class="btn btn-sm btn-ghost" @click="refresh()"><FIcon name="refresh-cw" :size="14" /> Try again</button>
+      </EmptyState>
     </div>
 
     <template v-else-if="doc && data">
@@ -277,8 +291,8 @@ const processing = computed(() => doc.value?.processing ?? null)
           <FIcon name="flag" :size="16" /> Flag issue &amp; send back
         </button>
         <ToneBadge v-if="doc.sent_back" tone="danger" icon="flag">Flagged — going back to {{ doc.sent_back.office_name ?? 'the previous office' }}</ToneBadge>
-        <ToneBadge v-if="doc.return_pickup_open" tone="warning" icon="users">Waiting for a liaison of {{ doc.sent_back?.office_name ?? 'that office' }} to claim the pickup</ToneBadge>
-        <button v-if="perms!.canReleaseReturnClaim" class="btn btn-ghost" :disabled="!!busy" :aria-busy="busy === 'unclaim'" @click="act('unclaim', () => api.del(`/documents/${id}/return-claim`), 'Pickup given up — the other liaisons were told')">
+        <ToneBadge v-if="doc.return_pickup_open" tone="warning" icon="users">Waiting for a messenger of {{ doc.sent_back?.office_name ?? 'that office' }} to claim the pickup</ToneBadge>
+        <button v-if="perms!.canReleaseReturnClaim" class="btn btn-ghost" :disabled="!!busy" :aria-busy="busy === 'unclaim'" @click="act('unclaim', () => api.del(`/documents/${id}/return-claim`), 'Claim cancelled — other messengers have been notified')">
           Give up this pickup
         </button>
         <NuxtLink v-if="doc.open_issues" :to="`/issues?document=${doc.id}`" class="btn btn-ghost btn-sm">
@@ -339,7 +353,7 @@ const processing = computed(() => doc.value?.processing ?? null)
 
           <section v-if="data.internal_routes?.length" class="card card-pad" aria-labelledby="internal-routes-title">
             <h2 id="internal-routes-title" class="text-lg">Internal routes</h2>
-            <p class="mt-1 text-sm text-ink-body">Moves between the umbrella offices of one office, inside its route step. They are not route checkpoints: route progress doesn’t change.</p>
+            <p class="mt-1 text-sm text-ink-body">Moves between the umbrella offices of one office, inside its route step. They are not route steps: route progress doesn’t change.</p>
             <ol class="mt-4 space-y-4">
               <li v-for="run in data.internal_routes" :key="run.id" class="rounded-2xl border border-line/70 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-2">

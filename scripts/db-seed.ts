@@ -1,4 +1,6 @@
-// Demo data for Bago City LGU.   npm run db:seed   (refuses remote hosts unless --remote)
+// Demo data for Bago City LGU.   npm run db:seed   (local databases only)
+// Every demo account, the ADMIN included, shares a published password: never on a real installation.
+// A real installation gets its first administrator from `npm run admin:bootstrap`.
 //
 // Documents are pushed through the real workflow (submit → receive → pickup →
 // deliver → approve) so visits, QR codes, approvals, liaison metrics and
@@ -13,6 +15,11 @@ try {
 
 // Imported after .env is loaded so the database config picks it up.
 const { env } = await import('../server/lib/env.ts')
+// Unlike the other scripts, --remote does not unlock this one: the demo accounts' password is public.
+if (process.argv.includes('--remote')) {
+  console.error('[seed] refusing --remote: the demo accounts (an ADMIN among them) share a published password. Use npm run admin:bootstrap on a real installation.')
+  process.exit(1)
+}
 assertSafeTarget('seed', { host: env.db.host, port: env.db.port, name: env.db.name })
 const { sequelize, Approval, Liaison, Office, Organization, User } = await import('../server/lib/models.ts')
 const { hashPassword, loadActor } = await import('../server/lib/auth.ts')
@@ -46,6 +53,9 @@ const USERS = [
   { email: 'hr.staff@bago.gov.ph', type: 'STAFF', first: 'Paolo', last: 'Ramos', office: 'HRMSO' },
   { email: 'liaison.adm@bago.gov.ph', type: 'LIAISON', first: 'Dante', last: 'Flores', office: 'RECORDS' },
   { email: 'liaison.fin@bago.gov.ph', type: 'LIAISON', first: 'Grace', last: 'Torres', office: 'CBO' },
+  // Each office releases documents with its own messengers, so every office on the route needs one.
+  { email: 'liaison.hr@bago.gov.ph', type: 'LIAISON', first: 'Mario', last: 'Castillo', office: 'HRMSO' },
+  { email: 'liaison.acc@bago.gov.ph', type: 'LIAISON', first: 'Elena', last: 'Navarro', office: 'CACCO' },
 ]
 
 // An organization can have many Document Routes; each document follows the one it was uploaded on.
@@ -129,6 +139,8 @@ async function main() {
     mayorStaff: await actor('mayor.staff@bago.gov.ph'),
     liaisonAdm: await actor('liaison.adm@bago.gov.ph'),
     liaisonFin: await actor('liaison.fin@bago.gov.ph'),
+    liaisonHr: await actor('liaison.hr@bago.gov.ph'),
+    liaisonAcc: await actor('liaison.acc@bago.gov.ph'),
   }
 
   const create = (
@@ -150,9 +162,9 @@ async function main() {
   const fullRoute = async (docId: string) => {
     await hop(docId, p.client, p.liaisonAdm, p.records)
     await hop(docId, p.records, p.liaisonAdm, p.hr)
-    await hop(docId, p.hr, p.liaisonAdm, p.budget)
+    await hop(docId, p.hr, p.liaisonHr, p.budget)
     await hop(docId, p.budget, p.liaisonFin, p.accounting)
-    await hop(docId, p.accounting, p.liaisonFin, p.ocm)
+    await hop(docId, p.accounting, p.liaisonAcc, p.ocm)
   }
 
   // 1. Fresh submission waiting at Records — uploaded by an HR employee on the HR personnel route

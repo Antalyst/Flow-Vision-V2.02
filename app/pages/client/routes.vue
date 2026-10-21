@@ -12,10 +12,11 @@ interface DraftStep {
 const routesApi = useRoutes()
 const { busy, run } = useAction()
 
-const [{ data: routeData, refresh }, { data: officeData }] = await Promise.all([
-  useAsyncData('routes-list', () => routesApi.list()),
-  useAsyncData('route-offices', () => routesApi.offices()),
+const [{ data: routeData, refresh, status: routeStatus, error: routeError }, { data: officeData, status: officeStatus, error: officeError, refresh: refreshOffices }] = await Promise.all([
+  useAsyncData('routes-list', () => routesApi.list(), { lazy: true }),
+  useAsyncData('route-offices', () => routesApi.offices(), { lazy: true }),
 ])
+const pageStatus = computed(() => (routeStatus.value === 'pending' || officeStatus.value === 'pending' ? 'pending' : routeError.value || officeError.value ? 'error' : 'success'))
 
 const routes = computed<OrgRoute[]>(() => routeData.value?.data ?? [])
 const offices = computed<Office[]>(() => officeData.value?.data ?? [])
@@ -153,14 +154,16 @@ async function confirmRemove() {
       :title="mode === 'build' ? (editing ? `Edit route` : 'New Document Route') : 'Document Routes'"
       :description="
         mode === 'build'
-          ? 'Arrange the offices this kind of document passes through, in order. The last office is the final checkpoint, where it is approved. How long a document may take is set per document type in Organization Settings.'
-          : 'Create one route per kind of document. Whoever uploads a document picks the route it follows; the last office on each route is its final checkpoint.'
+          ? 'Arrange the offices this kind of document passes through, in order. The last office is where it is approved. How long a document may take is set per document type in Organization Settings.'
+          : 'Create one route per kind of document. Whoever uploads a document picks the route it follows; the last office on each route is where documents are approved.'
       "
     >
       <template #actions>
         <button v-if="mode === 'list' && offices.length" class="btn btn-primary" @click="openBuilder(null)"><FIcon name="plus" :size="16" /> New route</button>
       </template>
     </PageHeader>
+
+    <AsyncState :status="pageStatus" :ready="Boolean(routeData && officeData)" :error="routeError || officeError" variant="cards" :rows="4" what="the routes" :messages="['Loading routes…']" @retry="refresh(); refreshOffices()">
 
     <div v-if="!offices.length" class="card">
       <EmptyState icon="grid" title="Add offices first" description="A route is a sequence of offices. Create your offices, then come back to arrange them.">
@@ -230,7 +233,7 @@ async function confirmRemove() {
                   <template v-else>{{ i + 1 }}</template>
                 </span>
                 Step {{ i + 1 }}
-                <ToneBadge v-if="i === steps.length - 1" tone="success">Final checkpoint</ToneBadge>
+                <ToneBadge v-if="i === steps.length - 1" tone="success">Last office</ToneBadge>
               </span>
               <span class="flex gap-1">
                 <button class="grid size-9 place-items-center rounded-lg text-ink-2 hover:bg-ink/5 disabled:opacity-30" :disabled="i === 0" aria-label="Move up" @click="move(i, -1)"><FIcon name="arrow-up" :size="16" /></button>
@@ -285,6 +288,7 @@ async function confirmRemove() {
       </section>
     </div>
 
+    </AsyncState>
     <AppModal
       :open="Boolean(removing)"
       :title="`Remove “${removing?.name ?? ''}”?`"

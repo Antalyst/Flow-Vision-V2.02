@@ -48,7 +48,7 @@ const days = ref(30)
 // ADMIN only: narrow the organization's log to one office (what happened there or was done by its people).
 const officeId = ref('')
 const isClient = computed(() => auth.role === 'ADMIN')
-const { data: officeData } = await useAsyncData('activity-offices', () => (isClient.value ? useRoutes().offices() : Promise.resolve(null)))
+const { data: officeData } = await useAsyncData('activity-offices', () => (isClient.value ? useRoutes().offices() : Promise.resolve(null)), { lazy: true })
 const officeOptions = computed(() => officeData.value?.data ?? [])
 const showOfficeFilter = computed(() => isClient.value && scope.value === 'organization' && officeOptions.value.length > 0)
 watch(scope, (s) => s !== 'organization' && (officeId.value = ''))
@@ -71,7 +71,7 @@ const RANGES = [
 ]
 
 const params = computed(() => ({ scope: scope.value, category: category.value, days: days.value, q: debouncedQ.value || undefined, office: officeId.value || undefined, limit: 50 }))
-const { data, refresh, status } = await useAsyncData('activity-log', () => api.get<ActivityPage>('/activity', params.value), { watch: [params] })
+const { data, refresh, status } = await useAsyncData('activity-log', () => api.get<ActivityPage>('/activity', params.value), { watch: [params], lazy: true })
 useLiveRefresh(refresh)
 
 // "Load older" appends pages below the first one.
@@ -112,13 +112,20 @@ const ADMIN_LABELS: Record<string, string> = {
   USER_UPDATE: 'Updated an account',
   USER_PASSWORD_RESET: 'Reset a password',
   PASSWORD_CHANGE: 'Changed their password',
+  // Public registration was removed; older audit entries still carry it.
   ORG_REGISTER: 'Registered the organization',
+  ADMIN_BOOTSTRAP: 'Was set up as the initial administrator',
+  BACKUP_CREATE: 'Made a full backup',
+  BACKUP_FAILED: 'Started a backup that failed',
+  BACKUP_VERIFY: 'Verified a backup',
+  BACKUP_DOWNLOAD: 'Downloaded a backup',
   ORG_UPDATE: 'Updated the organization profile',
   ORG_LOGO_UPDATE: 'Changed the organization logo',
   ORG_LOGO_DELETE: 'Removed the organization logo',
   ORG_WORK_HOURS_UPDATE: 'Changed the working hours',
   HOLIDAY_CREATE: 'Added a holiday',
   HOLIDAY_DELETE: 'Removed a holiday',
+  // Document templates were removed; older audit entries still carry these.
   TEMPLATE_CREATE: 'Added a document template',
   TEMPLATE_UPDATE: 'Updated a document template',
   TEMPLATE_DELETE: 'Deleted a document template',
@@ -200,7 +207,7 @@ const stamp = (v: string) => stampFmt.format(new Date(v))
       </select>
     </div>
 
-    <PageSkeleton v-if="!rows.length && status === 'pending'" variant="list" :rows="7" :messages="['Loading activity…', 'Reading the audit trail…']" />
+    <PageSkeleton v-if="!rows.length && status === 'pending'" variant="list" :rows="7" :messages="['Loading activity…', 'Loading the activity log…']" />
     <div v-else-if="!rows.length" class="card">
       <EmptyState
         icon="list"

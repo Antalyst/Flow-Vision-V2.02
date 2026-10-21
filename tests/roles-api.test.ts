@@ -5,9 +5,10 @@
  *   npm run test:roles-api            (or: node tests/roles-api.test.ts --base=http://localhost:3000)
  *
  * Signs in as the seeded demo accounts (one per role) and checks what each may and may not do,
- * plus session handling and registration. It writes to the database it runs against: accounts
- * rt.*@flowvision.test and one organization "Role Test Org …". It refuses a non-local --base
- * unless --remote is given.
+ * plus session handling and that there is no public registration. It writes to the database it
+ * runs against: accounts rt.*@flowvision.test. It refuses a non-local --base unless --remote.
+ * Cross-organization checks need an ADMIN of a second organization (there is no public sign-up to
+ * make one): --other-admin=<email> --other-password=<password>; without them they are skipped.
  */
 const argv: Record<string, string> = Object.fromEntries(
   process.argv.slice(2).map((a) => {
@@ -156,21 +157,43 @@ check((await s.ADMIN.call('PATCH', `/users/${s.ADMIN.user.id}`, { account_type: 
 check((await s.DEPARTMENT_HEAD.call('PATCH', `/users/${s.DEPARTMENT_HEAD.user.id}`, { account_type: 'ADMIN' })).status === 404, "DEPARTMENT_HEAD can't promote itself to ADMIN")
 check((await s.DEPARTMENT_HEAD.call('GET', '/auth/me')).body?.user?.account_type === 'DEPARTMENT_HEAD', '…its role is unchanged')
 
-// ── Registration ───────────────────────────────────────────────────────────────
+// ── No public registration ─────────────────────────────────────────────────────
+// The initial ADMIN comes from `npm run admin:bootstrap` (command line only); nothing over HTTP
+// creates an organization or an ADMIN without an ADMIN session.
 const bagoOrg = s.ADMIN.user.organization?.id as string
-const reg = await fetch(`${BASE}/api/auth/register`, {
-  method: 'POST',
-  headers: { 'content-type': 'application/json' },
-  // An attempt to pick a role and join an existing organization; both must be ignored.
-  body: JSON.stringify({ organization_name: `Role Test Org ${stamp}`, first_name: 'Reg', last_name: 'Test', email: `rt.reg.${stamp}@flowvision.test`, password: 'RoleTest#2026', account_type: 'STAFF', org_id: bagoOrg, organization_id: bagoOrg }),
-})
-const regUser = ((await reg.json().catch(() => ({}))) as { user?: any }).user
-check([200, 201].includes(reg.status), 'Public registration succeeds', `${reg.status}`)
-check(regUser?.account_type === 'ADMIN' && regUser?.organization?.id && regUser.organization.id !== bagoOrg, 'Registration only ever makes the ADMIN of a brand-new organization (role and org in the body are ignored)', `${regUser?.account_type} ${regUser?.organization?.id === bagoOrg ? 'JOINED BAGO' : ''}`)
-const outsiderAdmin = await login(`rt.reg.${stamp}@flowvision.test`, 'RoleTest#2026')
-check(((await outsiderAdmin.call('GET', '/documents')).body?.data ?? []).length === 0, "The new organization's ADMIN sees none of the other organization's documents")
-check((await outsiderAdmin.call('PATCH', `/users/${s.STAFF.user.id}`, { first_name: 'Changed' })).status === 404, "…and can't edit its accounts")
-check((await outsiderAdmin.call('GET', `/messages/office`)).status === 403, '…and has no office channel (no office)')
+const regEmail = `rt.reg.${stamp}@flowvision.test`
+const regBody = { organization_name: `Role Test Org ${stamp}`, first_name: 'Reg', last_name: 'Test', email: regEmail, password: 'RoleTest#2026x', account_type: 'ADMIN', org_id: bagoOrg, organization_id: bagoOrg }
+const reg = await request('', 'POST', '/auth/register', regBody)
+check(reg.status === 404 || reg.status === 405, 'Public registration is gone: POST /api/auth/register is not found', `${reg.status}`)
+for (const path of ['/auth/bootstrap', '/bootstrap', '/setup', '/org', '/organizations']) {
+  const r = await request('', 'POST', path, regBody)
+  check([401, 403, 404, 405].includes(r.status), `No unauthenticated organization or administrator creation at POST /api${path}`, `${r.status}`)
+}
+check((await request('', 'POST', '/users', { ...regBody, account_type: 'ADMIN' })).status === 401, 'Creating an account without a session → 401')
+check((await login(regEmail, 'RoleTest#2026x')).status === 401, '…and none of those attempts created an account')
+const regPage = await fetch(`${BASE}/register`, { redirect: 'manual' })
+const regHtml = await regPage.text().catch(() => '')
+check(regPage.status !== 200 && !/Create your organization/i.test(regHtml), 'The /register page is not served', `${regPage.status}`)
+const loginHtml = await (await fetch(`${BASE}/login`)).text()
+check(!/href="\/register"/.test(loginHtml) && !/Create an account/.test(loginHtml), 'The sign-in page has no sign-up link')
+for (const role of ['DEPARTMENT_HEAD', 'STAFF', 'LIAISON'] as const) {
+  const r = await s[role].call('POST', '/users', { account_type: 'ADMIN', email: `rt.esc.${role}.${stamp}@flowvision.test`.toLowerCase(), first_name: 'E', last_name: 'Sc' })
+  check([400, 403].includes(r.status), `${role} can't create an ADMIN account`, `${r.status}`)
+}
+check((await s.STAFF.call('PATCH', '/auth/me', { account_type: 'ADMIN' })).body?.user?.account_type !== 'ADMIN' && (await s.STAFF.call('GET', '/auth/me')).body?.user?.account_type === 'STAFF', "STAFF can't make itself ADMIN through its profile")
+
+// ── Cross-organization isolation (needs an ADMIN of a second organization) ─────────
+if (argv['other-admin']) {
+  const outsiderAdmin = await login(argv['other-admin'], argv['other-password'] ?? PASSWORD)
+  check(outsiderAdmin.status === 200 && outsiderAdmin.user?.account_type === 'ADMIN' && outsiderAdmin.user?.organization?.id !== bagoOrg, 'The second organization\'s ADMIN signs in', `${outsiderAdmin.status}`)
+  const bagoDocs = new Set((((await s.ADMIN.call('GET', '/documents')).body?.data ?? []) as Array<{ id: string }>).map((d) => d.id))
+  const seen = ((await outsiderAdmin.call('GET', '/documents')).body?.data ?? []) as Array<{ id: string }>
+  check(seen.every((d) => !bagoDocs.has(d.id)), "The other organization's ADMIN sees none of this organization's documents")
+  check((await outsiderAdmin.call('PATCH', `/users/${s.STAFF.user.id}`, { first_name: 'Changed' })).status === 404, "…and can't edit its accounts")
+  check((await outsiderAdmin.call('GET', `/messages/office`)).status === 403, '…and has no office channel (no office)')
+} else {
+  console.log('- cross-organization checks skipped: pass --other-admin=<email> --other-password=<password> (an ADMIN of a second organization)')
+}
 
 console.log(`\n${passed} passed, ${failed} failed`)
 process.exit(failed ? 1 : 0)

@@ -8,6 +8,8 @@
  * permissions, a staff member and one document routed through the umbrella, then checks that every
  * granted action works, every ungranted one is refused, and nothing crosses offices or
  * organizations. It writes to the database it runs against and refuses a non-local --base unless --remote.
+ * The cross-organization checks need an ADMIN of a second organization (there is no public sign-up
+ * to make one): --other-admin=<email> --other-password=<password>; without them they are skipped.
  */
 import { DH_PERMISSIONS } from '../shared/dh-permissions.ts'
 
@@ -233,10 +235,10 @@ const events = (r.body?.tracking ?? []).map((e: any) => e.event_type)
 check(events.includes('HANDED_TO_UMBRELLA') && events.includes('RETURNED_FROM_UMBRELLA') && r.body?.document?.current_step_number === 1, 'the hand-off and return are in the history; still on the same route step', events)
 
 console.log('\nNo crossing offices or organizations')
-const reg = await fetch(`${BASE}/api/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ organization_name: `Other Org ${stamp}`, first_name: 'O', last_name: 'Admin', email: `other.${stamp}@test.local`, password: 'Other@12345' }) })
-const other = reg.ok ? await login(`other.${stamp}@test.local`, 'Other@12345') : null
-check(Boolean(other), 'another organization registered')
+const other = argv['other-admin'] ? await login(argv['other-admin'], argv['other-password'] ?? PASSWORD) : null
+if (!other) console.log('- cross-organization checks skipped: pass --other-admin=<email> --other-password=<password> (an ADMIN of a second organization)')
 if (other) {
+  check(other.user?.account_type === 'ADMIN', "the second organization's ADMIN signs in", other.user?.account_type)
   r = await other.call('GET', `/documents/${doc.id}`)
   check(r.status === 404, "another organization's admin can't see the document", r.status)
   r = await other.call('PATCH', `/users/${d1.user.id}`, { permissions: [] })

@@ -11,7 +11,7 @@
  */
 import { afterEach, describe, it, mock } from 'node:test'
 import assert from 'node:assert/strict'
-import { DocumentTemplate, DocumentType, KnowledgeFile, Office, OrganizationRoute } from '../server/lib/models.ts'
+import { DocumentType, KnowledgeFile, Office, OrganizationRoute } from '../server/lib/models.ts'
 import { buildSystemPrompt } from '../server/lib/ai-prompt.ts'
 import { canReadKnowledge, knowledgeWhere, resolveAiContext } from '../server/lib/ai-context.ts'
 import { chunkContent, knowledgeCatalog, listCharterServices, parseCharterServices, searchKnowledge } from '../server/lib/ai-knowledge.ts'
@@ -265,7 +265,6 @@ describe('system prompt (rebuilt from the account on every message, follow-ups i
     mock.method(DocumentType, 'findAll', async () => [])
     mock.method(OrganizationRoute, 'findAll', async () => [])
     mock.method(Office, 'findAll', async () => [])
-    mock.method(DocumentTemplate, 'findAll', async () => [])
     return buildSystemPrompt(a)
   }
 
@@ -289,5 +288,14 @@ describe('system prompt (rebuilt from the account on every message, follow-ups i
     const text = await prompt(actor('STAFF', { ...OFFICE_A, status: 'inactive' }))
     assert.match(text, /their office on record is inactive/)
     assert.equal(text.includes('BPLO Office Guide'), false)
+  })
+
+  it('loads no document templates and never asks the model to choose one (the feature was removed)', async () => {
+    const text = await prompt(actor('ADMIN', null))
+    assert.equal(/template/i.test(text), false)
+    assert.equal(/body guide|signature block|memos?, letters/i.test(text), false)
+    // The canvas (reports and tables) is unchanged.
+    assert.match(text, /<canvas type="table" title=/)
+    assert.match(text, /type="document" for prose: reports and summaries/)
   })
 })

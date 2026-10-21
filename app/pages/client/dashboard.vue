@@ -27,13 +27,13 @@ interface DashboardCards {
 // The office picked in the Forecasts filter also scopes the four cards at the top.
 const officeId = ref('')
 
-const { data, refresh, status } = await useAsyncData('client-dashboard', () => api.get<ClientDashboard>('/dashboard'))
-const { data: cards, refresh: refreshCards } = await useAsyncData(
+const { data, refresh, status, error } = await useAsyncData('client-dashboard', () => api.get<ClientDashboard>('/dashboard'), { lazy: true })
+const { data: cards, refresh: refreshCards, status: cardsStatus } = await useAsyncData(
   'client-dashboard-cards',
   () => api.get<DashboardCards>('/dashboard/cards', { office_id: officeId.value || undefined }),
-  { watch: [officeId] },
+  { watch: [officeId], lazy: true },
 )
-const { data: routeData, refresh: refreshRoutes } = await useAsyncData('client-dashboard-routes', () => routesApi.list())
+const { data: routeData, refresh: refreshRoutes } = await useAsyncData('client-dashboard-routes', () => routesApi.list(), { lazy: true })
 const forecast = ref<{ refresh: () => unknown }>()
 useLiveRefresh(() => {
   refresh()
@@ -52,8 +52,8 @@ const pipeline = computed(() => {
   const s = data.value?.by_status ?? {}
   return [
     { key: 'START', label: 'At first office', count: s.START ?? 0, tone: 'bg-terracotta' },
-    { key: 'MOVING', label: 'Moving', count: (s.PICKED_UP ?? 0) + (s.IN_TRANSIT ?? 0), tone: 'bg-info' },
-    { key: 'ARRIVED_AT_OFFICE', label: 'At an office', count: s.ARRIVED_AT_OFFICE ?? 0, tone: 'bg-amber' },
+    { key: 'MOVING', label: 'In transit', count: (s.PICKED_UP ?? 0) + (s.IN_TRANSIT ?? 0), tone: 'bg-info' },
+    { key: 'ARRIVED_AT_OFFICE', label: 'At office', count: s.ARRIVED_AT_OFFICE ?? 0, tone: 'bg-amber' },
     { key: 'COMPLETED', label: 'Completed', count: s.COMPLETED ?? 0, tone: 'bg-sage' },
     { key: 'RETURNED', label: 'Returned', count: s.RETURNED ?? 0, tone: 'bg-danger' },
   ]
@@ -63,13 +63,17 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
 
 <template>
   <div class="fv-rise">
-    <PageHeader :eyebrow="auth.user?.organization?.name" :title="`${greeting}, ${auth.user?.first_name}`" description="Here's where your organization's documents stand right now.">
+    <PageHeader :eyebrow="auth.user?.organization?.name" :title="`${greeting}, ${auth.user?.first_name}`" description="The current status of your organization's documents.">
       <template #actions>
         <NuxtLink to="/documents/new" class="btn btn-primary"><FIcon name="plus" :size="16" /> Upload document</NuxtLink>
       </template>
     </PageHeader>
 
-    <PageSkeleton v-if="status === 'pending' && !data" variant="dashboard" :messages="['Counting documents…', 'Checking every office…', 'Almost there…']" />
+    <PageSkeleton v-if="status === 'pending' && !data" variant="dashboard" :messages="['Loading documents…', 'Loading offices…', 'Almost done…']" />
+    <div v-else-if="error && !data" class="card card-pad flex flex-wrap items-center justify-between gap-3 text-sm text-danger-ink" role="alert">
+      {{ apiErrorMessage(error, 'Could not load the dashboard') }}
+      <button class="btn btn-sm btn-ghost" @click="refresh()"><FIcon name="refresh-cw" :size="14" /> Try again</button>
+    </div>
 
     <template v-else-if="data">
       <!-- No route yet: the one thing to do first -->
@@ -78,44 +82,47 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
         <div class="flex-1">
           <p class="font-display text-base font-semibold">Set up your first Document Route</p>
           <p class="mt-1 text-sm text-ink-body">
-            Every document follows a route through your offices — create one per kind of document. {{ data.totals.offices ? 'Arrange your offices into steps to start accepting submissions.' : 'Add your offices first, then arrange them into steps.' }}
+            Every document follows a route through your offices. Create one route for each kind of document. {{ data.totals.offices ? 'Add your offices as steps to start receiving documents.' : 'Add your offices first, then add them as steps.' }}
           </p>
         </div>
         <NuxtLink :to="data.totals.offices ? '/client/routes' : '/client/offices'" class="btn btn-primary">
-          {{ data.totals.offices ? 'Build route' : 'Add offices' }} <FIcon name="arrow-right" :size="16" />
+          {{ data.totals.offices ? 'Create route' : 'Add offices' }} <FIcon name="arrow-right" :size="16" />
         </NuxtLink>
       </div>
 
       <div v-if="officeName" class="mb-3 flex flex-wrap items-center gap-2 text-sm text-ink-body">
         <FIcon name="filter" :size="14" class="text-ink-2" />
         Showing <strong class="font-semibold text-ink">{{ officeName }}</strong>
-        <span class="text-ink-2">— picked in Forecasts below</span>
+        <span class="text-ink-2">— selected in Forecasts below</span>
         <button type="button" class="btn btn-ghost btn-sm" @click="officeId = ''"><FIcon name="x" :size="14" /> All offices</button>
       </div>
 
-      <section v-if="cards" class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+      <div v-if="!cards" class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" role="status" aria-label="Loading the summary">
+        <div v-for="i in 4" :key="i" class="card card-pad" aria-hidden="true"><div class="skeleton h-3.5 w-24" /><div class="skeleton mt-4 h-8 w-16" /><div class="skeleton mt-3 h-3 w-28" /></div>
+      </div>
+      <section v-else class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4" :aria-busy="cardsStatus === 'pending'">
         <StatCard
           label="Active documents"
           :value="cards.active"
           icon="activity"
           tone="primary"
           to="/documents"
-          :hint="officeName ? `At ${officeName} now` : 'Across all offices'"
+          :hint="officeName ? `At ${officeName} now` : 'In all offices'"
         />
         <StatCard
-          label="Awaiting approval"
+          label="Pending approval"
           :value="cards.pending_approvals"
           icon="clock"
           tone="warning"
-          :hint="officeName ? `Waiting for ${officeName}'s decision` : 'At the final checkpoint'"
+          :hint="officeName ? `Needs a decision from ${officeName}` : 'At the last office'"
         />
         <CompletedTypesCard :by-type="cards.completed.by_type" :office-name="officeName" />
         <StatCard
-          label="Past target date"
+          label="Overdue"
           :value="cards.overdue"
           icon="alert-triangle"
           :tone="cards.overdue ? 'danger' : 'neutral'"
-          :hint="officeName ? `Late and still at ${officeName}` : 'Late and still in progress'"
+          :hint="officeName ? `Still at ${officeName} after the due date` : 'Not completed by the due date'"
         />
       </section>
 
@@ -127,7 +134,7 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
             <h2 class="text-lg">Recent documents</h2>
             <NuxtLink to="/documents" class="text-sm font-medium text-terracotta-ink hover:underline">View all</NuxtLink>
           </div>
-          <EmptyState v-if="!data.recent.length" icon="file-text" title="No documents yet" description="Submitted documents will appear here with their live position on the route.">
+          <EmptyState v-if="!data.recent.length" icon="file-text" title="No documents yet" description="Submitted documents will show here with their current location.">
             <NuxtLink to="/documents/new" class="btn btn-primary btn-sm">Upload your first document</NuxtLink>
           </EmptyState>
           <ul v-else class="-mx-2 divide-y divide-line/60">
@@ -148,7 +155,7 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
 
         <div class="space-y-6">
           <section class="card card-pad">
-            <h2 class="text-lg">Organization processes</h2>
+            <h2 class="text-lg">Document status</h2>
             <div class="mt-4 flex h-2.5 overflow-hidden rounded-full bg-line/50">
               <div v-for="p in pipeline" :key="p.key" :class="p.tone" :style="{ width: `${(p.count / pipelineTotal) * 100}%` }" />
             </div>
@@ -187,7 +194,7 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
                 <span class="mono font-medium">{{ data.team[role] ?? 0 }}</span>
               </li>
             </ul>
-            <NuxtLink to="/client/accounts" class="btn btn-ghost btn-sm mt-4 w-full"><FIcon name="user-plus" :size="15" /> Invite people</NuxtLink>
+            <NuxtLink to="/client/accounts" class="btn btn-ghost btn-sm mt-4 w-full"><FIcon name="user-plus" :size="15" /> Add accounts</NuxtLink>
           </section>
         </div>
       </div>

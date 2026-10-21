@@ -13,15 +13,15 @@ defineProps<{ authority: boolean; officeName?: string | null }>()
     </span>
     <div>
       <p class="font-display text-[15px] font-bold tracking-wide" :class="authority ? 'text-sage-ink' : 'text-info-ink'">
-        {{ authority ? 'YOU HAVE APPROVAL AUTHORITY' : 'YOU DO NOT HAVE APPROVAL AUTHORITY' }}
+        {{ authority ? 'YOU CAN APPROVE DOCUMENTS' : 'YOU CANNOT APPROVE DOCUMENTS' }}
       </p>
       <p class="mt-1 text-sm text-ink-body">
         <template v-if="authority">
-          {{ officeName }} is the final checkpoint on your organization's route. You can approve or return documents that reach it.
+          {{ officeName }} is the last office on your organization's route. You can approve or return documents that reach it.
         </template>
         <template v-else>
-          {{ officeName ?? 'Your office' }} is not the final checkpoint. You can follow any document's timeline, but only staff at the final
-          checkpoint office can approve.
+          {{ officeName ?? 'Your office' }} is not the last office on the route. You can view any document's timeline, but only staff at the last
+          office can approve.
         </template>
       </p>
     </div>

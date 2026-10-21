@@ -15,9 +15,11 @@ const { env } = await import('../server/lib/env.ts')
 assertSafeTarget('schema', { host: env.db.host, port: env.db.port, name: env.db.name })
 
 const VIEWS = ['active_documents_by_office', 'liaison_performance', 'pending_approvals']
+// document_templates is no longer created (the feature was removed); it stays here so a reset clears it.
 const TABLES = [
-  'ai_messages', 'ai_conversations', 'approvals', 'audit_logs', 'auth_sessions', 'documents', 'document_files', 'document_templates', 'document_tracking', 'document_types', 'file_blobs', 'issues',
-  'knowledge_files', 'liaisons', 'messages', 'notifications', 'offices', 'organizations', 'organization_holidays', 'organization_routes', 'organization_settings', 'qr_codes', 'route_steps', 'users',
+  'ai_messages', 'ai_conversations', 'approvals', 'audit_logs', 'auth_sessions', 'department_head_assignments', 'documents', 'document_files', 'document_internal_transactions',
+  'document_templates', 'document_tracking', 'document_types', 'file_blobs', 'internal_route_steps', 'internal_routes', 'issues', 'knowledge_files', 'liaisons', 'messages', 'notifications',
+  'offices', 'organizations', 'organization_holidays', 'organization_routes', 'organization_settings', 'qr_codes', 'route_steps', 'system_bootstrap', 'users',
 ]
 
 const schemaPath = path.resolve(import.meta.dirname, '../database/flowvision-complete-schema.sql')

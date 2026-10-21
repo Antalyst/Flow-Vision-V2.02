@@ -11,9 +11,9 @@ const props = defineProps<{
 
 /** How long the type takes: from its completed documents, else the time Organization Settings allows. */
 function typeHint(t: (typeof props.byType)[number]) {
-  if (t.avg_minutes != null) return `Usually done in ${formatDuration(t.avg_minutes)}`
-  if (t.target_hours > 0) return `None done yet · allowed ${formatSla(t.target_hours)}`
-  return 'None done yet'
+  if (t.avg_minutes != null) return `Usually takes ${formatDuration(t.avg_minutes)}`
+  if (t.target_hours > 0) return `None completed yet · limit ${formatSla(t.target_hours)}`
+  return 'None completed yet'
 }
 
 const slides = computed(() =>
@@ -24,7 +24,7 @@ const slides = computed(() =>
           key: '__none',
           title: 'No document types yet',
           count: 0,
-          hint: props.officeName ? `${props.officeName} hasn't uploaded anything yet` : 'Add document types in Organization Settings',
+          hint: props.officeName ? `${props.officeName} has not uploaded any documents yet` : 'Add document types in Organization Settings',
         },
       ],
 )

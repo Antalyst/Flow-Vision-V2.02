@@ -23,7 +23,7 @@ async function decide(decision: 'APPROVED' | 'RETURNED') {
   const ok = await run(
     decision,
     () => api.patch(`/approvals/${props.approval.id}`, { decision, remarks: remarks.value.trim() || undefined }),
-    decision === 'APPROVED' ? `${doc.value.tracking_number} approved` : `${doc.value.tracking_number} returned to submitter`,
+    decision === 'APPROVED' ? `${doc.value.tracking_number} approved` : `${doc.value.tracking_number} returned to uploader`,
   )
   if (ok) emit('decided', props.approval.id)
 }
@@ -52,13 +52,13 @@ async function decide(decision: 'APPROVED' | 'RETURNED') {
 
     <p v-if="doc.description" class="mt-4 rounded-xl bg-ink/[0.035] px-4 py-3 text-sm text-ink-body">{{ doc.description }}</p>
 
-    <label class="field-label mt-5" :for="`remarks-${approval.id}`">Remarks <span class="font-normal text-ink-2">(required when returning)</span></label>
+    <label class="field-label mt-5" :for="`remarks-${approval.id}`">Comments <span class="font-normal text-ink-2">(required when returning)</span></label>
     <textarea
       :id="`remarks-${approval.id}`"
       v-model="remarks"
       rows="2"
       class="input"
-      placeholder="Add a note for the submitter"
+      placeholder="Add a note for the uploader"
       maxlength="2000"
       :aria-invalid="Boolean(remarksError)"
     />

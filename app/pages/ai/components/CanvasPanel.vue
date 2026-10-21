@@ -7,8 +7,6 @@ const emit = defineEmits<{ close: []; select: [id: string] }>()
 
 const ui = useUiStore()
 const { busy, exportCanvas } = useCanvasExport()
-const docTemplates = useDocTemplates()
-onMounted(() => docTemplates.load())
 
 const active = computed(() => props.canvases.find((c) => c.id === props.activeId) ?? props.canvases.at(-1) ?? null)
 const view = ref<'preview' | 'markdown'>('preview')
@@ -21,33 +19,13 @@ const EXPORTS: Array<{ format: ExportFormat; label: string; short: string; icon:
   { format: 'pdf', label: 'Export PDF (.pdf)', short: 'PDF', icon: 'file' },
 ]
 
-// The template (letterhead) of each canvas: the AI's choice, or what the user picked here ('' = none).
-const overrides = reactive<Record<string, string>>({})
-const template = computed(() => (active.value ? docTemplates.templateFor(active.value, overrides[active.value.id]) : null))
-const templateChoice = computed({
-  get: () => (active.value ? (overrides[active.value.id] ?? template.value?.id ?? '') : ''),
-  set: (id: string) => {
-    if (active.value) overrides[active.value.id] = id
-  },
-})
-const org = docTemplates.organization
-
 const printing = ref(false)
-/** Print the canvas as laid out on its template, with the FlowVision note. */
+/** Print the canvas with its title and the FlowVision note. */
 async function print() {
   if (!active.value || printing.value) return
   printing.value = true
   try {
-    const [logo, signature] = await Promise.all([loadImage(template.value?.show_logo ? org.value.logo_url : null), loadImage(template.value?.signature_url)])
-    const html = sheetHtml({
-      title: active.value.title,
-      bodyHtml: renderMarkdown(active.value.content),
-      template: template.value,
-      orgName: org.value.name,
-      logoSrc: logo?.dataUrl ?? null,
-      signatureSrc: signature?.dataUrl ?? null,
-    })
-    await printSheet(active.value.title, html)
+    await printCanvas(active.value.title, active.value.content)
   } catch (err) {
     console.error('[canvas] print failed', err)
     ui.error('Could not print', 'Try again, or export a PDF and print that.')
@@ -59,7 +37,7 @@ async function print() {
 async function runExport(format: ExportFormat) {
   if (!active.value) return
   try {
-    await exportCanvas(active.value, format, { template: template.value, orgName: org.value.name, logoUrl: org.value.logo_url })
+    await exportCanvas(active.value, format)
   } catch (err) {
     console.error('[canvas] export failed', err)
     ui.error('Export failed', 'The file could not be created. Try again, or copy the Markdown instead.')
@@ -156,17 +134,6 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
             </div>
           </div>
 
-          <!-- Letterhead: the template the AI chose; the user can switch it -->
-          <div class="mt-3 flex flex-wrap items-center gap-2 text-[13px]">
-            <label for="canvas-template" class="flex items-center gap-1.5 text-ink-2"><FIcon name="layout" :size="14" /> Template</label>
-            <select id="canvas-template" v-model="templateChoice" class="input h-9 min-h-0 w-auto max-w-full py-0 text-[13px]">
-              <option value="">No letterhead</option>
-              <option v-for="t in docTemplates.templates.value" :key="t.id" :value="t.id">{{ t.name }}{{ t.is_default ? ' (default)' : '' }}</option>
-            </select>
-            <span v-if="active.template && !overrides[active.id] && template" class="text-xs text-ink-2">Chosen by the assistant</span>
-            <span v-else-if="!docTemplates.templates.value.length" class="text-xs text-ink-2">An administrator can add templates in Organization Settings.</span>
-          </div>
-
           <!-- One tab per canvas in the conversation -->
           <nav v-if="canvases.length > 1" class="-mx-1 mt-3 flex gap-1 overflow-x-auto px-1 pb-0.5" aria-label="Canvases in this conversation">
             <button
@@ -186,11 +153,8 @@ onBeforeUnmount(() => window.removeEventListener('keydown', onKey))
         <!-- Body -->
         <div class="min-h-0 flex-1 overflow-y-auto px-5 py-6 sm:px-7">
           <template v-if="view === 'preview'">
-            <DocumentSheet v-if="template" :title="active.title" :markdown="active.content" :template="template" :org-name="org.name" :logo-url="template.show_logo ? org.logo_url : null" />
-            <template v-else>
-              <article class="fv-prose" v-html="html" />
-              <p class="mt-8 border-t border-line/70 pt-3 text-center text-xs text-ink-2 italic">{{ FLOWVISION_NOTE }}</p>
-            </template>
+            <article class="fv-prose" v-html="html" />
+            <p class="mt-8 border-t border-line/70 pt-3 text-center text-xs text-ink-2 italic">{{ FLOWVISION_NOTE }}</p>
           </template>
           <pre v-else class="mono rounded-2xl border border-line bg-white/70 p-4 whitespace-pre-wrap text-ink-body">{{ active.content }}</pre>
         </div>

@@ -23,7 +23,7 @@ export default defineApiHandler(async (event) => {
   // Permission first: an account that can't send back learns nothing else here.
   requirePermission(user, 'SEND_BACK_DOCUMENTS')
   const body = await readJson(event)
-  if (body.liaison_user_id) throw badRequest('The liaisons of the office it goes back to pick it up: don’t choose a messenger', { field: 'liaison_user_id' })
+  if (body.liaison_user_id) throw badRequest('The messengers of the office it goes back to will pick it up: don’t choose a messenger', { field: 'liaison_user_id' })
   const remarks = v.str(body, 'remarks', { max: 2000 })
   if (!(await Document.count({ where: { id: documentId, org_id: user.org_id, [Op.and]: [openableWhere(user)] } }))) throw notFound('Document')
 

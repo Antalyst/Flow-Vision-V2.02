@@ -20,7 +20,7 @@ export const PRIORITY_META: Record<Priority, { label: string; tone: Tone }> = {
 export const ROLE_META: Record<AccountType, { label: string; home: string; tone: Tone; description: string }> = {
   ADMIN: { label: 'Admin', home: '/client/dashboard', tone: 'primary', description: 'Administers the organization and submits documents' },
   DEPARTMENT_HEAD: { label: 'Department Head', home: '/employee/dashboard', tone: 'info', description: 'Leads an office: receives and routes its documents' },
-  STAFF: { label: 'Staff', home: '/staff/dashboard', tone: 'success', description: 'Approves at the final checkpoint; view-only elsewhere' },
+  STAFF: { label: 'Staff', home: '/staff/dashboard', tone: 'success', description: 'Approves at the last office; view-only elsewhere' },
   LIAISON: { label: 'Messenger', home: '/liaison/dashboard', tone: 'warning', description: 'Carries documents between offices' },
 }
 
@@ -65,7 +65,7 @@ export const EVENT_LABELS: Record<string, string> = {
   DELIVERY_FAILED: 'Delivery failed',
   APPROVAL_REQUESTED: 'Awaiting final approval',
   APPROVED: 'Approved',
-  RETURNED: 'Returned to submitter',
+  RETURNED: 'Returned to uploader',
   COMPLETED: 'Completed',
   MESSENGER_REASSIGNED: 'Messenger reassigned',
   PASSED_TO_STAFF: 'Passed to the next staff',
@@ -102,9 +102,11 @@ export const formatDate = (v?: string | null) => (v ? dateFmt.format(new Date(v)
 export const formatDateTime = (v?: string | null) => (v ? dateTimeFmt.format(new Date(v)) : '—')
 export const formatTime = (v?: string | null) => (v ? timeFmt.format(new Date(v)) : '—')
 
-export function timeAgo(v?: string | null) {
+/** `now` (ms): the clock to compare with — pass useNow()'s value in components, so it stays current. */
+export function timeAgo(v?: string | null, now = Date.now()) {
   if (!v) return '—'
-  const seconds = Math.round((Date.now() - new Date(v).getTime()) / 1000)
+  // A message stamped by the server a moment "ahead" of a slightly slow device clock is just now, not in the future.
+  const seconds = Math.max(0, Math.round((now - new Date(v).getTime()) / 1000))
   if (seconds < 45) return 'just now'
   const minutes = Math.round(seconds / 60)
   if (minutes < 60) return `${minutes}m ago`
@@ -220,7 +222,7 @@ export function whereabouts(doc: FlowDocument) {
     case 'COMPLETED':
       return 'Approved and completed'
     case 'RETURNED':
-      return 'Returned to submitter'
+      return 'Returned to uploader'
     default:
       return ''
   }

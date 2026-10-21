@@ -40,8 +40,8 @@ export interface LoadedImage {
 const imageCache = new Map<string, Promise<LoadedImage | null>>()
 
 /**
- * An image of our own (organization logo, template signature) as bytes and a data URL, with its
- * size — for printing and for Word / PDF exports. Null when it can't be loaded. Cached per URL
+ * An image of our own (the organization logo) as bytes and a data URL, with its size — for
+ * printing QR labels. Null when it can't be loaded. Cached per URL
  * (the URLs carry a version, so a replaced image gets a new one).
  */
 export function loadImage(url: string | null | undefined): Promise<LoadedImage | null> {
@@ -74,10 +74,4 @@ export function loadImage(url: string | null | undefined): Promise<LoadedImage |
     pending.then((r) => r || imageCache.delete(url))
   }
   return pending
-}
-
-/** Fit an image inside a box, keeping its proportions. */
-export function fitImage(img: { width: number; height: number }, maxWidth: number, maxHeight: number) {
-  const scale = Math.min(maxWidth / img.width, maxHeight / img.height, 1)
-  return { width: Math.round(img.width * scale), height: Math.round(img.height * scale) }
 }

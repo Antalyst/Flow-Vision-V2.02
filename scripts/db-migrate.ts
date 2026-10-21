@@ -120,9 +120,11 @@ try {
     }
   }
   // …plus AI Assistant chat history (conversations before their messages, for the foreign key),
-  // file_blobs, where uploads are kept on hosts with a read-only disk (Vercel), and Organization
-  // Settings' working hours, holidays and document templates (also: scripts/db-add-settings.ts).
-  for (const table of ['document_types', 'knowledge_files', 'document_files', 'ai_conversations', 'ai_messages', 'file_blobs', 'organization_settings', 'organization_holidays', 'document_templates', 'department_head_assignments', 'internal_routes', 'internal_route_steps', 'document_internal_transactions']) {
+  // file_blobs, where uploads are kept on hosts with a read-only disk (Vercel), Organization
+  // Settings' working hours and holidays (also: scripts/db-add-settings.ts), and the one-time
+  // administrator bootstrap marker. (Document templates were removed: a legacy document_templates
+  // table is left alone — see database/migrations/2026-10-24-drop-document-templates.sql.)
+  for (const table of ['document_types', 'knowledge_files', 'document_files', 'ai_conversations', 'ai_messages', 'file_blobs', 'organization_settings', 'organization_holidays', 'department_head_assignments', 'internal_routes', 'internal_route_steps', 'document_internal_transactions', 'system_bootstrap']) {
     if (await hasTable(table)) {
       console.log(`[migrate] ${table} already present`)
       continue
@@ -256,6 +258,19 @@ try {
     )
     console.log('[migrate] document_tracking times now keep milliseconds')
   }
+  // Millisecond message times (database/migrations/2026-10-25-message-precision.sql).
+  const [msgPrecision] = await connection.query(
+    "SELECT DATETIME_PRECISION AS p FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'messages' AND COLUMN_NAME IN ('created_at','updated_at','read_at')",
+    [env.db.name],
+  )
+  if ((msgPrecision as Array<{ p: number }>).some((r) => Number(r.p) !== 3)) {
+    await connection.query(
+      "ALTER TABLE `messages` MODIFY `read_at` timestamp(3) NULL DEFAULT NULL COMMENT 'Read timestamp', " +
+        'MODIFY `created_at` timestamp(3) NOT NULL DEFAULT current_timestamp(3), ' +
+        'MODIFY `updated_at` timestamp(3) NOT NULL DEFAULT current_timestamp(3) ON UPDATE current_timestamp(3)',
+    )
+    console.log('[migrate] message times now keep milliseconds')
+  }
   if (!(await hasColumn('department_head_assignments', 'note'))) {
     await connection.query("ALTER TABLE `department_head_assignments` ADD COLUMN `note` varchar(500) DEFAULT NULL COMMENT 'Why: e.g. removed because the grantor lost the permission' AFTER `changed_by`")
     console.log('[migrate] department_head_assignments.note added')
@@ -269,6 +284,14 @@ try {
     }
   }
   console.log(`[migrate] default document types added for ${(orgsWithout as unknown[]).length} organization(s)`)
+  // An installation that already has an administrator is bootstrapped: `npm run admin:bootstrap`
+  // must never add a second initial one (database/migrations/2026-10-24-admin-bootstrap.sql).
+  const [bootstrapped] = await connection.query(
+    "INSERT IGNORE INTO `system_bootstrap` (`id`, `org_id`, `admin_user_id`, `method`, `completed_at`) " +
+      "SELECT 1, u.org_id, u.id, 'EXISTING', u.created_at FROM users u WHERE u.account_type = 'ADMIN' ORDER BY u.created_at ASC, u.id ASC LIMIT 1",
+  )
+  console.log((bootstrapped as { affectedRows: number }).affectedRows ? '[migrate] existing administrator recorded: the bootstrap is closed' : '[migrate] bootstrap marker unchanged')
+
   // A scanned code must point at exactly one document.
   if (!(await hasIndex('qr_codes', 'uq_qr_codes_data'))) {
     await connection.query('ALTER TABLE `qr_codes` ADD UNIQUE KEY `uq_qr_codes_data` (`qr_code_data`)')

@@ -30,7 +30,7 @@ type ManagedType = 'STAFF' | 'LIAISON' | 'DEPARTMENT_HEAD'
 // offices ("Manage staff and messengers"), and assigns delegated Department Heads there ("Assign Department
 // Heads") — any number per office or umbrella office, each with only the permissions granted here.
 const ROLES: Record<ManagedType, { label: string; description: string }> = {
-  STAFF: { label: 'Staff', description: 'Uploads and tracks their own documents; approves at the final checkpoint' },
+  STAFF: { label: 'Staff', description: 'Uploads and tracks their own documents; approves at the last office' },
   LIAISON: { label: 'Messenger', description: 'Picks up and delivers documents between offices' },
   DEPARTMENT_HEAD: { label: 'Department Head (delegated)', description: 'Assigned by you, with only the permissions you grant below' },
 }
@@ -44,11 +44,19 @@ const auth = useAuthStore()
 const { busy, run } = useAction()
 const officeName = computed(() => auth.user?.office?.name ?? 'your office')
 
-const { data, refresh } = await useAsyncData('employee-team', () => api.get<{ data: TeamMember[] }>('/users', { managed: 1 }))
+const { data, refresh: refreshList, status, error } = await useAsyncData('employee-team', () => api.get<{ data: TeamMember[] }>('/users', { managed: 1 }), { lazy: true })
 // The umbrella offices of this office (none for an umbrella office itself).
-const { data: officeData } = await useAsyncData('employee-team-offices', () => api.get<{ data: Office[] }>('/offices'))
+const { data: officeData } = await useAsyncData('employee-team-offices', () => api.get<{ data: Office[] }>('/offices'), { lazy: true })
 const umbrellas = computed(() => (officeData.value?.data ?? []).filter((o) => o.parent_office_id && o.parent_office_id === auth.user?.office?.id))
 const refreshUmbrellas = () => {}
+
+// Two views: everyone in this office and its umbrella offices (by office), and the accounts this account manages.
+const view = ref<'offices' | 'managed'>('offices')
+const browser = ref<{ refresh: () => void } | null>(null)
+function refresh() {
+  refreshList()
+  browser.value?.refresh()
+}
 const officeChoices = computed(() => [
   ...(auth.user?.office ? [{ id: auth.user.office.id, label: `${auth.user.office.name} (your office)` }] : []),
   ...umbrellas.value.map((u) => ({ id: u.id, label: `↳ ${u.name} · ${u.code}` })),
@@ -193,6 +201,14 @@ async function copyCredentials() {
       </template>
     </PageHeader>
 
+    <div class="mb-5 flex w-fit gap-1 rounded-xl bg-ink/[0.04] p-1" role="tablist" aria-label="View">
+      <button class="tab" role="tab" :class="view === 'offices' && 'tab-active'" :aria-selected="view === 'offices'" @click="view = 'offices'"><FIcon name="grid" :size="15" /> By office</button>
+      <button class="tab" role="tab" :class="view === 'managed' && 'tab-active'" :aria-selected="view === 'managed'" @click="view = 'managed'"><FIcon name="list" :size="15" /> Accounts I manage</button>
+    </div>
+
+    <OfficeUsersBrowser v-if="view === 'offices'" ref="browser" @edit="(m) => openForm(m as unknown as TeamMember)" />
+
+    <template v-else>
     <div class="mb-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
       <div class="flex gap-1 overflow-x-auto rounded-xl bg-ink/[0.04] p-1" role="tablist">
         <button class="tab shrink-0" :class="!filter && 'tab-active'" role="tab" :aria-selected="!filter" @click="filter = ''">All {{ data?.data.length ?? 0 }}</button>
@@ -214,7 +230,12 @@ async function copyCredentials() {
       </div>
     </div>
 
-    <section class="card overflow-hidden">
+    <PageSkeleton v-if="status === 'pending' && !data" variant="list" :rows="5" :messages="['Loading accounts…']" />
+    <div v-else-if="error && !data" class="card card-pad flex flex-wrap items-center justify-between gap-3 text-sm text-danger-ink" role="alert">
+      {{ apiErrorMessage(error, 'Could not load the accounts') }}
+      <button class="btn btn-sm btn-ghost" @click="refreshList()"><FIcon name="refresh-cw" :size="14" /> Try again</button>
+    </div>
+    <section v-else class="card overflow-hidden">
       <EmptyState
         v-if="!members.length"
         icon="users"
@@ -251,6 +272,7 @@ async function copyCredentials() {
         </li>
       </ul>
     </section>
+    </template>
 
     <AppModal
       :open="formOpen"

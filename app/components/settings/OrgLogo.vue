@@ -1,5 +1,5 @@
 <script setup lang="ts">
-/** Organization Settings: the logo printed on every QR label and on document templates. */
+/** Organization Settings: the logo printed on every QR label. */
 const props = defineProps<{ logoUrl: string | null }>()
 const emit = defineEmits<{ changed: [] }>()
 
@@ -23,7 +23,7 @@ async function upload(file?: File | null) {
 async function remove() {
   await ui.confirm({
     title: 'Remove the logo?',
-    body: 'QR labels and document templates print without a logo until you upload another one.',
+    body: 'QR labels print without a logo until you upload another one.',
     confirmLabel: 'Remove logo',
     busyLabel: 'Removing…',
     action: async () => {
@@ -42,7 +42,7 @@ function done() {
 <template>
   <section class="card card-pad max-w-2xl">
     <h2 class="text-lg">Logo</h2>
-    <p class="mt-1 text-sm text-ink-body">Printed at the top of every document QR label and on the letterhead of your document templates. PNG or JPG, up to 2 MB.</p>
+    <p class="mt-1 text-sm text-ink-body">Printed at the top of every document QR label. PNG or JPG, up to 2 MB.</p>
     <div class="mt-5 flex flex-col gap-4 sm:flex-row sm:items-center">
       <div class="grid size-28 shrink-0 place-items-center overflow-hidden rounded-2xl border border-dashed border-line bg-white">
         <img v-if="props.logoUrl" :src="props.logoUrl" alt="Organization logo" class="max-h-24 max-w-24 object-contain" />

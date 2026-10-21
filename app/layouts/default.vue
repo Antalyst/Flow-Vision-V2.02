@@ -40,6 +40,7 @@ const ROLE_NAV: Record<AccountType, NavGroup[]> = {
         { to: '/client/offices', label: 'Offices', icon: 'grid' },
         { to: '/client/accounts', label: 'Team accounts', icon: 'users' },
         { to: '/client/settings', label: 'Organization settings', icon: 'settings' },
+        { to: '/client/backups', label: 'Backups', icon: 'hard-drive' },
       ],
     },
   ],

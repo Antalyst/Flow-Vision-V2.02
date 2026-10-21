@@ -1,8 +1,9 @@
 import { canOpenPage } from '#shared/page-access'
 import type { AccountType } from '~/types'
 
-// "/" is the public landing page; signed-in users skip it and land in their portal.
-const PUBLIC_PATHS = ['/', '/login', '/register']
+// "/" is the public landing page; signed-in users skip it and land in their portal. There is no
+// public sign-up: the administrator creates every account (see scripts/admin-bootstrap.ts).
+const PUBLIC_PATHS = ['/', '/login']
 
 // Each portal is reserved for one account type; shared pages (documents, messages, issues…) are open to all.
 const PORTALS: Record<string, AccountType> = {

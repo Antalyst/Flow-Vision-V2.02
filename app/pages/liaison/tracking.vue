@@ -21,7 +21,7 @@ const since = computed(() => {
   d.setDate(d.getDate() - (range.value === '7d' ? 7 : 30))
   return d.toISOString()
 })
-const { data, refresh } = await useAsyncData('liaison-me', () => api.get<LiaisonMe>('/liaisons/me', { since: since.value }), { watch: [range] })
+const { data, refresh, status, error } = await useAsyncData('liaison-me', () => api.get<LiaisonMe>('/liaisons/me', { since: since.value }), { watch: [range], lazy: true })
 useLiveRefresh(refresh)
 
 const failDoc = ref<FlowDocument | null>(null)
@@ -42,6 +42,8 @@ const rangeLabel = computed(() => ({ today: 'Today', '7d': 'Last 7 days', '30d':
 <template>
   <div class="fv-rise">
     <PageHeader eyebrow="D3 · Performance" title="My deliveries" description="What you're carrying, what you've delivered, and how you're tracking." />
+
+    <AsyncState :status="status" :ready="Boolean(data)" :error="error" variant="dashboard" what="your deliveries" :messages="['Loading your deliveries…']" @retry="refresh()">
 
     <template v-if="data">
       <section class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -98,6 +100,7 @@ const rangeLabel = computed(() => ({ today: 'Today', '7d': 'Last 7 days', '30d':
       </section>
     </template>
 
+    </AsyncState>
     <AppModal :open="Boolean(failDoc)" title="Report failed delivery" :description="failDoc ? `${failDoc.tracking_number} goes back to ${failDoc.currentOffice?.name ?? failDoc.origin?.name}.` : undefined" width="sm" @close="failDoc = null">
       <label class="field-label" for="fail">What happened?</label>
       <textarea id="fail" v-model="failRemarks" rows="3" class="input" placeholder="e.g. Receiving office closed" maxlength="2000" />

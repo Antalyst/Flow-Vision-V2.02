@@ -130,7 +130,7 @@ export async function serializeActor(user: Actor) {
       ? {
           id: user.organization.id,
           name: user.organization.name,
-          // Printed on QR labels and document letterheads (Organization Settings).
+          // Printed on QR labels (Organization Settings).
           logo_url: imageKey(user.organization.logo_url) ? `/api/org/logo?v=${imageVersion(user.organization.logo_url)}` : null,
         }
       : null,

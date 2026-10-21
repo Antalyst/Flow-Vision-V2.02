@@ -14,7 +14,7 @@ interface OfficeDashboard {
 const api = useApi()
 const auth = useAuthStore()
 
-const { data, refresh } = await useAsyncData('employee-dashboard', () => api.get<OfficeDashboard>('/dashboard'))
+const { data, refresh, status, error } = await useAsyncData('employee-dashboard', () => api.get<OfficeDashboard>('/dashboard'), { lazy: true })
 useLiveRefresh(refresh)
 
 const pickupDoc = ref<FlowDocument | null>(null)
@@ -22,12 +22,14 @@ const pickupDoc = ref<FlowDocument | null>(null)
 
 <template>
   <div class="fv-rise">
-    <PageHeader :eyebrow="auth.user?.office?.parent?.name ?? auth.user?.office?.code" :title="auth.user?.office?.name ?? 'Your office'" description="Documents assigned to your office and what each one needs next.">
+    <PageHeader :eyebrow="auth.user?.office?.parent?.name ?? auth.user?.office?.code" :title="auth.user?.office?.name ?? 'Your office'" description="Documents in your office and the next action for each.">
       <template #actions>
         <NuxtLink to="/employee/queue" class="btn btn-ghost"><FIcon name="inbox" :size="16" /> Open queue</NuxtLink>
         <NuxtLink to="/scan" class="btn btn-primary"><FIcon name="maximize" :size="16" /> Scan to receive</NuxtLink>
       </template>
     </PageHeader>
+
+    <AsyncState :status="status" :ready="Boolean(data)" :error="error" variant="dashboard" what="your office" :messages="['Loading your office…']" @retry="refresh()">
 
     <div v-if="!data?.office" class="card">
       <EmptyState icon="alert-circle" title="No office assigned" description="Ask your organization's admin to assign you to an office." />
@@ -35,10 +37,10 @@ const pickupDoc = ref<FlowDocument | null>(null)
 
     <template v-else>
       <section class="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <StatCard label="Incoming" :value="data.counts.incoming" icon="navigation" tone="info" hint="On the way to you" to="/employee/queue?tab=incoming" />
-        <StatCard label="Awaiting receipt" :value="data.counts.awaiting_receipt" icon="inbox" :tone="data.counts.awaiting_receipt ? 'warning' : 'neutral'" to="/employee/queue?tab=arrived" />
-        <StatCard label="In process" :value="data.counts.in_process" icon="edit-3" tone="primary" hint="Received, ready to release" to="/employee/queue?tab=process" />
-        <StatCard label="Awaiting pickup" :value="data.counts.awaiting_pickup" icon="package" tone="neutral" :hint="`${data.counts.received_today} received today`" to="/employee/queue?tab=pickup" />
+        <StatCard label="Incoming" :value="data.counts.incoming" icon="navigation" tone="info" hint="On the way" to="/employee/queue?tab=incoming" />
+        <StatCard label="To receive" :value="data.counts.awaiting_receipt" icon="inbox" :tone="data.counts.awaiting_receipt ? 'warning' : 'neutral'" to="/employee/queue?tab=arrived" />
+        <StatCard label="In progress" :value="data.counts.in_process" icon="edit-3" tone="primary" hint="Received, not yet released" to="/employee/queue?tab=process" />
+        <StatCard label="Pending pickup" :value="data.counts.awaiting_pickup" icon="package" tone="neutral" :hint="`${data.counts.received_today} received today`" to="/employee/queue?tab=pickup" />
       </section>
 
       <OfficeForecast />
@@ -46,17 +48,17 @@ const pickupDoc = ref<FlowDocument | null>(null)
       <section class="mt-8">
         <h2 class="mb-4 text-lg">At your office now</h2>
         <div v-if="!data.documents.length" class="card">
-          <EmptyState icon="check-circle" title="Desk is clear" description="Nothing is waiting at your office. New arrivals appear here instantly." />
+          <EmptyState icon="check-circle" title="No documents waiting" description="No documents are waiting at your office. New documents appear here right away." />
         </div>
         <div v-else class="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <DocumentCard v-for="d in data.documents" :key="d.id" :doc="d" show-submitter>
             <template #actions>
               <NuxtLink v-if="!d.received_at" to="/scan" class="btn btn-sm btn-primary"><FIcon name="maximize" :size="14" /> Scan to receive</NuxtLink>
               <button v-else-if="!d.pickup_requested_at && d.next_office_name && releasesDocument(d, auth.user?.id)" class="btn btn-sm btn-primary" @click="pickupDoc = d">
-                <FIcon name="truck" :size="14" /> Release → {{ d.next_office_name }}
+                <FIcon name="truck" :size="14" /> Release to {{ d.next_office_name }}
               </button>
-              <ToneBadge v-else-if="!d.pickup_requested_at && d.next_office_name" tone="info" icon="user">Received by {{ fullName(d.received_by) }} — they release it</ToneBadge>
-              <NuxtLink v-else-if="!d.next_office_name" :to="`/documents/${d.id}#approval`" class="btn btn-sm btn-success"><FIcon name="check-square" :size="14" /> Last office — review &amp; approve</NuxtLink>
+              <ToneBadge v-else-if="!d.pickup_requested_at && d.next_office_name" tone="info" icon="user">Received by {{ fullName(d.received_by) }}, who will release it</ToneBadge>
+              <NuxtLink v-else-if="!d.next_office_name" :to="`/documents/${d.id}#approval`" class="btn btn-sm btn-success"><FIcon name="check-square" :size="14" /> Last office — review and approve</NuxtLink>
               <ToneBadge v-else tone="warning" icon="package">Waiting for {{ d.liaison ? fullName(d.liaison) : 'messenger' }}</ToneBadge>
               <NuxtLink :to="`/documents/${d.id}`" class="btn btn-sm btn-ghost ml-auto">Details</NuxtLink>
             </template>
@@ -70,7 +72,7 @@ const pickupDoc = ref<FlowDocument | null>(null)
           <NuxtLink to="/documents" class="btn btn-sm btn-ghost">All office documents <FIcon name="arrow-right" :size="14" /></NuxtLink>
         </div>
         <div v-if="!data.staff_uploads?.length" class="card">
-          <EmptyState icon="users" title="Nothing from your staff yet" description="Documents your office staff submit appear here so you can track them." />
+          <EmptyState icon="users" title="No uploads from your staff yet" description="Documents submitted by your staff appear here." />
         </div>
         <div v-else class="grid grid-cols-1 gap-3 lg:grid-cols-2">
           <DocumentCard v-for="d in data.staff_uploads" :key="d.id" :doc="d" show-submitter />
@@ -78,6 +80,7 @@ const pickupDoc = ref<FlowDocument | null>(null)
       </section>
     </template>
 
+    </AsyncState>
     <RequestPickupModal :open="Boolean(pickupDoc)" :doc="pickupDoc" @close="pickupDoc = null" @requested="refresh()" />
   </div>
 </template>
