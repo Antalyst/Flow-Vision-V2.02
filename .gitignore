@@ -13,6 +13,8 @@ dist
 /uploads/
 /database/
 /docs/
+/tests/
+/uploads/
 
 # Environment files (copy .env.example → .env)
 .env
