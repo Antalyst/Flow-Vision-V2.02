@@ -93,7 +93,15 @@ const ROLE_NAV: Record<AccountType, NavGroup[]> = {
         { to: '/documents/new', label: 'Upload document', icon: 'plus-circle' },
       ],
     },
-    { id: 'team', title: 'Team', items: [{ to: '/staff/team', label: 'Messengers', icon: 'users', hidden: !auth.user?.office }] },
+    {
+      id: 'team',
+      title: 'Team',
+      items: [
+        { to: '/staff/team', label: 'Messengers', icon: 'users', hidden: !auth.user?.office },
+        // The office's internal routes: read-only, or editable for staff the Department Head made responsible.
+        { to: '/staff/internal-routes', label: 'Internal routes', icon: 'shuffle', hidden: !auth.user?.office },
+      ],
+    },
   ],
   LIAISON: [
     { id: 'overview', title: null, items: [{ to: '/liaison/dashboard', label: 'Pickups', icon: 'home' }] },
@@ -182,10 +190,7 @@ onMounted(() => connectRealtime())
         <FIcon name="menu" />
       </button>
       <NuxtLink :to="auth.homePath"><BrandMark :size="28" /></NuxtLink>
-      <NuxtLink to="/notifications" class="relative grid size-10 place-items-center rounded-lg hover:bg-ink/5" aria-label="Notifications">
-        <FIcon name="bell" />
-        <span v-if="notifications.unread" class="absolute top-1.5 right-1.5 size-2.5 rounded-full bg-terracotta ring-2 ring-cream" />
-      </NuxtLink>
+      <NotificationBell />
     </header>
 
     <!-- Drawer overlay (mobile) -->
@@ -220,9 +225,18 @@ onMounted(() => connectRealtime())
       <div v-if="!rail" class="glass-dark mx-4 mb-4 rounded-xl px-3.5 py-3">
         <p class="truncate text-[13px] font-medium">{{ auth.user?.organization?.name }}</p>
         <!-- Role and office: shown for messengers only. -->
-        <p class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-night-text-2">
-          <span class="size-1.5 rounded-full" :class="auth.role ? TONE_DOT[ROLE_META[auth.role].tone] : ''" />
-          {{ auth.role && ROLE_META[auth.role].label }}<template v-if="auth.user?.office"> · {{ auth.user.office.name }}</template>
+        <p class="mt-0.5 flex items-center gap-1.5 truncate text-xs text-night-text-2" :title="auth.user?.office?.name">
+          <span class="size-1.5 shrink-0 rounded-full" :class="auth.role ? TONE_DOT[ROLE_META[auth.role].tone] : ''" />
+          <span class="truncate">{{ auth.role && ROLE_META[auth.role].label }}<template v-if="auth.user?.office"> · {{ auth.user.office.name }}</template></span>
+        </p>
+        <!-- An umbrella office: the main office it belongs to. -->
+        <p
+          v-if="auth.user?.office?.parent"
+          class="mt-1 flex items-center gap-1.5 text-xs text-night-text-2"
+          :title="`Umbrella office of ${auth.user.office.parent.name}`"
+        >
+          <FIcon name="corner-down-right" :size="12" class="shrink-0" aria-hidden="true" />
+          <span class="truncate">Under {{ auth.user.office.parent.name }}</span>
         </p>
       </div>
 
@@ -292,6 +306,10 @@ onMounted(() => connectRealtime())
 
     <main class="relative z-10 transition-[padding] duration-300 ease-out" :class="collapsedCookie ? 'lg:pl-[76px]' : 'lg:pl-[272px]'">
       <div class="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-8 sm:py-10">
+        <!-- Desktop: the bell above every page (the mobile top bar has its own). One bell per screen size. -->
+        <div v-if="auth.user" class="-mt-4 mb-2 hidden justify-end lg:flex">
+          <NotificationBell />
+        </div>
         <NuxtLink
           v-if="auth.user?.must_change_password && route.path !== '/profile'"
           to="/profile"

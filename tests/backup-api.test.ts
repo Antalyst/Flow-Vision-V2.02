@@ -103,6 +103,10 @@ if (!overview.body?.enabled) {
   const row = overview.body.backups.find((x: any) => x.name === job?.result?.name)
   check(row && row.bytes > 0 && row.created_at && row.summary?.tables > 0, 'history shows time, size and contents', row)
   if (overview.body.copy) check(job?.result?.copy?.ok === row?.copies?.length > 0, 'copy status in the job matches the history')
+  check(overview.body.encryption?.configured === row?.encrypted, 'the backup is encrypted exactly when a passphrase is configured', overview.body.encryption)
+  const recorded = overview.body.health?.full?.last_run
+  check(recorded?.detail?.name === job?.result?.name && ['ok', 'incomplete'].includes(recorded?.status), 'the job is recorded in the backup health', recorded)
+  if (overview.body.copy) check(overview.body.health?.copy?.last_run?.detail?.name === job?.result?.name, '…and so is its copy', overview.body.health?.copy)
 
   console.log('Verify and download')
   const v = await admin.call('POST', `/backups/${row.name}/verify`)
@@ -112,9 +116,11 @@ if (!overview.body?.enabled) {
   const tmp = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'fv-bk-dl-')), `${row.name}.zip`)
   await pipeline(Readable.fromWeb(dl.body as any), fs.createWriteStream(tmp))
   check(fs.statSync(tmp).size === row.bytes, 'the download is complete (size matches)', `${fs.statSync(tmp).size} vs ${row.bytes}`)
-  if (!row.encrypted) {
+  // An encrypted one needs the passphrase: --passphrase-file=<the server's BACKUP_PASSPHRASE_FILE>.
+  if (!row.encrypted || argv['passphrase-file']) {
     const { verifyPackage } = await import('../server/lib/backup/package.ts')
-    const res = await verifyPackage(tmp)
+    const passphrase = row.encrypted ? fs.readFileSync(argv['passphrase-file']!, 'utf8').replace(/\r?\n$/, '') : null
+    const res = await verifyPackage(tmp, { passphrase, scratchDir: path.dirname(tmp) })
     check(res.ok, 'the downloaded package verifies on its own (every checksum and the dump)', res.errors)
   }
   fs.rmSync(path.dirname(tmp), { recursive: true, force: true })

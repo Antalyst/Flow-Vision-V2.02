@@ -25,6 +25,7 @@
     "test:team-offices-api": "node tests/team-offices-api.test.ts",
     "test:messages-api": "node tests/messages-api.test.ts",
     "test:backup": "node --test --test-concurrency=1 tests/backup.test.ts",
+    "test:backup-kit": "node --test tests/backup-recovery-kit.test.ts",
     "test:office-ai": "node --test tests/office-ai.test.ts",
     "test:umbrella-types": "node --test tests/umbrella-types.test.ts",
     "test:delegated-heads": "node --test tests/delegated-heads.test.ts",
@@ -35,7 +36,17 @@
     "test:knowledge-upload": "node --test --test-timeout=240000 tests/knowledge-upload.test.ts",
     "test:knowledge-upload-api": "node tests/knowledge-upload-api.test.ts",
     "test:roles-api": "node tests/roles-api.test.ts",
-    "test:office-workflow-api": "node tests/office-workflow-api.test.ts"
+    "test:office-workflow-api": "node tests/office-workflow-api.test.ts",
+    "test:document-origin": "node --test tests/document-origin.test.ts",
+    "test:document-origin-api": "node tests/document-origin-api.test.ts",
+    "test:dashboard-api": "node tests/dashboard-api.test.ts",
+    "test:document-origin-migration": "node --test tests/document-origin-migration.test.ts",
+    "test:office-performance": "node --test tests/office-performance.test.ts",
+    "test:umbrella-performance-api": "node tests/umbrella-performance-api.test.ts",
+    "test:organization-performance-api": "node tests/organization-performance-api.test.ts",
+    "test:notification-bell-api": "node tests/notification-bell-api.test.ts",
+    "test:routing-mode": "node --test tests/routing-mode.test.ts",
+    "test:internal-process-api": "node tests/internal-process-api.test.ts"
   },
   "dependencies": {
     "@fontsource-variable/inter": "^5.3.0",

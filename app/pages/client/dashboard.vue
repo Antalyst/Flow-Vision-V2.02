@@ -128,6 +128,9 @@ const pipelineTotal = computed(() => pipeline.value.reduce((n, p) => n + p.count
 
       <ForecastCarousel ref="forecast" v-model:office="officeId" class="mt-6" />
 
+      <!-- Every main office and umbrella office of the organization (monitoring only). -->
+      <UmbrellaPerformance mode="organization" class="mt-8" />
+
       <div class="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start">
         <section class="card card-pad">
           <div class="mb-4 flex items-center justify-between">

@@ -195,10 +195,15 @@ export function deadlineState(doc: FlowDocument): { tone: Tone; label: string; p
   return { tone: 'success', label: `${formatDuration(remaining)} left` }
 }
 
+/** The origin as a place (an office, or the organization of an admin upload); null when it wasn't recorded. */
+export function originPlace(doc: Pick<FlowDocument, 'origin'> | null | undefined) {
+  return doc?.origin && doc.origin.kind !== 'NOT_RECORDED' ? doc.origin.name : null
+}
+
 /** Short human description of where a document is and what it is waiting for. */
 export function whereabouts(doc: FlowDocument) {
   // At step 0 (the origin) an admin upload is at the organization, not at an office.
-  const office = doc.currentOffice?.name ?? doc.origin?.name ?? 'the office'
+  const office = doc.currentOffice?.name ?? originPlace(doc) ?? 'the office'
   switch (doc.status) {
     case 'CREATED':
       return 'Not yet submitted'
@@ -211,7 +216,7 @@ export function whereabouts(doc: FlowDocument) {
       if (doc.pickup_requested_at) return `Released to ${doc.liaison ? fullName(doc.liaison) : 'a messenger'} at ${office}, waiting for pickup`
       if (!doc.received_at) {
         // Just submitted: the paper is still with its origin (the uploader's office or organization).
-        if (doc.status === 'START' && doc.origin && doc.origin.office_id !== doc.current_office_id) return `Sent from ${doc.origin.name}, waiting for ${office} to scan it in`
+        if (doc.status === 'START' && originPlace(doc) && doc.origin!.office_id !== doc.current_office_id) return `Sent from ${originPlace(doc)}, waiting for ${office} to scan it in`
         return `At ${office}, waiting to be scanned in`
       }
       return `In review at ${office}${doc.received_by ? ` — received by ${fullName(doc.received_by)}` : ''}`

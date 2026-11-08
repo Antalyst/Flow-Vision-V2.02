@@ -8,7 +8,8 @@ export default defineApiHandler(async (event) => {
   if (query.unread === 'true') where.is_read = false
   const limit = Math.min(Number(query.limit) || 30, 100)
   const [rows, unread] = await Promise.all([
-    Notification.findAll({ where, order: [['created_at', 'DESC']], limit }),
+    // Newest first. created_at has whole seconds, so ties (a burst of notifications) fall back to the insert order.
+    Notification.findAll({ where, order: [['created_at', 'DESC'], ['id', 'DESC']], limit }),
     Notification.count({ where: { user_id: user.id, is_read: false } }),
   ])
   return { data: rows.map(notificationDto), unread }

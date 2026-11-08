@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import fsp from 'node:fs/promises'
 import path from 'node:path'
 import { spawn } from 'node:child_process'
-import { assertSpace, BackupError, labelOf, readConfig, type BackupConfig } from './config.ts'
+import { acquireLock, assertSpace, BackupError, keyFileProblem, labelOf, readConfig, type BackupConfig } from './config.ts'
 import { buildBackup } from './full.ts'
 import { verifyPackage } from './package.ts'
 import type { DbTarget } from './database.ts'
@@ -13,7 +13,9 @@ import type { DbTarget } from './database.ts'
  * snapshot is a logical full recovery point; Restic stores only what changed (deduplication).
  * Repository and password use Restic's own settings: RESTIC_REPOSITORY (a folder on the external
  * drive) and RESTIC_PASSWORD_FILE. Forgetting old snapshots is refused until the newest one has
- * passed a restore test and the repository check passes.
+ * passed a restore test and the repository check passes, and while it lacks referenced files (older
+ * snapshots may be the only ones that still hold them). Snapshot and forget hold the backup lock
+ * from start to end, so two of them never share the staging folder.
  */
 
 const HOST = 'flowvision'
@@ -35,6 +37,7 @@ function repoSettings() {
   if (!repo) throw new BackupError('NOT_CONFIGURED', 'RESTIC_REPOSITORY is not set (e.g. a folder on the external drive)')
   if (!process.env.RESTIC_PASSWORD_FILE?.trim()) throw new BackupError('NOT_CONFIGURED', 'RESTIC_PASSWORD_FILE is not set (a file holding the repository password, kept off the backup drive too)')
   if (!fs.existsSync(process.env.RESTIC_PASSWORD_FILE)) throw new BackupError('NOT_CONFIGURED', 'RESTIC_PASSWORD_FILE does not exist')
+  if (!fs.readFileSync(process.env.RESTIC_PASSWORD_FILE, 'utf8').trim()) throw new BackupError('NOT_CONFIGURED', 'RESTIC_PASSWORD_FILE is empty')
   const local = path.isAbsolute(repo)
   if (local && !fs.existsSync(path.parse(repo).root)) throw new BackupError('DRIVE_MISSING', `The Restic repository's drive ${path.parse(repo).root} is not connected`)
   return { repo, local }
@@ -56,8 +59,9 @@ function restic(cfg: BackupConfig, args: string[], { json = false } = {}) {
 }
 
 const statusFile = (cfg: BackupConfig) => path.join(cfg.dir!, 'restic-status.json')
-type Status = { verified: Record<string, string>; last_snapshot: string | null }
-async function readStatus(cfg: BackupConfig): Promise<Status> {
+/** verified: snapshot id → when it passed its restore test; incomplete: snapshot id → referenced files it lacks. */
+type Status = { verified: Record<string, string>; incomplete?: Record<string, number>; last_snapshot: string | null }
+export async function readStatus(cfg: BackupConfig): Promise<Status> {
   return JSON.parse((await fsp.readFile(statusFile(cfg), 'utf8').catch(() => null)) ?? '{"verified":{},"last_snapshot":null}')
 }
 async function writeStatus(cfg: BackupConfig, s: Status) {
@@ -72,6 +76,9 @@ export async function initRepository(cfg = readConfig()) {
     await restic(cfg, ['cat', 'config'])
     return { created: false, label: local ? labelOf(repo) : 'remote repository' }
   } catch {
+    // A new repository: its password must be one that can be typed again on another computer.
+    const problem = keyFileProblem(fs.readFileSync(process.env.RESTIC_PASSWORD_FILE!), 1)
+    if (problem) throw new BackupError('PASSPHRASE', `RESTIC_PASSWORD_FILE ${problem}. Write it again as one line of plain text before creating the repository.`)
     if (local) await fsp.mkdir(path.dirname(repo), { recursive: true })
     await restic(cfg, ['init'])
     return { created: true, label: local ? labelOf(repo) : 'remote repository' }
@@ -126,10 +133,12 @@ export async function snapshot(opts: { db: DbTarget; cfg?: BackupConfig; onStep?
     throw new BackupError('REPO_MISSING', `No Restic repository at ${local ? labelOf(repo) : 'RESTIC_REPOSITORY'}: run \`npm run backup -- init\` once (and check the drive is connected)`)
   })
   const staging = path.join(cfg.dir, 'restic-staging')
-  const built = await buildBackup({ db: opts.db, cfg, form: 'dir', dirTarget: staging, onStep: step })
-  if (built.kind !== 'dir') throw new Error('unexpected')
   const verifyDir = path.join(cfg.dir, `.restic-verify-${Date.now()}`)
+  const release = await acquireLock(cfg.dir, 'snapshot')
   try {
+    const built = await buildBackup({ db: opts.db, cfg, form: 'dir', dirTarget: staging, locked: true, onStep: step })
+    if (built.kind !== 'dir') throw new Error('unexpected')
+    const filesMissing = built.manifest.files.missing.length
     const logical = built.verify.bytes
     if (local) await assertSpace(path.parse(repo).root, logical, cfg.reserveBytes, 'Restic repository drive')
     const now = new Date()
@@ -153,22 +162,38 @@ export async function snapshot(opts: { db: DbTarget; cfg?: BackupConfig; onStep?
     const r = await restoreSnapshot(cfg, summary.snapshot_id, verifyDir)
     const status = await readStatus(cfg)
     status.verified[summary.snapshot_id] = new Date().toISOString()
+    status.incomplete = { ...status.incomplete, ...(filesMissing && { [summary.snapshot_id]: filesMissing }) }
     status.last_snapshot = summary.snapshot_id
     await writeStatus(cfg, status)
-    return { snapshot: String(summary.snapshot_id).slice(0, 8), tags, verified: r.verify.ok, logicalBytes: logical, addedBytes: Number(summary.data_added ?? 0) }
+    return { snapshot: String(summary.snapshot_id).slice(0, 8), tags, verified: r.verify.ok, filesMissing, logicalBytes: logical, addedBytes: Number(summary.data_added ?? 0) }
   } finally {
     await fsp.rm(verifyDir, { recursive: true, force: true }).catch(() => {})
     await fsp.rm(staging, { recursive: true, force: true }).catch(() => {})
+    await release()
   }
 }
 
 /** Retention (BACKUP_RETAIN_DAILY / WEEKLY / MONTHLY, each at least 1, so the newest snapshot always stays). */
-export async function forget(cfg = readConfig()) {
+export async function forget(cfg = readConfig(), { allowIncomplete = false } = {}) {
+  if (!cfg.dir) throw new BackupError('NOT_CONFIGURED', 'BACKUP_DIR is not set')
+  const release = await acquireLock(cfg.dir, 'forget')
+  try {
+    return await forgetLocked(cfg, allowIncomplete)
+  } finally {
+    await release()
+  }
+}
+
+async function forgetLocked(cfg: BackupConfig, allowIncomplete: boolean) {
   const list = await snapshots(cfg)
   if (!list.length) throw new BackupError('NOTHING', 'No snapshots yet')
   const newest = list.at(-1)!
   const status = await readStatus(cfg)
   if (!status.verified[newest.id]) throw new BackupError('NOT_VERIFIED', 'The newest snapshot has not passed a restore test; nothing is removed until it has (run a new snapshot)')
+  const missing = status.incomplete?.[newest.id] ?? 0
+  if (missing && !allowIncomplete) {
+    throw new BackupError('INCOMPLETE', `The newest snapshot lacks ${missing} referenced file(s) (see its manifest); older snapshots may be the only copies, so nothing is removed. Restore those files, or run forget with --allow-incomplete once you have checked.`)
+  }
   await restic(cfg, ['check'])
   const { daily, weekly, monthly } = cfg.retain
   const out = await restic(cfg, ['forget', '--host', HOST, '--tag', TAG, '--keep-daily', String(daily), '--keep-weekly', String(weekly), '--keep-monthly', String(monthly), '--prune'], { json: true })

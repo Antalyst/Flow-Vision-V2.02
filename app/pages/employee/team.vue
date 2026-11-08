@@ -22,6 +22,8 @@ interface TeamMember {
   assigned_by: string | null
   assigned_at: string | null
   permissions: DhPermission[] | null
+  /** STAFF made responsible for the office's internal routes. */
+  manages_internal_routes?: boolean
 }
 
 type ManagedType = 'STAFF' | 'LIAISON' | 'DEPARTMENT_HEAD'
@@ -89,7 +91,11 @@ const form = reactive({
   status: 'ACTIVE',
   page_access: null as string[] | null,
   permissions: [] as DhPermission[],
+  manages_internal_routes: false,
 })
+// A head who manages the office's internal routes (of a main office) can make its staff responsible for them.
+const canGrantInternal = computed(() => !auth.user?.office?.parent_office_id && myPermissions.value.includes('MANAGE_INTERNAL_ROUTES'))
+const showInternalGrant = computed(() => Boolean(editing.value) && canGrantInternal.value && form.account_type === 'STAFF' && form.office_id === auth.user?.office?.id)
 
 /** Roles this account may add (its own permissions decide). */
 const roleChoices = computed(() => allowedRoles.value)
@@ -120,6 +126,7 @@ function openForm(member?: TeamMember) {
     page_access: member?.page_access ? [...member.page_access] : null,
     // A new delegate starts with the everyday document permissions ticked; nothing is granted until saved.
     permissions: member?.permissions ? [...member.permissions] : SUGGESTED_DELEGATE_PERMISSIONS.filter((p) => myPermissions.value.includes(p)),
+    manages_internal_routes: Boolean(member?.manages_internal_routes),
   })
   formOpen.value = true
 }
@@ -148,8 +155,12 @@ const credentials = ref<{ email: string; password: string } | null>(null)
 
 async function save() {
   // The server checks the office (own office or one of its umbrella offices) and every permission granted.
-  const { permissions, ...rest } = form
-  const body: Record<string, unknown> = { ...rest, ...(form.account_type === 'DEPARTMENT_HEAD' && { permissions }) }
+  const { permissions, manages_internal_routes, ...rest } = form
+  const body: Record<string, unknown> = {
+    ...rest,
+    ...(form.account_type === 'DEPARTMENT_HEAD' && { permissions }),
+    ...(showInternalGrant.value && { manages_internal_routes }),
+  }
   if (editing.value) {
     const ok = await run('save', () => api.patch(`/users/${editing.value!.id}`, body), 'Account updated')
     if (ok) {
@@ -262,6 +273,7 @@ async function copyCredentials() {
           <div class="flex flex-wrap items-center gap-2 sm:w-[260px] sm:justify-end">
             <ToneBadge :tone="roleMeta(m.account_type).tone" dot>{{ ROLES[m.account_type as ManagedType]?.label ?? roleMeta(m.account_type).label }}</ToneBadge>
             <ToneBadge v-if="m.account_type === 'STAFF' && m.office?.is_final_checkpoint" tone="success" icon="shield">Approver</ToneBadge>
+            <ToneBadge v-if="m.manages_internal_routes" tone="primary" icon="shuffle">Internal routes</ToneBadge>
             <span v-if="m.liaisonProfile" class="text-xs text-ink-2">{{ m.liaisonProfile.success_rate }}% success</span>
           </div>
           <div class="flex gap-1">
@@ -342,6 +354,15 @@ async function copyCredentials() {
           </div>
           <p v-if="!form.permissions.length" class="mt-1 text-xs text-amber-ink">With no permissions this Department Head can only view the office’s documents.</p>
         </fieldset>
+        <label v-if="showInternalGrant" class="flex items-start gap-2 rounded-xl border border-line/70 p-3 text-sm">
+          <input v-model="form.manages_internal_routes" type="checkbox" class="mt-0.5 size-4" />
+          <span>
+            <span class="font-medium">Responsible for internal routes</span>
+            <span class="block text-xs text-ink-2">
+              Can create, edit and deactivate {{ auth.user?.office?.name ?? 'your office' }}’s internal routes on their Internal routes page. Other staff only view them. You keep managing them too.
+            </span>
+          </span>
+        </label>
         <PageAccessPicker v-model="form.page_access" :role="form.account_type" />
       </form>
       <template #footer>

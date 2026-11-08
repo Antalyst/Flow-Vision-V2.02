@@ -62,14 +62,23 @@ interface OfficeForecastData {
   suggestion: string | null
 }
 
+/**
+ * `part`: 'office' = the office forecast (with the period controls); 'staff' = the staff workload cards, so a
+ * page can show them further down. Both share the period and the data (one request). 'all' = both together.
+ */
+const props = withDefaults(defineProps<{ part?: 'all' | 'office' | 'staff' }>(), { part: 'all' })
+const showOffice = computed(() => props.part !== 'staff')
+const showStaff = computed(() => props.part !== 'office')
+
 const api = useApi()
-const days = ref(30)
-const horizon = ref(7)
+const days = useState('employee-office-forecast-days', () => 30)
+const horizon = useState('employee-office-forecast-horizon', () => 7)
 const { data, pending, refresh, error } = await useAsyncData('employee-office-forecast', () => api.get<OfficeForecastData>('/forecast/office', { days: days.value, horizon: horizon.value }), {
   watch: [days, horizon],
   lazy: true,
 })
-useLiveRefresh(refresh)
+// One live refresh per page: the staff part follows the office part's data.
+if (props.part !== 'staff') useLiveRefresh(refresh)
 
 const f = computed(() => (data.value?.office ? data.value : null))
 
@@ -97,17 +106,19 @@ const maxLoad = computed(() => Math.max(1, ...(f.value?.staff ?? []).map((s) => 
 </script>
 
 <template>
-  <section v-if="pending && !data" class="mt-8" role="status" aria-label="Loading the forecast">
+  <!-- Loading and errors belong to the office part; the staff part appears once there is data. -->
+  <section v-if="showOffice && pending && !data" class="mt-8" role="status" aria-label="Loading the forecast">
     <div class="skeleton h-5 w-40" aria-hidden="true" />
     <div class="mt-4 grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-4" aria-hidden="true">
       <div v-for="i in 4" :key="i" class="card card-pad"><div class="skeleton h-3.5 w-28" /><div class="skeleton mt-4 h-8 w-16" /><div class="skeleton mt-4 h-14 w-full rounded-xl" /></div>
     </div>
   </section>
-  <section v-else-if="error && !data" class="card card-pad mt-8 flex flex-wrap items-center justify-between gap-3 text-sm text-danger-ink" role="alert">
+  <section v-else-if="showOffice && error && !data" class="card card-pad mt-8 flex flex-wrap items-center justify-between gap-3 text-sm text-danger-ink" role="alert">
     {{ apiErrorMessage(error, 'Could not load the forecast') }}
     <button class="btn btn-sm btn-ghost" @click="refresh()"><FIcon name="refresh-cw" :size="14" /> Try again</button>
   </section>
   <section v-else-if="f" class="mt-8">
+    <template v-if="showOffice">
     <div class="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div>
         <h2 class="flex items-center gap-2 text-lg"><FIcon name="trending-up" :size="18" /> Forecast</h2>
@@ -237,10 +248,12 @@ const maxLoad = computed(() => Math.max(1, ...(f.value?.staff ?? []).map((s) => 
       </article>
     </div>
 
-    <!-- Staff -->
-    <article class="card card-pad mt-4">
+    </template>
+
+    <!-- Staff (part="staff" shows it on its own, further down the page) -->
+    <article v-if="showStaff" class="card card-pad" :class="showOffice ? 'mt-4' : ''">
       <div class="mb-4 flex flex-wrap items-start justify-between gap-2">
-        <div>
+        <div class="min-w-0 flex-1">
           <h3 class="text-base font-semibold">Staff workload forecast</h3>
           <p class="text-xs text-ink-2">For each staff member of your office (Department Heads are not included): what they hold now plus what they are predicted to receive in the next {{ f.range.horizon }} days</p>
         </div>

@@ -6,10 +6,11 @@ import zlib from 'node:zlib'
 import { PassThrough } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import archiver from 'archiver'
-import { acquireLock, assertSpace, BackupError, checkDestination, labelOf, NAME_RE, readConfig, readPassphrase, type BackupConfig } from './config.ts'
-import { encryptStream } from './crypto.ts'
+import { acquireLock, assertSpace, BackupError, checkDestination, encryptionPassphrase, labelOf, NAME_RE, plainAllowed, readConfig, readPassphrase, type BackupConfig } from './config.ts'
+import { encryptStream, isEncryptedHeader } from './crypto.ts'
 import { blobIndex, connect, dumpTool, fileReferences, inventory, rowCounts, runDump, serverInfo, type DbTarget, type FileRef } from './database.ts'
 import { FORMAT, FORMAT_VERSION, hasher, isStorageKey, openPackage, restoreGuide, sha256File, verifyPackage, verifyReader, type Manifest, type ManifestFile } from './package.ts'
+import { installRecoveryKit } from './recovery-kit.ts'
 
 /**
  * Full backups: a consistent database dump plus every uploaded file the database points at, packed,
@@ -145,6 +146,8 @@ export interface BuildOptions {
   dirTarget?: string
   copy?: boolean
   strict?: boolean
+  /** The caller already holds the backup lock (a Restic snapshot keeps it until the snapshot is stored and tested). */
+  locked?: boolean
   onStep?: (step: string) => void
 }
 
@@ -160,7 +163,9 @@ export async function buildBackup(opts: BuildOptions) {
   const step = opts.onStep ?? (() => {})
   if (!cfg.dir) throw new BackupError('NOT_CONFIGURED', 'BACKUP_DIR is not set: choose a backup folder (see docs/BACKUP_AND_RECOVERY.md)')
   await checkDestination(cfg.dir, 'Backup folder (BACKUP_DIR)')
-  const release = await acquireLock(cfg.dir, form === 'zip' ? 'full backup' : 'snapshot')
+  // Before anything is written: a package is encrypted, or (a local test database only) explicitly allowed plain.
+  const passphrase = form === 'zip' ? await encryptionPassphrase(cfg, opts.db.host) : null
+  const release = opts.locked ? async () => {} : await acquireLock(cfg.dir, form === 'zip' ? 'full backup' : 'snapshot')
   const id = crypto.randomUUID()
   const createdAt = new Date()
   const work = path.join(cfg.dir, `.work-${id}`)
@@ -170,7 +175,6 @@ export async function buildBackup(opts: BuildOptions) {
   try {
     await removeLeftovers(cfg.dir)
     const name = await uniqueName(cfg.dir, createdAt)
-    const passphrase = form === 'zip' ? await readPassphrase(cfg) : null
     const warnings: string[] = []
 
     step('Connecting to the database')
@@ -329,11 +333,16 @@ export async function buildBackup(opts: BuildOptions) {
       partial = encPartial
       await pipeline(fs.createReadStream(zipPartial), encryptStream(passphrase), fs.createWriteStream(encPartial))
       await fsyncFile(encPartial)
+      const head = Buffer.alloc(8)
+      const fd = await fsp.open(encPartial, 'r')
+      await fd.read(head, 0, 8, 0).finally(() => fd.close())
+      if (!isEncryptedHeader(head)) throw new BackupError('ENCRYPTION_FAILED', 'The package was not encrypted; it is not kept')
       await fsp.rm(zipPartial, { force: true })
       finalExt = '.zip.fvenc'
     }
 
     step('Verifying the package')
+    // Encrypted: this decrypts it with the passphrase, so a package that can't be opened is never kept.
     const v = await verifyPackage(partial, { passphrase, scratchDir: cfg.dir })
     if (!v.ok) throw new BackupError('VERIFY_FAILED', `The new package failed verification: ${v.errors.slice(0, 5).join('; ')}`)
     if (opts.strict && v.warnings.length) throw new BackupError('WARNINGS', `Strict mode: ${v.warnings.join('; ')}`)
@@ -377,7 +386,7 @@ export async function buildBackup(opts: BuildOptions) {
       copy.attempted = true
       copy.destination = labelOf(cfg.copyDir)
       try {
-        await copyToDestination(cfg, name, { locked: true })
+        await copyToDestination(cfg, name, { locked: true, allowPlain: plainAllowed(cfg, opts.db.host) })
         copy.ok = true
       } catch (err) {
         copy.error = (err as Error).message
@@ -477,14 +486,16 @@ export async function verifyStored(cfg: BackupConfig, name: string) {
 /**
  * Copy a backup to BACKUP_COPY_DIR (e.g. the external drive): to a hidden partial file first,
  * flushed to disk, read back and compared by SHA-256, and only then renamed into place. Existing
- * files there are never deleted or overwritten.
+ * backups there are never deleted or overwritten. Only encrypted packages go there (`allowPlain`:
+ * a local test database, see plainAllowed), next to the recovery kit that opens them without this app.
  */
-export async function copyToDestination(cfg: BackupConfig, name: string, { locked = false } = {}) {
+export async function copyToDestination(cfg: BackupConfig, name: string, { locked = false, allowPlain = false } = {}) {
   if (!cfg.dir || !cfg.copyDir) throw new BackupError('NOT_CONFIGURED', 'BACKUP_COPY_DIR is not set')
   const src = packagePath(cfg, name)
   const sidecar = await readSidecar(cfg, name)
   if (!src || !sidecar) throw new BackupError('NOT_FOUND', 'No such backup (or its record is missing)')
   if (sidecar.status === 'FAILED') throw new BackupError('NOT_VERIFIED', 'This backup failed verification; it is not copied')
+  if (!src.endsWith('.fvenc') && !allowPlain) throw new BackupError('NOT_ENCRYPTED', 'This backup is not encrypted, and unencrypted backups are never copied to the second destination. Make a new (encrypted) backup.')
   const dest = await checkDestination(cfg.copyDir, 'Second destination (BACKUP_COPY_DIR)')
   const release = locked ? async () => {} : await acquireLock(cfg.dir, 'copy')
   const target = path.join(cfg.copyDir, path.basename(src))
@@ -509,6 +520,7 @@ export async function copyToDestination(cfg: BackupConfig, name: string, { locke
         throw new BackupError(code === 'ENOSPC' ? 'NO_SPACE' : 'COPY_FAILED', `Copy to ${dest.label} failed (${code ?? (err as Error).message}); the destination keeps only complete backups`)
       }
     }
+    await installRecoveryKit(cfg.copyDir)
     const entry = { destination: dest.label, verified_at: new Date().toISOString(), sha256: srcSha }
     sidecar.copies = [...sidecar.copies.filter((c) => c.destination !== dest.label), entry]
     await writeJsonAtomic(path.join(cfg.dir, `${name}.json`), sidecar)

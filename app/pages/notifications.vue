@@ -4,6 +4,7 @@ import type { AppNotification } from '~/types'
 useHead({ title: 'Notifications · FlowVision' })
 
 const notifications = useNotificationsStore()
+const ui = useUiStore()
 // The list is loaded by the route middleware; refresh it when the page is opened.
 onMounted(() => notifications.load().catch(() => {}))
 
@@ -43,9 +44,27 @@ const groups = computed(() => {
   return out
 })
 
+// Read only once the server has it; on failure the notification stays unread and nothing opens.
 async function open(n: AppNotification) {
-  notifications.markRead(n)
+  try {
+    await notifications.markRead(n)
+  } catch (err) {
+    ui.error('Couldn’t mark the notification read', apiErrorMessage(err))
+    return
+  }
   if (n.link) await navigateTo(n.link)
+}
+
+const markingAll = ref(false)
+async function markAllRead() {
+  markingAll.value = true
+  try {
+    await notifications.markAllRead()
+  } catch (err) {
+    ui.error('Couldn’t mark all notifications read', apiErrorMessage(err))
+  } finally {
+    markingAll.value = false
+  }
 }
 </script>
 
@@ -53,7 +72,7 @@ async function open(n: AppNotification) {
   <div class="fv-rise mx-auto max-w-3xl">
     <PageHeader eyebrow="Collaborate" title="Notifications" :description="notifications.unread ? `${notifications.unread} unread` : 'You are all caught up.'">
       <template #actions>
-        <button v-if="notifications.unread" class="btn btn-ghost" @click="notifications.markAllRead()"><FIcon name="check-circle" :size="16" /> Mark all read</button>
+        <button v-if="notifications.unread" class="btn btn-ghost" :disabled="markingAll" @click="markAllRead()"><FIcon name="check-circle" :size="16" /> Mark all read</button>
       </template>
     </PageHeader>
 

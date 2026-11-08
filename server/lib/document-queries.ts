@@ -28,11 +28,22 @@ export const currentVisit = (column: string, doc = 'documents') =>
  */
 export const sendBackSql = (doc = 'documents') => `LEFT(SUBSTRING_INDEX(${currentVisit('notes', doc)}, '"send_back_to":', -1), 38)`
 
+/**
+ * The document started at the organization itself (an admin upload): no origin office, and the visit that
+ * logged its first submission is a step-0 visit without an office. Read from that history, never from the
+ * uploader's account as it is now.
+ */
+export const organizationOriginSql = (doc = 'documents') =>
+  `(${doc}.origin_office_id IS NULL AND EXISTS (SELECT 1 FROM document_tracking t WHERE t.document_id = ${doc}.id AND t.step_number = 0 AND t.office_id IS NULL AND t.notes LIKE '%"type":"SUBMITTED"%'))`
+
 // Computed per row so lists can show progress, destination, SLA and visit state without extra round trips.
 export const documentAttributes: any = {
   include: [
-    [sequelize.literal('(SELECT COUNT(*) FROM route_steps rs WHERE rs.route_id = documents.route_id)'), 'total_steps'],
+    // An internal process (no global route) has one checkpoint: its own office.
+    [sequelize.literal('(CASE WHEN documents.route_id IS NULL THEN 1 ELSE (SELECT COUNT(*) FROM route_steps rs WHERE rs.route_id = documents.route_id) END)'), 'total_steps'],
     [sequelize.literal('(SELECT r.name FROM organization_routes r WHERE r.id = documents.route_id)'), 'route_name'],
+    // The internal route an internal process follows (2026-11-06-internal-process.sql); NULL for a global route.
+    [sequelize.literal('(SELECT ir.name FROM internal_routes ir WHERE ir.id = documents.internal_route_id)'), 'internal_process_name'],
     [
       sequelize.literal(
         '(SELECT o.name FROM route_steps rs JOIN offices o ON o.id = rs.office_id WHERE rs.route_id = documents.route_id AND rs.step_number = documents.current_step_number + 1)',
@@ -46,9 +57,13 @@ export const documentAttributes: any = {
     [sequelize.literal(currentVisit('updated_at')), 'visit_updated_at'],
     [sequelize.literal('(SELECT q.qr_code_data FROM qr_codes q WHERE q.document_id = documents.id)'), 'qr_code'],
     [sequelize.literal('(SELECT COUNT(*) FROM document_files f WHERE f.document_id = documents.id)'), 'file_count'],
-    // Origin = where the uploader belongs: their assigned office, or (ADMIN, no office) the organization.
-    [sequelize.literal('(SELECT o.id FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office_id'],
-    [sequelize.literal('(SELECT o.name FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office_name'],
+    // Origin = only the office recorded at first submission (documents.origin_office_id), never the uploader's
+    // office as it is now. An admin upload starts at the organization; anything else without one is "not recorded".
+    [sequelize.literal('(SELECT o.name FROM offices o WHERE o.id = documents.origin_office_id)'), 'origin_name'],
+    // Its parent, when the origin is an umbrella office.
+    [sequelize.literal('(SELECT p.id FROM offices o JOIN offices p ON p.id = o.parent_office_id WHERE o.id = documents.origin_office_id)'), 'origin_main_id'],
+    [sequelize.literal('(SELECT p.name FROM offices o JOIN offices p ON p.id = o.parent_office_id WHERE o.id = documents.origin_office_id)'), 'origin_main_name'],
+    [sequelize.literal(`(CASE WHEN ${organizationOriginSql()} THEN 1 ELSE 0 END)`), 'origin_is_organization'],
     [sequelize.literal('(SELECT g.name FROM organizations g WHERE g.id = documents.org_id)'), 'org_name'],
     // Flagged and sent back to the previous office (see sendBackSql), and issues still open on it.
     [sequelize.literal(sendBackSql()), 'send_back_raw'],

@@ -276,6 +276,23 @@ try {
     console.log('[migrate] department_head_assignments.note added')
   }
 
+  // A document's origin office, kept apart from where it is now. The migration file itself runs (it checks
+  // what exists, stops on a column, index or foreign key defined differently, and backfills only what its
+  // history proves), so local databases and the hosted one get exactly the same steps.
+  {
+    const file = path.resolve(import.meta.dirname, '../database/migrations/2026-10-31-document-origin.sql')
+    const origin = await mysql.createConnection({ host: env.db.host, port: env.db.port, user: env.db.user, password: env.db.password, database: env.db.name, multipleStatements: true })
+    try {
+      const [results] = await origin.query(await fs.readFile(file, 'utf8'))
+      const rows = (results as unknown[]).flat() as Array<Record<string, unknown>>
+      for (const r of rows.filter((x) => x && 'outcome' in x)) console.log(`[migrate] document origins · ${r.outcome}: ${r.documents}`)
+      const done = rows.find((x) => x && 'origins_backfilled' in x)
+      console.log(`[migrate] document origins backfilled: ${done?.origins_backfilled ?? 0}`)
+    } finally {
+      await origin.end()
+    }
+  }
+
   // Every organization starts with the default document types (only those that have none yet).
   const [orgsWithout] = await connection.query('SELECT g.id, g.created_by FROM organizations g WHERE NOT EXISTS (SELECT 1 FROM document_types t WHERE t.org_id = g.id)')
   for (const org of orgsWithout as Array<{ id: string; created_by: string | null }>) {

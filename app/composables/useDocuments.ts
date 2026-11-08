@@ -1,8 +1,10 @@
-import type { Approval, DocumentFileInfo, DocumentPermissions, FlowDocument, InternalRun, OrgRoute, QrInfo, RoutingSlip, RoutingVisit, TrackingEvent } from '~/types'
+import type { Approval, DocumentFileInfo, DocumentPermissions, FlowDocument, InternalRoute, InternalRun, OrgRoute, QrInfo, RoutingMode, RoutingSlip, RoutingVisit, TrackingEvent } from '~/types'
 
 export interface DocumentDetail {
   document: FlowDocument
   route: OrgRoute | null
+  /** An internal process: the internal route it follows (in place of an organization route). */
+  internal_process: InternalRoute | null
   tracking: TrackingEvent[]
   routing: RoutingVisit[]
   approvals: Approval[]
@@ -71,8 +73,17 @@ export function useDocuments() {
     },
     update: (id: string, form: FormData) => api.patch<{ document: FlowDocument }>(`/documents/${id}`, form),
     remove: (id: string) => api.del(`/documents/${id}`),
-    /** `routeId` switches the document to another Document Route as it is (re)submitted. */
-    submit: (id: string, routeId?: string | null) => api.post<{ document: FlowDocument }>(`/documents/${id}/submit`, routeId ? { route_id: routeId } : undefined),
+    /**
+     * (Re)submit. `routing` switches it first: to another Document Route (GLOBAL + route_id), or to an internal
+     * process of the uploader's office (INTERNAL + internal_route_id). Omitted = the route it has.
+     */
+    submit: (id: string, routing?: { mode: RoutingMode; routeId?: string | null; internalRouteId?: string | null } | null) =>
+      api.post<{ document: FlowDocument }>(
+        `/documents/${id}/submit`,
+        routing ? { routing_mode: routing.mode, ...(routing.mode === 'GLOBAL' ? { route_id: routing.routeId || undefined } : { internal_route_id: routing.internalRouteId }) } : undefined,
+      ),
+    /** The internal routes this account can choose for an Internal Process at upload (its own office's). */
+    internalProcessRoutes: () => api.get<{ available: boolean; reason: string | null; office: { id: string; name: string; code: string } | null; data: InternalRoute[] }>('/documents/internal-process-routes'),
     /** Assign (or, before pickup, reassign) the free messenger who carries it to the next office. */
     requestPickup: (id: string, body: { liaison_user_id: string; remarks?: string }) =>
       api.post<{ document: FlowDocument; reassigned: boolean }>(`/documents/${id}/pickup-request`, body),
@@ -86,6 +97,8 @@ export function useDocuments() {
     advanceInternalRoute: (id: string, remarks?: string) => api.post<{ document: FlowDocument; completed: boolean }>(`/documents/${id}/internal-advance`, remarks ? { remarks } : {}),
     startTransit: (id: string) => api.post<{ document: FlowDocument }>(`/documents/${id}/transit`),
     failDelivery: (id: string, remarks: string) => api.post<{ document: FlowDocument }>(`/documents/${id}/fail-delivery`, { remarks }),
+    /** ADMIN: record the origin of an older document whose origin wasn't recorded (once). */
+    recordOrigin: (id: string, body: { office_id: string; reason: string }) => api.post<{ document: FlowDocument }>(`/documents/${id}/origin`, body),
     addNote: (id: string, remarks: string) => api.post(`/documents/${id}/notes`, { remarks }),
 
     /** The session cookie authorizes the download, so a plain link works. */

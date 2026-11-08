@@ -121,7 +121,10 @@ export const RouteStep = define(
 export const Document = define('documents', {
   id: uuidPk,
   org_id: { type: DataTypes.CHAR(36), allowNull: false },
-  route_id: { type: DataTypes.CHAR(36), allowNull: false },
+  // Exactly one of the two (chk_documents_one_route, 2026-11-06-internal-process.sql): a global Document
+  // Route, or — an internal process — one internal route of the uploader's office. NULL route_id = internal.
+  route_id: DataTypes.CHAR(36),
+  internal_route_id: DataTypes.CHAR(36),
   title: { type: DataTypes.STRING(255), allowNull: false },
   description: DataTypes.TEXT,
   category: DataTypes.STRING(100),
@@ -130,6 +133,10 @@ export const Document = define('documents', {
   submitted_by: { type: DataTypes.CHAR(36), allowNull: false },
   current_step_number: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
   current_office_id: DataTypes.CHAR(36),
+  // The uploader's office at first submission (an umbrella office, or a main office); never moves with
+  // the document. NULL = an admin upload, a draft, or an older document whose origin wasn't recorded.
+  // ON DELETE RESTRICT: an office that is a document's origin can't be deleted (offices are deactivated).
+  origin_office_id: DataTypes.CHAR(36),
   target_completion_date: DataTypes.DATE,
   // "<uuid>/<original file name>" under UPLOAD_DIR — the folder keeps the original name
   file_url: DataTypes.STRING(500),
@@ -246,7 +253,11 @@ export const Notification = define(
     title: DataTypes.STRING(255),
     message: { type: DataTypes.TEXT, allowNull: false },
     is_read: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
-    read_at: DataTypes.DATE,
+    // Milliseconds, so the latest of several notifications created in the same second is known — once the
+    // columns are timestamp(3) (database/migrations/2026-11-04-notification-precision.sql, for review); until
+    // then the database keeps whole seconds and drops the rest.
+    read_at: DataTypes.DATE(3),
+    created_at: { type: DataTypes.DATE(3), allowNull: false },
     action_url: DataTypes.STRING(500),
   },
   createdOnly,
@@ -488,6 +499,7 @@ InternalRouteStep.belongsTo(InternalRoute, { foreignKey: 'route_id', as: 'route'
 InternalRouteStep.belongsTo(Office, { foreignKey: 'office_id', as: 'office' })
 
 Document.belongsTo(OrganizationRoute, { foreignKey: 'route_id', as: 'route' })
+Document.belongsTo(InternalRoute, { foreignKey: 'internal_route_id', as: 'internalRoute' })
 Document.belongsTo(Office, { foreignKey: 'current_office_id', as: 'currentOffice' })
 Document.belongsTo(User, { foreignKey: 'submitted_by', as: 'submitter' })
 Document.hasMany(DocumentTracking, { foreignKey: 'document_id', as: 'visits' })

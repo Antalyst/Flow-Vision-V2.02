@@ -59,6 +59,8 @@ export function connectRealtime() {
     notifications.received()
     ui.info(n.title, n.body, n.link ?? undefined)
   })
+  // Read in another tab or on another device: refresh the badge and the unread list from the database.
+  addHandler('notifications:changed', (payload: { unread?: number }) => notifications.changed(payload?.unread))
   addHandler('document:updated', (payload: { id: string; status: string }) => documents.changed(payload))
   open()
 }

@@ -132,8 +132,13 @@ const baseEnv = (): Env => {
     BACKUP_COPY_DIR: dirs.external,
     BACKUP_DUMP_BIN: DUMP_BIN,
     BACKUP_RESERVE_MB: '1',
+    // A throwaway database on this computer: plain packages are allowed here (and only here), so most tests can
+    // read the zip directly. The 'encryption is mandatory' tests below run without it.
+    BACKUP_ALLOW_UNENCRYPTED: 'true',
   }
 }
+/** Exit code of a backup that was made and verified but lacks referenced files (the fixture's "Lost one"). */
+const INCOMPLETE = 3
 function cli(args: string[], env: Env = {}, { killOn = null as RegExp | null } = {}) {
   return new Promise<{ code: number | null; out: string; killed: boolean }>((resolve) => {
     const child = spawn(process.execPath, [SCRIPT, ...args], { cwd: dirs.cwd, env: { ...baseEnv(), ...env }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
@@ -171,10 +176,12 @@ describe('full backup', () => {
 
   it('exports the database and the uploaded files into a verified package, copied and verified on the second drive', async () => {
     const r = await cli(['full'])
-    assert.equal(r.code, 0, r.out)
+    assert.equal(r.code, INCOMPLETE, r.out)
     noSecrets(r.out)
     assert.match(r.out, /status VERIFIED_WITH_WARNINGS/) // the one missing file
+    assert.match(r.out, /INCOMPLETE: 1 file\(s\)/)
     assert.match(r.out, /copied and verified on/)
+    for (const f of ['flowvision-recover.mjs', 'README.md']) assert.ok(fs.existsSync(path.join(dirs.external, 'RECOVERY-KIT', f)), `the recovery kit's ${f} is on the drive`)
     const [pkg] = packages()
     assert.ok(pkg)
     firstPackage = pkg!
@@ -297,15 +304,15 @@ describe('interruptions and concurrency', () => {
     assert.deepEqual(packages(), before.map(([p]) => p), 'no new package')
     for (const [p, h] of before) assert.equal(sha(path.join(dirs.local, p!)), h, 'earlier backups unchanged')
     const again = await cli(['full', '--no-copy'])
-    assert.equal(again.code, 0, again.out)
+    assert.equal(again.code, INCOMPLETE, again.out)
     assert.ok(!fs.readdirSync(dirs.local).some((f) => f.startsWith('.work-') || f.endsWith('.partial') || f === '.flowvision-backup.lock'), 'leftovers and the stale lock are gone')
   })
 
   it('two backups started together: one runs, the other is refused', async () => {
     const [a, b] = await Promise.all([cli(['full', '--no-copy']), cli(['full', '--no-copy'])])
     const codes = [a.code, b.code].sort()
-    assert.deepEqual(codes, [0, 1], `${a.out}\n---\n${b.out}`)
-    assert.match((a.code ? a : b).out, /BUSY/)
+    assert.deepEqual(codes, [1, INCOMPLETE], `${a.out}\n---\n${b.out}`)
+    assert.match((a.code === 1 ? a : b).out, /BUSY/)
   })
 })
 
@@ -372,7 +379,7 @@ describe('encryption', () => {
   it('an encrypted package hides its contents and verifies only with the passphrase', async () => {
     fs.writeFileSync(passFile, crypto.randomBytes(24).toString('base64url'))
     const r = await cli(['full', '--no-copy'], { BACKUP_PASSPHRASE_FILE: passFile })
-    assert.equal(r.code, 0, r.out)
+    assert.equal(r.code, INCOMPLETE, r.out)
     encName = packages().find((p) => p.endsWith('.fvenc'))!
     assert.ok(encName)
     const bytes = fs.readFileSync(path.join(dirs.local, encName))
@@ -469,7 +476,337 @@ describe('restore', () => {
   })
 })
 
-describe('versioned snapshots (Restic)', { skip: !RESTIC_BIN && 'set FV_TEST_RESTIC_BIN to run' }, () => {
+describe('uploads, changes and deletions while a backup runs', () => {
+  /** Run the CLI and, once the dump has started, do `action` at the same time (as users of the live app would). */
+  async function during(args: string[], action: () => Promise<void>) {
+    let started: () => void = () => {}
+    const dumpStarted = new Promise<void>((resolve) => (started = resolve))
+    const run = new Promise<{ code: number | null; out: string }>((resolve) => {
+      const child = spawn(process.execPath, [SCRIPT, ...args], { cwd: dirs.cwd, env: baseEnv(), stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true })
+      let out = ''
+      const take = (d: Buffer) => {
+        out += d
+        if (/Exporting the database/.test(out)) started()
+      }
+      child.stdout.on('data', take)
+      child.stderr.on('data', take)
+      child.on('close', (code) => resolve({ code, out }))
+    })
+    await dumpStarted
+    await action()
+    return run
+  }
+  const manifestOf = async (pkg: string) => JSON.parse((await (await unzipper.Open.file(path.join(dirs.local, pkg))).files.find((e) => e.path === 'manifest.json')!.buffer()).toString())
+  const restoreCheck = async (pkg: string, name: string) => {
+    restoreDbs.add(name)
+    return cli(['restore', '--package', pkg.replace(/\.zip$/, ''), '--files-dir', path.join(TMP, `files-${name}`)], restoreEnv(name))
+  }
+
+  it('documents uploaded during the backup: every record in the dump has its file; nothing missing is hidden', async () => {
+    const added: string[] = []
+    const late = `${uuid()}/row before its file.pdf`
+    const r = await during(['full', '--no-copy'], async () => {
+      // As the app does it: the file first, then the record.
+      for (let i = 0; i < 3; i++) {
+        const key = `${uuid()}/uploaded during backup ${i}.pdf`
+        await writeUpload(key, Buffer.concat([Buffer.from('%PDF-1.4\n'), crypto.randomBytes(5000)]))
+        await addDocument(`During ${i}`, key)
+        added.push(key)
+      }
+      // The worst case the app never produces: a record whose file only arrives after the backup.
+      await addDocument('Record before its file', late)
+    })
+    await writeUpload(late, Buffer.from('%PDF-1.4\nlate'))
+    assert.ok([INCOMPLETE].includes(r.code!), r.out)
+    const pkg = packages().at(-1)!
+    const m = await manifestOf(pkg)
+    const inPackage = new Set(m.files.in_package.map((f: { key: string }) => f.key))
+    assert.equal(inPackage.size, m.files.in_package.length, 'no key is packed twice')
+    for (const key of added) assert.ok(inPackage.has(key), `${key} is in the package`)
+    assert.ok(m.files.missing.some((f: { key: string }) => f.key === late), 'the record without its file is reported missing, by record id')
+    assert.match(r.out, /INCOMPLETE: 2 file\(s\)/)
+    const restored = await restoreCheck(pkg, `${DB}_during`)
+    assert.equal(restored.code, 0, restored.out)
+    assert.match(restored.out, /all checks passed/)
+    assert.match(restored.out, /already missing when the backup was made/)
+  })
+
+  it('a file rewritten while it is being copied is never packed half-written without a warning', async () => {
+    const victim = files.scan
+    const p = path.join(dirs.uploads, ...victim.key.split('/'))
+    const versions = new Set<string>([crypto.createHash('sha256').update(victim.data).digest('hex')])
+    let stop = false
+    const writer = (async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+      for (let i = 0; !stop; i++) {
+        const data = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47]), crypto.randomBytes(1024 * 1024 + (i % 7) * 4096)])
+        versions.add(crypto.createHash('sha256').update(data).digest('hex'))
+        await fsp.writeFile(p, data)
+      }
+    })()
+    const r = await during(['full', '--no-copy'], async () => {})
+    stop = true
+    await writer
+    await fsp.writeFile(p, victim.data)
+    const m = await manifestOf(packages().at(-1)!)
+    const entry = m.files.in_package.find((f: { key: string }) => f.key === victim.key)
+    const warned = /changed while it was copied/.test(r.out)
+    assert.ok(warned || versions.has(entry.sha256), 'either the copy is one complete version of the file, or the backup says it may not match')
+    const zip = await unzipper.Open.file(path.join(dirs.local, packages().at(-1)!))
+    const packed = await zip.files.find((e) => e.path === `files/${victim.key}`)!.buffer()
+    assert.equal(crypto.createHash('sha256').update(packed).digest('hex'), entry.sha256, 'the package holds exactly what its manifest says')
+  })
+
+  it('a document deleted (or its file replaced) during the backup is reported, and the package stays self-consistent', async () => {
+    const key = `${uuid()}/deleted during backup.pdf`
+    await writeUpload(key, Buffer.from('%PDF-1.4\ngone soon'))
+    const id = await addDocument('Deleted during backup', key)
+    const r = await during(['full', '--no-copy'], async () => {
+      await root.query('DELETE FROM document_tracking WHERE document_id = ?', [id])
+      await root.query('DELETE FROM document_files WHERE document_id = ?', [id])
+      await root.query('DELETE FROM documents WHERE id = ?', [id])
+      await fsp.rm(path.dirname(path.join(dirs.uploads, ...key.split('/'))), { recursive: true, force: true })
+    })
+    assert.ok([0, INCOMPLETE].includes(r.code!), r.out)
+    const pkg = packages().at(-1)!
+    const m = await manifestOf(pkg)
+    const packed = m.files.in_package.some((f: { key: string }) => f.key === key)
+    const missing = m.files.missing.find((f: { key: string }) => f.key === key)
+    // Copied before it was deleted, or reported (never silently dropped while the dump may still hold its record).
+    assert.ok(packed || missing, 'the file is either in the package or listed as missing')
+    if (missing) assert.equal(missing.reason, 'deleted while the backup ran')
+    const restored = await restoreCheck(pkg, `${DB}_deleted`)
+    assert.equal(restored.code, 0, restored.out)
+  })
+
+  it('unfinished (staged) uploads are not collected as files, and no key appears twice', async () => {
+    const staged = `${uuid()}/still uploading.pdf`
+    await root.query('INSERT INTO file_blobs (file_url, part, data, size, uploaded_by, complete) VALUES (?, 0, ?, 10, ?, 0)', [staged, Buffer.alloc(10, 1), ids.user])
+    const r = await cli(['full', '--no-copy'])
+    assert.equal(r.code, INCOMPLETE, r.out)
+    const m = await manifestOf(packages().at(-1)!)
+    const all = [...m.files.in_package, ...m.files.in_database, ...m.files.missing].map((f: { key: string }) => f.key)
+    assert.ok(!all.includes(staged), 'a staged upload is not a stored file')
+    assert.equal(new Set(all).size, all.length, 'every key once')
+    await root.query('DELETE FROM file_blobs WHERE file_url = ?', [staged])
+  })
+})
+
+describe('encryption is mandatory', () => {
+  const plainOff = { BACKUP_ALLOW_UNENCRYPTED: undefined }
+  const external = () => fs.readdirSync(dirs.external).filter((f) => /^flowvision_full_/.test(f))
+
+  it('without a passphrase file no backup is made, and nothing reaches the external drive', async () => {
+    const [before, onDrive] = [packages(), external()]
+    const r = await cli(['full'], plainOff)
+    assert.equal(r.code, 2, r.out)
+    assert.match(r.out, /ENCRYPTION_REQUIRED/)
+    assert.deepEqual(packages(), before)
+    assert.deepEqual(external(), onDrive)
+  })
+
+  it('BACKUP_ALLOW_UNENCRYPTED is ignored for a database that is not on this computer', async () => {
+    const r = await cli(['full'], { DB_HOST: 'db.example.invalid' })
+    assert.equal(r.code, 2, r.out)
+    assert.match(r.out, /ENCRYPTION_REQUIRED: BACKUP_ALLOW_UNENCRYPTED applies only/)
+  })
+
+  it('an unencrypted package is never copied to the second destination', async () => {
+    const plain = packages().find((p) => p.endsWith('.zip'))!
+    const fresh = path.join(TMP, 'external-plain')
+    fs.mkdirSync(fresh)
+    fs.writeFileSync(path.join(fresh, '.flowvision-backup-destination'), 'x')
+    const r = await cli(['copy', plain.replace(/\.zip$/, '')], { ...plainOff, BACKUP_COPY_DIR: fresh })
+    assert.equal(r.code, 1, r.out)
+    assert.match(r.out, /NOT_ENCRYPTED/)
+    assert.deepEqual(fs.readdirSync(fresh), ['.flowvision-backup-destination'])
+  })
+
+  it('a passphrase file that could not be typed again on another computer is refused before anything is written', async () => {
+    const pass = 'Correct-Horse-Battery-Staple-42'
+    const cases: Array<[string, Buffer, RegExp]> = [
+      ['bom', Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(pass)]), /byte-order mark/],
+      ['utf16', Buffer.concat([Buffer.from([0xff, 0xfe]), Buffer.from(`${pass}\r\n`, 'utf16le')]), /UTF-16/],
+      ['two-lines', Buffer.from(`${pass}\nsecond line\n`), /more than one line/],
+      ['trailing-space', Buffer.from(`${pass} \n`), /space/],
+      ['short', Buffer.from('short-pass\n'), /shorter than 16/],
+      ['empty', Buffer.from(''), /shorter than 16/],
+    ]
+    const before = packages()
+    for (const [name, bytes, why] of cases) {
+      const f = path.join(TMP, `pass-${name}.txt`)
+      fs.writeFileSync(f, bytes)
+      const r = await cli(['full', '--no-copy'], { ...plainOff, BACKUP_PASSPHRASE_FILE: f })
+      assert.equal(r.code, 1, `${name}: ${r.out}`)
+      assert.match(r.out, /PASSPHRASE/, name)
+      assert.match(r.out, why, name)
+      noSecrets(r.out)
+      assert.ok(!r.out.includes(pass), `${name}: the passphrase is never printed`)
+    }
+    assert.deepEqual(packages(), before)
+    // One line with a final line break (what Notepad and most editors save) is accepted.
+    const ok = path.join(TMP, 'pass-ok.txt')
+    fs.writeFileSync(ok, `${pass}\r\n`)
+    const r = await cli(['full', '--no-copy'], { ...plainOff, BACKUP_PASSPHRASE_FILE: ok })
+    assert.equal(r.code, INCOMPLETE, r.out)
+    assert.match(r.out, /encrypted\)/)
+  })
+
+  it('a backup encrypted earlier with a byte-order-mark passphrase file still opens with that same file', async () => {
+    // Made like the earlier version did (it read the BOM into the key); old backups must stay readable.
+    const { encryptStream } = await import('../server/lib/backup/crypto.ts')
+    const { pipeline } = await import('node:stream/promises')
+    const bomFile = path.join(TMP, 'old-bom-pass.txt')
+    fs.writeFileSync(bomFile, Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from('An-Old-Passphrase-Of-Ours\r\n')]))
+    const old = path.join(dirs.work, 'old-bom.zip.fvenc')
+    await pipeline(fs.createReadStream(path.join(dirs.local, firstPackage)), encryptStream('﻿An-Old-Passphrase-Of-Ours'), fs.createWriteStream(old))
+    const r = await cli(['verify', old], { BACKUP_PASSPHRASE_FILE: bomFile })
+    assert.equal(r.code, 0, r.out)
+    assert.match(r.out, /verified \(/)
+  })
+})
+
+describe('health records, exit codes and locks', () => {
+  const health = () => JSON.parse(fs.readFileSync(path.join(dirs.local, 'backup-health.json'), 'utf8'))
+
+  it('every run is recorded: complete, incomplete (missing files) and failed', async () => {
+    const h = health()
+    assert.equal(h.copy.last_ok.status, 'ok', 'the copies made above')
+    assert.equal(h.copy.last_failure.code, 'NOT_ENCRYPTED', 'the refused plain copy above')
+    assert.equal(h.full.last_ok, null, 'no full backup was ever complete: the fixture always lacks one file')
+    assert.ok(!JSON.stringify(h).includes(BK_PASS))
+    const refused = await cli(['full'], { BACKUP_ALLOW_UNENCRYPTED: undefined })
+    assert.equal(refused.code, 2)
+    assert.equal(health().full.last_run.status, 'failed')
+    assert.equal(health().full.last_run.code, 'ENCRYPTION_REQUIRED')
+    const r = await cli(['full', '--no-copy'])
+    assert.equal(r.code, INCOMPLETE)
+    const after = health()
+    assert.equal(after.full.last_run.status, 'incomplete')
+    assert.equal(after.full.last_run.detail.files_missing, 1)
+    assert.equal(after.full.last_ok, null, 'an incomplete run is not counted as a success')
+  })
+
+  it('a lock taken before the computer last started is stale, even if its process id is in use again', async () => {
+    const other = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 60000)'])
+    try {
+      fs.writeFileSync(path.join(dirs.local, '.flowvision-backup.lock'), JSON.stringify({ pid: other.pid, host: os.hostname(), what: 'full backup', started_at: new Date(Date.now() - os.uptime() * 1000 - 3_600_000).toISOString() }))
+      const r = await cli(['full', '--no-copy'])
+      assert.equal(r.code, INCOMPLETE, r.out)
+      assert.ok(!fs.existsSync(path.join(dirs.local, '.flowvision-backup.lock')))
+      // A lock taken since the last start by a live process still keeps a second job out.
+      fs.writeFileSync(path.join(dirs.local, '.flowvision-backup.lock'), JSON.stringify({ pid: other.pid, host: os.hostname(), what: 'snapshot', started_at: new Date().toISOString() }))
+      const busy = await cli(['full', '--no-copy'])
+      assert.equal(busy.code, 1)
+      assert.match(busy.out, /BUSY/)
+    } finally {
+      other.kill()
+      fs.rmSync(path.join(dirs.local, '.flowvision-backup.lock'), { force: true })
+    }
+  })
+})
+
+describe('recovery from the external drive alone (a new computer)', () => {
+  const pass = `Envelope-Passphrase-${tag}-ok`
+  const drive = path.join(TMP, 'drive-only')
+  const newPc = path.join(TMP, 'new-computer')
+  let pkg = ''
+  const CLIENT = ['mariadb.exe', 'mysql.exe', 'mariadb', 'mysql'].map((n) => path.join(path.dirname(DUMP_BIN!), n)).find((p) => fs.existsSync(p))!
+  // Nothing from this computer's setup: no DB_*, BACKUP_*, RESTIC_* variables, and a working folder of its own.
+  const cleanEnv = () => Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(DB_|BACKUP_|RESTORE_|RESTIC_|FV_TEST_|UPLOAD_DIR)/.test(k)))
+  const kit = (args: string[]) =>
+    new Promise<{ code: number | null; out: string }>((resolve) => {
+      const c = spawn(process.execPath, [path.join(drive, 'RECOVERY-KIT', 'flowvision-recover.mjs'), ...args], { cwd: newPc, env: cleanEnv(), windowsHide: true })
+      let out = ''
+      c.stdout.on('data', (d) => (out += d))
+      c.stderr.on('data', (d) => (out += d))
+      c.on('close', (code) => resolve({ code, out }))
+    })
+
+  before(async () => {
+    const passFile = path.join(TMP, 'envelope.txt')
+    fs.writeFileSync(passFile, `${pass}\n`)
+    const ext = path.join(TMP, 'external-enc')
+    fs.mkdirSync(ext)
+    fs.writeFileSync(path.join(ext, '.flowvision-backup-destination'), 'x')
+    const r = await cli(['full'], { BACKUP_ALLOW_UNENCRYPTED: undefined, BACKUP_PASSPHRASE_FILE: passFile, BACKUP_COPY_DIR: ext })
+    assert.equal(r.code, INCOMPLETE, r.out)
+    pkg = fs.readdirSync(ext).find((f) => f.endsWith('.zip.fvenc'))!
+    // The "drive" as found after the backup computer is gone: only what was copied to it.
+    fs.cpSync(ext, drive, { recursive: true })
+    fs.mkdirSync(newPc)
+  })
+
+  it('the drive holds the encrypted backup, its record and the recovery kit, and no plaintext', async () => {
+    const names = fs.readdirSync(drive).sort()
+    assert.deepEqual(names, ['.flowvision-backup-destination', 'RECOVERY-KIT', pkg, pkg.replace('.zip.fvenc', '.json')].sort())
+    const bytes = fs.readFileSync(path.join(drive, pkg))
+    assert.ok(!bytes.includes(Buffer.from(SECRET_TEXT)) && !bytes.includes(Buffer.from(pass)))
+    assert.ok(!fs.readFileSync(path.join(drive, pkg.replace('.zip.fvenc', '.json')), 'utf8').includes(pass), 'the record holds no passphrase')
+  })
+
+  it('a wrong passphrase or a damaged copy is refused, never half-restored', async () => {
+    fs.writeFileSync(path.join(newPc, 'wrong.txt'), 'Not-The-Envelope-Passphrase')
+    const wrong = await kit(['prepare', path.join(drive, pkg), path.join(newPc, 'out-wrong'), '--passphrase-file', path.join(newPc, 'wrong.txt')])
+    assert.equal(wrong.code, 1)
+    assert.match(wrong.out, /wrong passphrase/)
+    assert.doesNotMatch(wrong.out, /^OK:/m)
+    const damaged = path.join(newPc, 'damaged.zip.fvenc')
+    const buf = fs.readFileSync(path.join(drive, pkg))
+    buf[Math.floor(buf.length / 2)] ^= 0x01
+    fs.writeFileSync(damaged, buf)
+    fs.writeFileSync(path.join(newPc, 'typed.txt'), pass)
+    const bad = await kit(['prepare', damaged, path.join(newPc, 'out-damaged'), '--passphrase-file', path.join(newPc, 'typed.txt')])
+    assert.equal(bad.code, 1)
+    assert.doesNotMatch(bad.out, /^OK:/m)
+  })
+
+  it('the kit decrypts, checks and unpacks it; the dump loads into a new database with every record and file', async () => {
+    // The passphrase typed again from the envelope, into a plain file (no line break).
+    fs.writeFileSync(path.join(newPc, 'typed.txt'), pass)
+    const out = path.join(newPc, 'unpacked')
+    const r = await kit(['prepare', path.join(drive, pkg), out, '--passphrase-file', path.join(newPc, 'typed.txt')])
+    assert.equal(r.code, 0, r.out)
+    assert.match(r.out, /^OK:/m)
+    assert.match(r.out, /Missing when the backup was made: 1 file/)
+    for (const f of Object.values(files)) assert.ok(fs.readFileSync(path.join(out, 'files', ...f.key.split('/'))).equals(f.data), f.key)
+    assert.equal((await kit(['verify', out])).code, 0)
+
+    const target = `${DB}_dr`
+    restoreDbs.add(target)
+    await root.query(`CREATE DATABASE \`${target}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`)
+    const cnf = path.join(newPc, 'client.cnf')
+    fs.writeFileSync(cnf, `[client]\nhost=${HOST}\nport=${PORT}\nuser=${ROOT_USER}\npassword="${ROOT_PASS}"\n`)
+    const load = spawn(CLIENT, [`--defaults-extra-file=${cnf}`, '--default-character-set=utf8mb4', '--max-allowed-packet=1G', target], { cwd: newPc, env: cleanEnv(), stdio: ['pipe', 'ignore', 'pipe'], windowsHide: true })
+    let err = ''
+    load.stderr.on('data', (d) => (err += d))
+    fs.createReadStream(path.join(out, 'database', 'flowvision.sql')).pipe(load.stdin)
+    const code = await new Promise((resolve) => load.on('close', resolve))
+    fs.rmSync(cnf)
+    assert.equal(code, 0, err)
+
+    const manifest = JSON.parse(fs.readFileSync(path.join(out, 'manifest.json'), 'utf8'))
+    for (const t of manifest.database.tables) {
+      const [[a]] = (await root.query(`SELECT COUNT(*) AS n FROM \`${DB}\`.\`${t}\``)) as any
+      const [[b]] = (await root.query(`SELECT COUNT(*) AS n FROM \`${target}\`.\`${t}\``)) as any
+      assert.equal(Number(b.n), Number(a.n), `rows of ${t}`)
+    }
+    for (const v of manifest.database.views) await root.query(`SELECT 1 FROM \`${target}\`.\`${v}\` LIMIT 1`)
+    const [[fk]] = (await root.query("SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ?", [target])) as any
+    const [[fkSrc]] = (await root.query("SELECT COUNT(*) AS n FROM information_schema.REFERENTIAL_CONSTRAINTS WHERE CONSTRAINT_SCHEMA = ?", [DB])) as any
+    assert.equal(Number(fk.n), Number(fkSrc.n), 'every foreign key')
+    const [[idx]] = (await root.query('SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ?', [target])) as any
+    const [[idxSrc]] = (await root.query('SELECT COUNT(*) AS n FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = ?', [DB])) as any
+    assert.equal(Number(idx.n), Number(idxSrc.n), 'every index')
+    // The file kept in the database comes back byte for byte.
+    const partHashes = async (db: string) => ((await root.query(`SELECT part, SHA2(data, 256) AS h FROM \`${db}\`.file_blobs WHERE file_url = ? ORDER BY part`, [blobKey])) as any)[0].map((x: any) => `${x.part}:${x.h}`)
+    const restoredParts = await partHashes(target)
+    assert.equal(restoredParts.length, 6)
+    assert.deepEqual(restoredParts, await partHashes(DB), 'file_blobs content, part by part')
+  })
+})
+
+describe('versioned snapshots (Restic)',{ skip: !RESTIC_BIN && 'set FV_TEST_RESTIC_BIN to run' }, () => {
   const repoEnv = (): Env => ({ BACKUP_RESTIC_BIN: RESTIC_BIN, RESTIC_REPOSITORY: path.join(dirs.external, 'restic-repo'), RESTIC_PASSWORD_FILE: path.join(TMP, 'restic-pass.txt') })
   let first = ''
 
@@ -486,12 +823,12 @@ describe('versioned snapshots (Restic)', { skip: !RESTIC_BIN && 'set FV_TEST_RES
     fs.writeFileSync(path.join(TMP, 'restic-pass.txt'), crypto.randomBytes(24).toString('base64url'))
     assert.equal((await cli(['init'], repoEnv())).code, 0)
     const a = await cli(['snapshot'], repoEnv())
-    assert.equal(a.code, 0, a.out)
+    assert.equal(a.code, INCOMPLETE, a.out)
     assert.match(a.out, /restore-tested: yes/)
     first = /snapshot ([0-9a-f]{8}) saved/.exec(a.out)![1]!
     await root.query(`INSERT INTO \`${DB}\`.organization_holidays (id, org_id, holiday_date, name) VALUES (?, ?, '2026-12-30', 'Added after the first snapshot')`, [uuid(), ids.org])
     const b = await cli(['snapshot'], repoEnv())
-    assert.equal(b.code, 0, b.out)
+    assert.equal(b.code, INCOMPLETE, b.out)
     const [, logical, added] = /logical size ([\d.]+) MB; added to the repository: ([\d.]+) MB/.exec(b.out)!
     assert.ok(Number(added) < Number(logical) / 2, `the second snapshot stores much less than a full copy (${added} of ${logical} MB)`)
   })
@@ -509,7 +846,7 @@ describe('versioned snapshots (Restic)', { skip: !RESTIC_BIN && 'set FV_TEST_RES
   })
 
   it('retention never removes the newest snapshot, and is refused until the newest passed its restore test', async () => {
-    const ok = await cli(['forget'], { ...repoEnv(), BACKUP_RETAIN_DAILY: '1', BACKUP_RETAIN_WEEKLY: '1', BACKUP_RETAIN_MONTHLY: '1' })
+    const ok = await cli(['forget', '--allow-incomplete'], { ...repoEnv(), BACKUP_RETAIN_DAILY: '1', BACKUP_RETAIN_WEEKLY: '1', BACKUP_RETAIN_MONTHLY: '1' })
     assert.equal(ok.code, 0, ok.out)
     const list = await cli(['snapshots'], repoEnv())
     assert.ok(list.out.trim().split('\n').length >= 1)

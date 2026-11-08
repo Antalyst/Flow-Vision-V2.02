@@ -3,6 +3,8 @@ import { sequelize, Approval, Document, DocumentFile, DocumentInternalTransactio
 import { badRequest, conflict, forbidden, notFound } from './errors.ts'
 import type { Actor, RequestMeta } from './auth.ts'
 import { getLiveRoute, getStep, routeForNewDocument, routeTimeOf } from './routes.ts'
+import { findUsableInternalRoute } from './internal-routes.ts'
+import { readRoutingSelection, type RoutingSelection } from './routing-mode.ts'
 import { processingTimeFor } from './knowledge.ts'
 import { deadlineFrom, loadWorkCalendar } from './work-calendar.ts'
 import { autoPriority } from './priority.ts'
@@ -11,6 +13,7 @@ import { notify, officeMemberIds } from './notifications.ts'
 import { emitAfterCommit } from './realtime.ts'
 import { recordOutcome } from './liaisons.ts'
 import { audit } from './audit.ts'
+import { checkRecordedOrigin, resolveOrigin, type OfficeFacts } from './document-origin.ts'
 import { hasPermission, requirePermission } from './dh-access.ts'
 import { appendLog, pendingPass, readLog, sendBackTarget, sortVisits } from './tracking-log.ts'
 import { currentVisit, liaisonWorkloadSql } from './document-queries.ts'
@@ -211,28 +214,45 @@ async function originCode(actor: Actor, transaction: Transaction) {
   return organizationCode(actor.organization?.name ?? '', offices.map((o) => o.code as string))
 }
 
+/** The origin of a document uploaded by `uploader`, from their office as it is now (document-origin.ts). */
+async function originOf(uploader: Row | null | undefined, orgId: string, transaction: Transaction) {
+  const officeId = (uploader?.office_id as string | null | undefined) ?? null
+  if (!officeId) return null
+  const office = (await Office.findByPk(officeId, { transaction })) as unknown as OfficeFacts | null
+  const parent = office?.parent_office_id ? ((await Office.findByPk(office.parent_office_id, { transaction })) as unknown as OfficeFacts | null) : null
+  return resolveOrigin(orgId, officeId, office, parent)
+}
+
 /**
  * Record who took the physical document in at its current office — on arrival, or from the
  * previous desk of the same office. At the last office on its route the first receipt also asks
  * that office (its employees and staff) for the final decision. Saves the visit.
  */
-async function markReceived(doc: Row, visit: Row, actor: Actor, transaction: Transaction, { remarks = null as string | null } = {}) {
+async function markReceived(doc: Row, visit: Row, actor: Actor, transaction: Transaction, { remarks = null as string | null, askDecision = true } = {}) {
   const pass = pendingPass(visit)
   const approvalAsked = readLog(visit).some((e) => e.type === 'APPROVAL_REQUESTED')
   visit.handler_id = actor.id
   appendLog(visit, { type: 'RECEIVED', by: actor.id, status: doc.status, remarks, ...(pass && { meta: { from_staff_id: pass.by } }) })
 
   const step = await getStep(doc.route_id, doc.current_step_number, transaction)
-  if (step && !approvalAsked && (await atLastStep(doc, transaction))) {
+  // An internal process: its office is its only checkpoint, and decides once the internal route is over.
+  const decidingOffice = step
+    ? { id: step.office_id as string, name: (step.office?.name as string | undefined) ?? 'your office' }
+    : !doc.route_id && visit.office_id
+      ? { id: visit.office_id as string, name: ((await Office.findByPk(visit.office_id, { attributes: ['name'], transaction }))?.name as string | undefined) ?? 'your office' }
+      : null
+  if (decidingOffice && askDecision && !approvalAsked && (await atLastStep(doc, transaction))) {
     appendLog(visit, { type: 'APPROVAL_REQUESTED', by: null, status: doc.status })
-    const deciders = await approverIds(step.office_id, transaction)
-    await ensurePendingApprovals(doc, step.office_id, step.step_number, deciders, transaction)
+    const deciders = await approverIds(decidingOffice.id, transaction)
+    await ensurePendingApprovals(doc, decidingOffice.id, doc.current_step_number, deciders, transaction)
     await notify(
       deciders,
       {
         type: 'APPROVAL_REQUESTED',
         title: `Approval needed: ${doc.title}`,
-        body: `${trackingNumber(doc.id)} reached ${step.office?.name ?? 'your office'}, the last office on its route, and is waiting for your decision.`,
+        body: step
+          ? `${trackingNumber(doc.id)} reached ${decidingOffice.name}, the last office on its route, and is waiting for your decision.`
+          : `${trackingNumber(doc.id)} is back at ${decidingOffice.name} from its internal process and is waiting for your decision.`,
         documentId: doc.id,
         link: docLink(doc.id),
       },
@@ -269,7 +289,11 @@ async function markReceived(doc: Row, visit: Row, actor: Actor, transaction: Tra
  * Put a document on its Document Route (or on `routeId`, when the submitter picks another one).
  * It starts at its origin — step 0, held by the uploader — and a messenger carries it to step 1.
  * When the uploader works at the route's first office, origin and step 1 are the same place, so
- * it starts at step 1, already received.
+ * it starts at step 1, already received. An umbrella office under that first office is a different place:
+ * the document stays with the unit at step 0 until the office scans it in (from a messenger or by hand).
+ *
+ * The first submission records the origin for good. A resubmission starts wherever the uploader is now,
+ * since the returned paper is with them, and leaves the recorded origin alone.
  */
 async function enterRoute(doc: Row, actor: Actor, eventType: 'SUBMITTED' | 'RESUBMITTED', transaction: Transaction, routeId?: string | null) {
   const live = await getLiveRoute(doc.org_id, routeId || doc.route_id, transaction)
@@ -285,7 +309,8 @@ async function enterRoute(doc: Row, actor: Actor, eventType: 'SUBMITTED' | 'RESU
   // working hours (paused at night, on days off and on holidays); priority follows the document and that time.
   // The origin is where the uploader belongs: their office, or (no office) the organization itself.
   const submitter = doc.submitted_by === actor.id ? actor : await User.findByPk(doc.submitted_by, { transaction })
-  const originOfficeId = (submitter?.office_id as string | null) ?? null
+  const origin = await originOf(submitter, doc.org_id, transaction)
+  const originOfficeId = origin?.officeId ?? null
   const time = await allowedTimeFor(doc.org_id, doc.category, route.id, transaction, originOfficeId)
   const hours = time.days * 24 + time.hours + time.minutes / 60
   const now = new Date()
@@ -294,10 +319,13 @@ async function enterRoute(doc: Row, actor: Actor, eventType: 'SUBMITTED' | 'RESU
 
   await doc.update(
     {
+      // A document switched from an internal process to a global route leaves the internal route (one or the other).
       route_id: route.id,
+      internal_route_id: null,
       status: 'START',
       current_step_number: startsAtFirst ? 1 : 0,
       current_office_id: startsAtFirst ? first.office_id : originOfficeId,
+      ...(eventType === 'SUBMITTED' && !doc.origin_office_id && { origin_office_id: originOfficeId }),
       submitted_at: now,
       completed_at: null,
       target_completion_date: hours > 0 ? deadlineFrom(now, time, calendar) : null,
@@ -342,7 +370,7 @@ async function enterRoute(doc: Row, actor: Actor, eventType: 'SUBMITTED' | 'RESU
  * Settings). For a type with no time set, the route's older per-office times, if it has any.
  * 0 = no deadline.
  */
-export async function allowedHoursFor(orgId: string, typeName: string | null | undefined, routeId: string, transaction?: Transaction, officeId?: string | null) {
+export async function allowedHoursFor(orgId: string, typeName: string | null | undefined, routeId: string | null, transaction?: Transaction, officeId?: string | null) {
   const { days, hours, minutes } = await allowedTimeFor(orgId, typeName, routeId, transaction, officeId)
   return days * 24 + hours + minutes / 60
 }
@@ -350,16 +378,65 @@ export async function allowedHoursFor(orgId: string, typeName: string | null | u
 /**
  * The same as days + hours + minutes (working time once the organization sets its working hours).
  * `officeId` = the uploader's office: a type of that name for their office wins over a Global one.
+ * An internal process (`routeId` null) has no route times to fall back on: only its document type's.
  */
-export async function allowedTimeFor(orgId: string, typeName: string | null | undefined, routeId: string, transaction?: Transaction, officeId?: string | null) {
+export async function allowedTimeFor(orgId: string, typeName: string | null | undefined, routeId: string | null, transaction?: Transaction, officeId?: string | null) {
   const byType = await processingTimeFor(orgId, typeName, transaction, officeId)
-  if (byType.days || byType.hours || byType.minutes) return byType
+  if (byType.days || byType.hours || byType.minutes || !routeId) return byType
   return { ...(await routeTimeOf(routeId, transaction)), minutes: 0 }
+}
+
+/**
+ * An internal process enters its office (routing-mode.ts): no global route. The uploader works at an active main
+ * office with umbrella units and submits it there themselves, so the document starts at that office — step 1,
+ * the only checkpoint it has — already received by them, and at once follows its internal route through the
+ * units with the same engine an office uses for a received document (beginInternalRoute). No other office is
+ * visited, notified or told it is coming; current_step_number never moves. When the last unit returns it and the
+ * office scans it in, the office decides on it like the last office of a route (internalDecisionDue): approve →
+ * COMPLETED, return → RETURNED to the uploader, who may resubmit it.
+ */
+async function enterInternalProcess(doc: Row, actor: Actor, eventType: 'SUBMITTED' | 'RESUBMITTED', meta: RequestMeta, transaction: Transaction) {
+  if (doc.submitted_by !== actor.id) throw forbidden('Only the person who uploaded this document can submit it to its internal process, at their own office')
+  // Checked again now: the account's office (from the session), and the route still active and usable there.
+  const route = await findUsableInternalRoute(actor, doc.internal_route_id, transaction)
+  const officeId = actor.office_id as string
+  const time = await allowedTimeFor(doc.org_id, doc.category, null, transaction, officeId)
+  const hours = time.days * 24 + time.hours + time.minutes / 60
+  const now = new Date()
+  const { calendar } = await loadWorkCalendar(doc.org_id)
+  await doc.update(
+    {
+      route_id: null,
+      internal_route_id: route.id,
+      status: 'START',
+      current_step_number: 1,
+      current_office_id: officeId,
+      ...(eventType === 'SUBMITTED' && !doc.origin_office_id && { origin_office_id: officeId }),
+      submitted_at: now,
+      completed_at: null,
+      target_completion_date: hours > 0 ? deadlineFrom(now, time, calendar) : null,
+      priority: autoPriority({ title: doc.title, description: doc.description, document_type: doc.category, routeHours: hours || null }),
+    },
+    { transaction },
+  )
+  const visit = await DocumentTracking.create({ document_id: doc.id, step_number: 1, office_id: officeId, status: 'START', arrived_at: now }, { transaction })
+  appendLog(visit, { type: eventType, by: actor.id, status: 'START', meta: { routing_mode: 'INTERNAL', internal_route_id: route.id, internal_route_name: route.name } })
+  await visit.save({ transaction })
+  // The paper is in the uploader's hands at their own office: received by them, then sent to the first unit.
+  await markReceived(doc, visit, actor, transaction, { askDecision: false })
+  await beginInternalRoute(doc, visit, route, actor, null, meta, transaction)
 }
 
 // ---------------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------------
+
+/** The routing chosen in a request body (routing-mode.ts), or a 400 naming the field; null = nothing chosen. */
+export function routingFrom(fields: Record<string, unknown>): RoutingSelection | null {
+  const read = readRoutingSelection(fields)
+  if (!read.ok) throw badRequest(read.message, { field: read.field })
+  return read.selection
+}
 
 export interface DocumentInput {
   title: string
@@ -367,6 +444,8 @@ export interface DocumentInput {
   document_type?: string | null
   /** Which Document Route to follow. Optional only while the organization has a single route. */
   route_id?: string | null
+  /** Global Routing or an internal process (routing-mode.ts readRoutingSelection); null/absent = GLOBAL on `route_id`. */
+  routing?: RoutingSelection | null
   submit?: boolean
   /** Pages/sheets of the paper document: entered for photos; otherwise the number of files. */
   pages?: number | null
@@ -380,17 +459,21 @@ export async function createDocument(actor: Actor, input: DocumentInput, files: 
   requirePermission(actor, 'UPLOAD_DOCUMENTS')
   const file = files[0] ?? null
   return sequelize.transaction(async (transaction) => {
-    // documents.route_id is required, so even drafts are pinned to a route.
-    const route = await routeForNewDocument(actor.org_id, input.route_id ?? null, transaction)
+    // Every document, drafts included, is pinned to exactly one route: a Document Route, or (an internal process)
+    // an internal route of the uploader's own office, checked against the session's account.
+    const internal = input.routing?.mode === 'INTERNAL'
+    const routeId = internal ? null : ((await routeForNewDocument(actor.org_id, input.routing?.routeId ?? input.route_id ?? null, transaction)).id as string)
+    const internalRouteId = internal ? ((await findUsableInternalRoute(actor, input.routing!.internalRouteId, transaction)).id as string) : null
 
     const doc = await Document.create(
       {
         org_id: actor.org_id,
-        route_id: route.id,
+        route_id: routeId,
+        internal_route_id: internalRouteId,
         title: input.title,
         description: input.description,
         category: input.document_type,
-        priority: autoPriority({ ...input, routeHours: (await allowedHoursFor(actor.org_id, input.document_type, route.id, transaction, actor.office_id)) || null }),
+        priority: autoPriority({ ...input, routeHours: (await allowedHoursFor(actor.org_id, input.document_type, routeId, transaction, actor.office_id)) || null }),
         // Set when the document enters its route (see enterRoute).
         target_completion_date: null,
         status: 'CREATED',
@@ -411,24 +494,51 @@ export async function createDocument(actor: Actor, input: DocumentInput, files: 
     const origin = await originCode(actor, transaction)
     await QrCode.create({ document_id: doc.id, qr_code_data: await uniqueRoutingCode(origin, new Date(doc.created_at), transaction), office_code: origin }, { transaction })
 
-    if (input.submit) await enterRoute(doc, actor, 'SUBMITTED', transaction)
+    if (input.submit) {
+      if (internal) await enterInternalProcess(doc, actor, 'SUBMITTED', meta, transaction)
+      else await enterRoute(doc, actor, 'SUBMITTED', transaction)
+    }
     await audit(meta, { action: 'DOCUMENT_CREATE', entityType: 'document', entityId: doc.id, after: doc.toJSON() }, transaction)
     return doc
   })
 }
 
-/** Draft → START, or RETURNED → START. `routeId` switches the document to another Document Route first. */
-export async function submitDocument(documentId: string, actor: Actor, meta: RequestMeta, routeId?: string | null) {
+/**
+ * Draft → START, or RETURNED → START. `routing` switches the document first: to another Document Route, from
+ * an internal process to a global route, or to an internal process (re-checked here against the session's
+ * account, whatever the draft held). Absent = the route the document already has.
+ */
+export async function submitDocument(documentId: string, actor: Actor, meta: RequestMeta, routing?: RoutingSelection | null) {
   requirePermission(actor, 'UPLOAD_DOCUMENTS')
   return sequelize.transaction(async (transaction) => {
     const doc = await lockDocument(documentId, actor, transaction)
     if (!canManageDocument(doc, actor)) throw forbidden('Only the person who uploaded this document can submit it')
-    const previousRouteId = doc.route_id
-    if (doc.status === 'CREATED') await enterRoute(doc, actor, 'SUBMITTED', transaction, routeId)
-    else if (doc.status === 'RETURNED') await enterRoute(doc, actor, 'RESUBMITTED', transaction, routeId)
-    else throw conflict('Only drafts or returned documents can be submitted')
-    const routeChange = doc.route_id !== previousRouteId ? { before: { route_id: previousRouteId }, after: { route_id: doc.route_id } } : {}
-    await audit(meta, { action: 'DOCUMENT_SUBMIT', entityType: 'document', entityId: doc.id, ...routeChange }, transaction)
+    if (doc.status !== 'CREATED' && doc.status !== 'RETURNED') throw conflict('Only drafts or returned documents can be submitted')
+    const eventType = doc.status === 'CREATED' ? 'SUBMITTED' : 'RESUBMITTED'
+    const before = { route_id: doc.route_id ?? null, internal_route_id: doc.internal_route_id ?? null }
+    const internal = routing ? routing.mode === 'INTERNAL' : !doc.route_id
+    if (internal) {
+      // Validated in enterInternalProcess; set here so it is the route it enters.
+      if (routing?.internalRouteId) doc.internal_route_id = routing.internalRouteId
+      await enterInternalProcess(doc, actor, eventType, meta, transaction)
+    } else {
+      // A draft that was an internal process has no route_id: the switch has to name one (or the only one).
+      const routeId = routing?.routeId ?? (doc.route_id ? null : ((await routeForNewDocument(actor.org_id, null, transaction)).id as string))
+      await enterRoute(doc, actor, eventType, transaction, routeId)
+    }
+    const after = { route_id: doc.route_id ?? null, internal_route_id: doc.internal_route_id ?? null }
+    const routeChanged = after.route_id !== before.route_id || after.internal_route_id !== before.internal_route_id
+    await audit(
+      meta,
+      {
+        action: 'DOCUMENT_SUBMIT',
+        entityType: 'document',
+        entityId: doc.id,
+        ...(routeChanged && { before }),
+        after: { ...(routeChanged && after), routing_mode: internal ? 'INTERNAL' : 'GLOBAL', origin_office_id: doc.origin_office_id ?? null },
+      },
+      transaction,
+    )
     return doc
   })
 }
@@ -479,6 +589,7 @@ export async function requestPickup(documentId: string, actor: Actor, { liaisonU
     await assertReceiver(doc, visit, actor, transaction)
     // A send-back is fetched by the liaisons of the office it goes back to (claimReturnPickup), not released here.
     if (sendBackTarget(visit)) throw conflict('This document is being sent back: the messengers of the office it goes back to will pick it up. Cancel the send-back to release it another way.', 'SENDING_BACK')
+    if (!doc.route_id) throw conflict('An internal process stays in your office: it is approved or returned here, not released to a messenger.', 'INTERNAL_PROCESS')
     const previousId = visit.liaison_id as string | null
     if (previousId === liaisonUserId) throw conflict('That messenger is already assigned to this document')
 
@@ -550,19 +661,65 @@ export async function requestPickup(documentId: string, actor: Actor, { liaisonU
 // Return pickups: a flagged document goes back one office, and that office's liaisons fetch it.
 // ---------------------------------------------------------------------------
 
-/** Where a send-back goes: the previous step's office, or from the first office its origin (the uploader's office). */
+/** Its first submission was logged at the organization itself (an admin upload): a step-0 visit without an office. */
+async function startedAtOrganization(doc: Row, transaction?: Transaction) {
+  if (doc.origin_office_id) return false
+  const visits = await DocumentTracking.count({
+    where: { document_id: doc.id, step_number: 0, office_id: null, notes: { [Op.like]: '%"type":"SUBMITTED"%' } },
+    transaction,
+  })
+  return visits > 0
+}
+
+/**
+ * Where a send-back goes: the previous step's office, or from the first office its recorded origin
+ * (documents.origin_office_id). Without one it is refused, never guessed from where the uploader is now.
+ */
 async function returnTargetOf(doc: Row, transaction?: Transaction) {
   const targetStep = doc.current_step_number - 1
   let originOfficeId: string | null = null
   if (targetStep === 0) {
-    originOfficeId = ((await User.findByPk(doc.submitted_by, { attributes: ['office_id'], transaction }))?.office_id as string | null) ?? null
-    if (!originOfficeId) {
+    originOfficeId = (doc.origin_office_id as string | null) ?? null
+    if (!originOfficeId && (await startedAtOrganization(doc, transaction))) {
       throw conflict('This document came from the organization itself (an admin upload), so there is no office before this one to send it back to.', 'NO_PREVIOUS_OFFICE')
+    }
+    if (!originOfficeId) {
+      throw conflict(
+        'This document’s originating office was not recorded, so it can’t be sent back past this office. Ask an administrator to record its origin on the document page, then send it back again.',
+        'ORIGIN_NOT_RECORDED',
+      )
     }
   }
   const target = await stepAt(doc, targetStep, originOfficeId, transaction)
   if (!target) throw conflict('Document route is missing the previous step')
   return { target, targetStep }
+}
+
+/**
+ * An administrator records the origin of a document whose origin wasn't recorded (an older document): once,
+ * with a reason, to an active office or umbrella office of the organization. Never for a draft (it gets its
+ * origin on submission) or an admin upload (it started at the organization). Only documents.origin_office_id
+ * changes: where the document is, its step, its route and its history stay as they are.
+ */
+export async function recordOrigin(documentId: string, actor: Actor, { officeId, reason }: { officeId: string; reason: string }, meta: RequestMeta) {
+  if (actor.account_type !== 'ADMIN') throw forbidden('Only an administrator can record a document’s origin')
+  return sequelize.transaction(async (transaction) => {
+    const doc = await lockDocument(documentId, actor, transaction)
+    if (doc.status === 'CREATED') throw conflict('A draft gets its origin when it is submitted', 'ORIGIN_DRAFT')
+    if (doc.origin_office_id) throw conflict('This document’s origin is already recorded and can’t be changed', 'ORIGIN_ALREADY_RECORDED')
+    if (await startedAtOrganization(doc, transaction)) throw conflict('This document came from the organization itself (an admin upload): it has no origin office', 'ORIGIN_IS_ORGANIZATION')
+    const office = (await Office.findByPk(officeId, { transaction })) as unknown as OfficeFacts | null
+    const parent = office?.parent_office_id ? ((await Office.findByPk(office.parent_office_id, { transaction })) as unknown as OfficeFacts | null) : null
+    const origin = checkRecordedOrigin(actor.org_id, officeId, office, parent)
+    await doc.update({ origin_office_id: origin.officeId }, { transaction, silent: true })
+    await audit(
+      meta,
+      { action: 'DOCUMENT_ORIGIN_RECORD', entityType: 'document', entityId: doc.id, before: { origin_office_id: null }, after: { origin_office_id: origin.officeId, reason } },
+      transaction,
+    )
+    broadcast(doc, transaction)
+    return doc
+  })
 }
 
 /** The office a send-back of this document goes (or would go) to; null when it can't be sent back from here. */
@@ -802,6 +959,7 @@ export async function sendBack(documentId: string, actor: Actor, { issueId, rema
     await assertReceiver(doc, visit, actor, transaction, 'send it back')
     if (visit.liaison_id) throw conflict('A messenger is already assigned to this document. Unassign them before sending it back.')
     if (sendBackTarget(visit)) throw conflict('This document is already being sent back', 'ALREADY_SENT_BACK')
+    if (!doc.route_id) throw conflict('An internal process has no previous office to send it back to. Return it to its uploader with your decision instead.', 'INTERNAL_PROCESS')
 
     const issue = await Issue.findOne({ where: { id: issueId, document_id: doc.id }, transaction, lock: transaction.LOCK.UPDATE })
     if (!issue) throw badRequest('That issue was not flagged on this document', { field: 'issue_id' })
@@ -1072,56 +1230,70 @@ export async function startInternalRoute(documentId: string, actor: Actor, { rou
     if (visit.liaison_id) throw conflict('A messenger is assigned to this document. Unassign them before starting an internal route.')
     if (openReturn(visit)) throw conflict('This document is being sent back. Cancel the send-back before starting an internal route.', 'SENDING_BACK')
 
+    // An internal process follows its own internal route (it may run it again after ending it early), no other.
+    if (!doc.route_id && doc.internal_route_id && routeId !== doc.internal_route_id) {
+      throw badRequest('This document is an internal process: it can only follow its own internal route again', { field: 'route_id' })
+    }
     const route = await InternalRoute.findOne({
       where: { id: routeId, org_id: actor.org_id, office_id: doc.current_office_id, is_active: true },
       include: [{ model: InternalRouteStep, as: 'steps', include: [{ model: Office, as: 'office', attributes: ['id', 'name', 'code', 'status', 'parent_office_id'] }] }],
       transaction,
     })
     if (!route) throw badRequest('That is not an active internal route of this office', { field: 'route_id' })
-    const steps = [...((route.steps as Row[]) ?? [])].sort((a, b) => a.step_number - b.step_number)
-    if (steps.length < 2) throw conflict('This internal route has no steps. Edit it first.')
-    for (const s of steps) {
-      if (!s.office || s.office.status === 'inactive' || s.office.parent_office_id !== doc.current_office_id) {
-        throw conflict(`${s.office?.name ?? 'A unit on this route'} is no longer an active umbrella office of this office. Edit the route first.`)
-      }
-    }
-    const snapshot: InternalStep[] = steps.map((s) => ({ office_id: s.office_id, name: s.office.name, code: s.office.code, action_label: s.action_label ?? null }))
-    const now = new Date()
-    const parent = doc.current_office_id as string
-    const internal = await DocumentInternalTransaction.create(
-      {
-        org_id: doc.org_id,
-        document_id: doc.id,
-        internal_route_id: route.id,
-        route_name: route.name,
-        parent_office_id: parent,
-        route_step_number: doc.current_step_number,
-        steps: JSON.stringify(snapshot),
-        current_index: 0,
-        status: 'ACTIVE',
-        started_by: actor.id,
-        started_at: now,
-        created_at: now,
-        updated_at: now,
-      },
-      { transaction },
-    )
-    const first = snapshot[0]!
-    visit.handler_id = null
-    appendLog(visit, {
-      type: 'INTERNAL_ROUTE_STARTED',
-      by: actor.id,
-      status: doc.status,
-      remarks,
-      meta: { transaction_id: internal.id, route_id: route.id, route_name: route.name, from_office_id: parent, to_office_id: first.office_id, internal_step: 1, internal_steps: snapshot.length },
-    })
-    await visit.save({ transaction })
-    await doc.update({ current_office_id: first.office_id }, { transaction })
-    await audit(meta, { action: 'DOCUMENT_INTERNAL_START', entityType: 'document', entityId: doc.id, after: { transaction_id: internal.id, route_id: route.id, route_name: route.name, to_office_id: first.office_id, step: doc.current_step_number } }, transaction)
-    await notifyInternalArrival(doc, actor, first.office_id, `${route.name}, step 1 of ${snapshot.length}${first.action_label ? `: ${first.action_label}` : ''}`, remarks, transaction)
-    broadcast(doc, transaction)
+    await beginInternalRoute(doc, visit, route, actor, remarks, meta, transaction)
     return doc
   })
+}
+
+/**
+ * Send a document the office holds (received at its route step, or at an internal process's step 1) to the first
+ * unit of one of the office's internal routes. Shared by the office's "Send along internal route" and by an
+ * internal process entering its office at upload: one engine. The caller has checked who may do it and that
+ * the route is an active route of this office; every unit on it must still be an active umbrella office here.
+ */
+async function beginInternalRoute(doc: Row, visit: Row, route: Row, actor: Actor, remarks: string | null, meta: RequestMeta, transaction: Transaction) {
+  const steps = [...((route.steps as Row[]) ?? [])].sort((a, b) => a.step_number - b.step_number)
+  if (steps.length < 2) throw conflict('This internal route has no steps. Edit it first.')
+  for (const s of steps) {
+    if (!s.office || s.office.status === 'inactive' || s.office.parent_office_id !== doc.current_office_id) {
+      throw conflict(`${s.office?.name ?? 'A unit on this route'} is no longer an active umbrella office of this office. Edit the route first.`)
+    }
+  }
+  const snapshot: InternalStep[] = steps.map((s) => ({ office_id: s.office_id, name: s.office.name, code: s.office.code, action_label: s.action_label ?? null }))
+  const now = new Date()
+  const parent = doc.current_office_id as string
+  const internal = await DocumentInternalTransaction.create(
+    {
+      org_id: doc.org_id,
+      document_id: doc.id,
+      internal_route_id: route.id,
+      route_name: route.name,
+      parent_office_id: parent,
+      route_step_number: doc.current_step_number,
+      steps: JSON.stringify(snapshot),
+      current_index: 0,
+      status: 'ACTIVE',
+      started_by: actor.id,
+      started_at: now,
+      created_at: now,
+      updated_at: now,
+    },
+    { transaction },
+  )
+  const first = snapshot[0]!
+  visit.handler_id = null
+  appendLog(visit, {
+    type: 'INTERNAL_ROUTE_STARTED',
+    by: actor.id,
+    status: doc.status,
+    remarks,
+    meta: { transaction_id: internal.id, route_id: route.id, route_name: route.name, from_office_id: parent, to_office_id: first.office_id, internal_step: 1, internal_steps: snapshot.length },
+  })
+  await visit.save({ transaction })
+  await doc.update({ current_office_id: first.office_id }, { transaction })
+  await audit(meta, { action: 'DOCUMENT_INTERNAL_START', entityType: 'document', entityId: doc.id, after: { transaction_id: internal.id, route_id: route.id, route_name: route.name, to_office_id: first.office_id, step: doc.current_step_number } }, transaction)
+  await notifyInternalArrival(doc, actor, first.office_id, `${route.name}, step 1 of ${snapshot.length}${first.action_label ? `: ${first.action_label}` : ''}`, remarks, transaction)
+  broadcast(doc, transaction)
 }
 
 /**
@@ -1496,16 +1668,35 @@ export async function failDelivery(documentId: string, actor: Actor, { remarks }
  */
 async function atLastStep(doc: Row, transaction?: Transaction) {
   if (!doc.current_step_number) return false
+  if (!doc.route_id) return internalDecisionDue(doc, transaction)
   const step = await getStep(doc.route_id, doc.current_step_number, transaction)
   if (!step) return false
   if (step.is_final_checkpoint) return true
   return !(await getStep(doc.route_id, doc.current_step_number + 1, transaction))
 }
 
-/** SQL twin of atLastStep, for lists. */
+/**
+ * An internal process is "at its last step" — its office decides — once it is back at its office from the
+ * internal route it followed since it entered this visit (completed, or ended early), with none still running.
+ * Never at submission itself (no route run yet), and not while a unit has it.
+ */
+async function internalDecisionDue(doc: Row, transaction?: Transaction) {
+  if (doc.route_id || !doc.current_step_number) return false
+  const visit = await getCurrentVisit(doc, transaction)
+  if (!visit || visit.office_id !== doc.current_office_id) return false
+  const runs = await DocumentInternalTransaction.findAll({ where: { document_id: doc.id, started_at: { [Op.gte]: visit.arrived_at } }, attributes: ['status'], transaction })
+  return runs.length > 0 && runs.every((r) => r.status !== 'ACTIVE')
+}
+
+/** SQL twin of atLastStep, for lists: the last office of its route, or an internal process back from its internal route. */
 const AT_LAST_STEP_SQL = `documents.current_step_number > 0 AND (
-  (SELECT rs.is_final_checkpoint FROM route_steps rs WHERE rs.route_id = documents.route_id AND rs.step_number = documents.current_step_number) = 1
-  OR NOT EXISTS (SELECT 1 FROM route_steps rs WHERE rs.route_id = documents.route_id AND rs.step_number > documents.current_step_number))`
+  (documents.route_id IS NOT NULL AND (
+    (SELECT rs.is_final_checkpoint FROM route_steps rs WHERE rs.route_id = documents.route_id AND rs.step_number = documents.current_step_number) = 1
+    OR NOT EXISTS (SELECT 1 FROM route_steps rs WHERE rs.route_id = documents.route_id AND rs.step_number > documents.current_step_number)))
+  OR (documents.route_id IS NULL
+    AND ${currentVisit('office_id')} = documents.current_office_id
+    AND EXISTS (SELECT 1 FROM document_internal_transactions t WHERE t.document_id = documents.id AND t.started_at >= ${currentVisit('arrived_at')})
+    AND NOT EXISTS (SELECT 1 FROM document_internal_transactions t WHERE t.document_id = documents.id AND t.status = 'ACTIVE')))`
 
 /**
  * Who may approve or return a document: employees and staff of the office it is at — when that
@@ -1711,7 +1902,8 @@ export function availableActions(doc: Row, actor: Actor, ctx: ActionContext) {
     // Desk to desk inside the office, before it is released (or decided, at the last office).
     canPassToStaff: may('PASS_DOCUMENTS') && releases && !atOrigin && atOffice && ctx.received && !ctx.visitLiaisonId && !ctx.returnOpen,
     // Flag an issue and send it back to the previous office, with one of this office's messengers.
-    canSendBack: may('SEND_BACK_DOCUMENTS') && !ctx.atUnit && !ctx.sendingBack && releases && !atOrigin && atOffice && ctx.received && !ctx.visitLiaisonId,
+    // Not an internal process: it has no previous office (its own office returns it to the uploader instead).
+    canSendBack: may('SEND_BACK_DOCUMENTS') && Boolean(doc.route_id) && !ctx.atUnit && !ctx.sendingBack && releases && !atOrigin && atOffice && ctx.received && !ctx.visitLiaisonId,
     canTakeBackPass: may('PASS_DOCUMENTS') && atOffice && Boolean(ctx.passedBy) && ctx.passedBy === actor.id,
     // Until the messenger has picked it up, another one can take over.
     canReassign: may('RELEASE_DOCUMENTS') && releases && atOffice && Boolean(ctx.visitLiaisonId) && !ctx.sendingBack,

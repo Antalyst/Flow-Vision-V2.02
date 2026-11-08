@@ -39,13 +39,20 @@ describe('who manages and who reads internal routes', () => {
   it('never an umbrella office, staff, or the admin', () => {
     assert.throws(() => requireInternalRouteManager(user('uh', 'DEPARTMENT_HEAD', U1)), /umbrella office/)
     assert.throws(() => requireInternalRouteManager(user('s', 'STAFF', HR)), /Department Head/)
+    // Staff the head made responsible (2026-11-06): their own main office only.
+    assert.equal(requireInternalRouteManager(user('s', 'STAFF', HR, { permissions: '["MANAGE_INTERNAL_ROUTES"]' })).id, 'hr')
+    assert.throws(() => requireInternalRouteManager(user('s', 'STAFF', U1, { permissions: '["MANAGE_INTERNAL_ROUTES"]' })), /umbrella office/)
+    assert.throws(() => requireInternalRouteManager(user('l', 'LIAISON', HR, { permissions: '["MANAGE_INTERNAL_ROUTES"]' })), /Department Head/)
     assert.throws(() => requireInternalRouteManager(user('a', 'ADMIN', null)), /Department Head/)
   })
   it('reading: a head its own office, an umbrella head its parent, the admin any office; nobody picks another office', () => {
     assert.deepEqual(readableOfficeId(user('m', 'DEPARTMENT_HEAD', HR), 'rec'), { officeId: 'hr' })
     assert.deepEqual(readableOfficeId(user('uh', 'DEPARTMENT_HEAD', U1), null), { officeId: 'hr' })
     assert.deepEqual(readableOfficeId(user('a', 'ADMIN', null), 'rec'), { officeId: 'rec' })
-    assert.throws(() => readableOfficeId(user('s', 'STAFF', HR), null), /Department Heads/)
+    // Staff read their office's routes (an umbrella office's staff: its parent's), never another office's.
+    assert.deepEqual(readableOfficeId(user('s', 'STAFF', HR), 'rec'), { officeId: 'hr' })
+    assert.deepEqual(readableOfficeId(user('s', 'STAFF', U1), null), { officeId: 'hr' })
+    assert.throws(() => readableOfficeId(user('l', 'LIAISON', HR), null), /office staff/)
   })
 })
 

@@ -20,7 +20,9 @@ const RAN_ON_STEPS = { [Op.notIn]: ['CREATED', 'RETURNED'] }
 const stepInclude = { model: RouteStep, as: 'steps', include: [{ model: Office, as: 'office' }] }
 const stepOrder: any = [[{ model: RouteStep, as: 'steps' }, 'step_number', 'ASC']]
 
-export function getRouteWithSteps(routeId: string, transaction?: Transaction) {
+/** A Document Route with its steps; null for an internal process (no route_id). */
+export async function getRouteWithSteps(routeId: string | null, transaction?: Transaction) {
+  if (!routeId) return null
   return OrganizationRoute.findByPk(routeId, { include: [stepInclude], order: stepOrder, transaction })
 }
 

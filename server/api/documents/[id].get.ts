@@ -4,6 +4,7 @@ import { availableActions, documentHistory, getCurrentVisit, internalSteps, myPe
 import { documentAttributes, documentIncludes, openableWhere, userAttrs } from '~~/server/lib/document-queries.ts'
 import { hasQrAccess, routingSlipOf } from '~~/server/lib/qr-access.ts'
 import { getRouteWithSteps } from '~~/server/lib/routes.ts'
+import { findInternalRoute, internalRouteDto } from '~~/server/lib/internal-routes.ts'
 import { AT_OFFICE, approvalDto, documentDtoOne, routeDto } from '~~/server/lib/serializers.ts'
 import { notFound } from '~~/server/lib/errors.ts'
 import { documentFileList } from '~~/server/lib/document-files.ts'
@@ -49,10 +50,17 @@ export default defineApiHandler(async (event) => {
   // Internal routes: every one this document followed (newest first), and the office's routes it could start.
   const internalRuns = await DocumentInternalTransaction.findAll({ where: { document_id: doc.id }, order: [['started_at', 'DESC']] })
   const internalActive = internalRuns.find((t) => t.status === 'ACTIVE') ?? null
+  // An internal process can only run its own internal route again (after ending it early).
   const internalOptions =
     !withUnit && !internalActive && doc.current_office_id && user.office_id === doc.current_office_id
-      ? await InternalRoute.findAll({ where: { org_id: user.org_id, office_id: doc.current_office_id, is_active: true }, attributes: ['id', 'name', 'description'], order: [['name', 'ASC']] })
+      ? await InternalRoute.findAll({
+          where: { org_id: user.org_id, office_id: doc.current_office_id, is_active: true, ...(!doc.route_id && doc.internal_route_id && { id: doc.internal_route_id }) },
+          attributes: ['id', 'name', 'description'],
+          order: [['name', 'ASC']],
+        })
       : []
+  // An internal process: the internal route it follows, with its steps (its route, in place of an organization route).
+  const internalProcess = !doc.route_id && doc.internal_route_id ? await findInternalRoute(user.org_id as string, null, doc.internal_route_id as string).catch(() => null) : null
   // Flagged and going back one office: its liaisons (that office and its umbrella offices) claim the pickup.
   const back = AT_OFFICE.includes(doc.status) ? sendBackTarget(visit) : null
   const returnOpen = Boolean(back && !visit?.liaison_id)
@@ -88,6 +96,7 @@ export default defineApiHandler(async (event) => {
   return {
     document,
     route: route ? routeDto(route) : null,
+    internal_process: internalProcess ? internalRouteDto(internalProcess) : null,
     tracking: history.tracking,
     // Office by office: what happened inside each office up to the hand-over to the next.
     routing: history.routing,

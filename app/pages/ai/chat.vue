@@ -305,6 +305,8 @@ onMounted(() => {
           <span class="grid size-7 shrink-0 place-items-center overflow-hidden rounded-lg border border-line bg-white"><img src="~/assets/logo/icon.png" alt="" class="size-6" /></span>
           <h1 class="truncate text-[15px] font-semibold tracking-tight">{{ assistant.active?.title ?? 'FlowVision Assistant' }}</h1>
         </div>
+        <!-- This page has no shared layout, so it carries the bell itself. -->
+        <NotificationBell />
         <div ref="modelMenu" class="relative">
           <button class="btn btn-sm btn-ghost" :aria-expanded="modelsOpen" aria-haspopup="true" title="AI model (switches automatically)" @click="toggleModels">
             <span class="size-1.5 rounded-full" :class="currentModel ? 'bg-sage' : 'bg-amber'" />

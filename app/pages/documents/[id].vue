@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { FlowDocument, OrgRoute } from '~/types'
+import type { FlowDocument, InternalRoute, OrgRoute, RoutingMode } from '~/types'
 import type { Tone } from '~/utils/format'
 
 const route = useRoute()
@@ -62,10 +62,48 @@ watchEffect(() => {
     routeOptions.value.find((r) => r.name === doc.value?.route_name)?.id ??
     (routeOptions.value.length === 1 ? routeOptions.value[0]!.id : '')
 })
-const showRoutePicker = computed(() => canPickRoute.value && (routeOptions.value.length > 1 || submitRouteId.value !== doc.value?.route_id))
+// Internal Process: the uploader's own office's internal routes (from the server), when it has any.
+const { data: internalChoiceData } = await useAsyncData(`document-${id.value}-internal-routes`, () => (canPickRoute.value ? docsApi.internalProcessRoutes() : Promise.resolve(null)), {
+  watch: [canPickRoute],
+  lazy: true,
+})
+const internalChoices = computed<InternalRoute[]>(() => internalChoiceData.value?.data ?? [])
+// The mode it is submitted with: what the document has, until the uploader switches it.
+const submitMode = ref<RoutingMode>('GLOBAL')
+const submitInternalId = ref('')
+watch(
+  () => doc.value?.id,
+  () => {
+    submitMode.value = doc.value?.routing_mode ?? 'GLOBAL'
+    submitInternalId.value = doc.value?.internal_process_route_id ?? ''
+  },
+  { immediate: true },
+)
+watchEffect(() => {
+  if (!internalChoiceData.value || internalChoices.value.some((r) => r.id === submitInternalId.value)) return
+  submitInternalId.value = internalChoices.value.length === 1 ? internalChoices.value[0]!.id : ''
+})
+const offersModes = computed(() => canPickRoute.value && (internalChoices.value.length > 0 || doc.value?.routing_mode === 'INTERNAL'))
+const submitChoiceOk = computed(() => (submitMode.value === 'INTERNAL' ? Boolean(submitInternalId.value) : Boolean(submitRouteId.value)))
+const submitRouting = () => (submitMode.value === 'INTERNAL' ? { mode: 'INTERNAL' as const, internalRouteId: submitInternalId.value } : { mode: 'GLOBAL' as const, routeId: submitRouteId.value })
+const showRoutePicker = computed(
+  () => offersModes.value || (canPickRoute.value && (routeOptions.value.length > 1 || submitRouteId.value !== doc.value?.route_id)),
+)
 // A draft previews the route it will follow; everything else shows the route it ran on.
 const shownRoute = computed(() =>
-  doc.value?.status === 'CREATED' ? (routeOptions.value.find((r) => r.id === submitRouteId.value) ?? data.value?.route) : data.value?.route,
+  doc.value?.status === 'CREATED'
+    ? submitMode.value === 'INTERNAL'
+      ? null
+      : (routeOptions.value.find((r) => r.id === submitRouteId.value) ?? data.value?.route)
+    : data.value?.route,
+)
+// An internal process: the internal route it follows (a draft: the one it will follow).
+const shownInternal = computed(() =>
+  doc.value?.status === 'CREATED' && submitMode.value === 'INTERNAL'
+    ? (internalChoices.value.find((r) => r.id === submitInternalId.value) ?? data.value?.internal_process ?? null)
+    : doc.value?.status === 'CREATED'
+      ? null
+      : (data.value?.internal_process ?? null),
 )
 
 const pickupOpen = ref(false)
@@ -127,6 +165,24 @@ const pendingPass = computed(() => {
 })
 const failOpen = ref(false)
 const failRemarks = ref('')
+// An older document whose origin wasn't recorded: an administrator can record it once (with a reason).
+const canRecordOrigin = computed(() => auth.role === 'ADMIN' && doc.value?.origin?.kind === 'NOT_RECORDED' && doc.value.status !== 'CREATED')
+const originOpen = ref(false)
+const originForm = reactive({ office_id: '', reason: '' })
+const { data: originOfficeData } = await useAsyncData(`document-${id.value}-origin-offices`, () => (originOpen.value ? routesApi.offices() : Promise.resolve(null)), {
+  watch: [originOpen],
+  lazy: true,
+})
+const originOffices = computed(() => originOfficeData.value?.data ?? [])
+async function recordOrigin() {
+  if (!originForm.office_id || !originForm.reason.trim()) return
+  const ok = await act('origin', () => docsApi.recordOrigin(id.value, { office_id: originForm.office_id, reason: originForm.reason.trim() }), 'Origin recorded')
+  if (ok) {
+    originOpen.value = false
+    originForm.office_id = ''
+    originForm.reason = ''
+  }
+}
 const note = ref('')
 // The routing details run long on a multi-office route, so they start folded.
 const routingOpen = ref(false)
@@ -197,7 +253,8 @@ const processing = computed(() => doc.value?.processing ?? null)
           <span class="mono rounded-md bg-ink/[0.05] px-2 py-1 text-ink-body" :title="`Tracking number ${doc.tracking_number}`">{{ doc.qr_code ?? doc.tracking_number }}</span>
           <StatusBadge :status="doc.status" />
           <PriorityBadge :priority="doc.priority" />
-          <ToneBadge v-if="doc.internal_route_name" tone="primary" icon="shuffle">Internal route: {{ doc.internal_route_name }}</ToneBadge>
+          <ToneBadge v-if="doc.routing_mode === 'INTERNAL'" tone="primary" icon="shuffle">Internal process{{ doc.internal_process_name ? `: ${doc.internal_process_name}` : '' }}</ToneBadge>
+          <ToneBadge v-else-if="doc.internal_route_name" tone="primary" icon="shuffle">Internal route: {{ doc.internal_route_name }}</ToneBadge>
           <ToneBadge v-if="doc.qr_hidden" tone="neutral" icon="eye-off" title="It is on its way to your office: you get the QR label when it arrives">QR label shown on arrival</ToneBadge>
         </div>
         <h1 class="mt-3 text-[26px] leading-tight sm:text-[30px]">{{ doc.title }}</h1>
@@ -240,27 +297,43 @@ const processing = computed(() => doc.value?.processing ?? null)
       <div v-if="anyAction" class="card mb-6 flex flex-wrap items-center gap-2 p-4">
         <span class="mr-2 text-sm font-medium text-ink-body">Your next step:</span>
         <template v-if="showRoutePicker">
-          <label class="sr-only" for="submit-route">Document Route</label>
-          <select id="submit-route" v-model="submitRouteId" class="input w-auto max-w-full min-w-48">
-            <option value="" disabled>{{ routeOptions.length ? 'Choose a route…' : 'No route available' }}</option>
-            <option v-for="r in routeOptions" :key="r.id" :value="r.id">{{ r.name }} · {{ r.steps.length }} step{{ r.steps.length === 1 ? '' : 's' }}</option>
-          </select>
+          <template v-if="offersModes">
+            <label class="sr-only" for="submit-mode">Routing</label>
+            <select id="submit-mode" v-model="submitMode" class="input w-auto max-w-full">
+              <option value="GLOBAL">Global Routing</option>
+              <option value="INTERNAL">Internal Process</option>
+            </select>
+          </template>
+          <template v-if="submitMode === 'INTERNAL'">
+            <label class="sr-only" for="submit-internal-route">Internal route</label>
+            <select id="submit-internal-route" v-model="submitInternalId" class="input w-auto max-w-full min-w-48">
+              <option value="" disabled>{{ internalChoices.length ? 'Choose an internal route…' : (internalChoiceData?.reason ?? 'No internal route available') }}</option>
+              <option v-for="r in internalChoices" :key="r.id" :value="r.id">{{ r.name }} · {{ r.steps.length }} umbrella office{{ r.steps.length === 1 ? '' : 's' }}</option>
+            </select>
+          </template>
+          <template v-else>
+            <label class="sr-only" for="submit-route">Document Route</label>
+            <select id="submit-route" v-model="submitRouteId" class="input w-auto max-w-full min-w-48">
+              <option value="" disabled>{{ routeOptions.length ? 'Choose a route…' : 'No route available' }}</option>
+              <option v-for="r in routeOptions" :key="r.id" :value="r.id">{{ r.name }} · {{ r.steps.length }} step{{ r.steps.length === 1 ? '' : 's' }}</option>
+            </select>
+          </template>
         </template>
         <button
           v-if="perms!.canSubmit"
           class="btn btn-primary"
-          :disabled="!!busy || !submitRouteId"
+          :disabled="!!busy || !submitChoiceOk"
           :aria-busy="busy === 'submit'"
-          @click="act('submit', () => docsApi.submit(id, submitRouteId), 'Submitted to route')"
+          @click="act('submit', () => docsApi.submit(id, submitRouting()), submitMode === 'INTERNAL' ? 'Submitted to its internal process' : 'Submitted to route')"
         >
-          <FIcon name="send" :size="16" /> Submit to route
+          <FIcon name="send" :size="16" /> {{ submitMode === 'INTERNAL' ? 'Submit to internal process' : 'Submit to route' }}
         </button>
         <button
           v-if="perms!.canResubmit"
           class="btn btn-primary"
-          :disabled="!!busy || !submitRouteId"
+          :disabled="!!busy || !submitChoiceOk"
           :aria-busy="busy === 'submit'"
-          @click="act('submit', () => docsApi.submit(id, submitRouteId), 'Resubmitted — back at step 1')"
+          @click="act('submit', () => docsApi.submit(id, submitRouting()), submitMode === 'INTERNAL' ? 'Resubmitted to its internal process' : 'Resubmitted — back at step 1')"
         >
           <FIcon name="rotate-ccw" :size="16" /> Resubmit
         </button>
@@ -326,8 +399,21 @@ const processing = computed(() => doc.value?.processing ?? null)
         </template>
       </div>
 
+      <!-- An internal process: the internal route it follows inside its office (no organization route) -->
+      <section v-if="shownInternal" class="card card-pad mb-6" aria-labelledby="internal-process-title">
+        <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <h2 id="internal-process-title" class="text-lg">{{ doc.status === 'CREATED' ? 'Internal process it will follow' : 'Internal process' }}</h2>
+          <span class="text-xs text-ink-2">{{ shownInternal.name }}</span>
+        </div>
+        <p class="mb-5 text-sm text-ink-2">
+          Within {{ shownInternal.office?.name ?? 'its office' }} only: its umbrella offices handle it in order, then {{ shownInternal.office?.name ?? 'the office' }} approves or returns it. No other
+          office receives it.<template v-if="data.internal_routes?.length"> Progress is under “Internal routes” below.</template>
+        </p>
+        <RouteFlow :steps="internalProcessFlow(shownInternal)" />
+      </section>
+
       <!-- Route progress -->
-      <section v-if="shownRoute" class="card card-pad mb-6">
+      <section v-else-if="shownRoute" class="card card-pad mb-6">
         <div class="mb-5 flex flex-wrap items-center justify-between gap-2">
           <h2 class="text-lg">{{ doc.status === 'CREATED' ? 'Route it will follow' : 'Route progress' }}</h2>
           <span class="text-xs text-ink-2">{{ shownRoute.name }}</span>
@@ -407,9 +493,21 @@ const processing = computed(() => doc.value?.processing ?? null)
               <div class="flex justify-between gap-4"><dt class="text-ink-2">Type</dt><dd class="text-right">{{ doc.document_type ?? '—' }}</dd></div>
               <div class="flex justify-between gap-4"><dt class="text-ink-2">Submitted by</dt><dd class="text-right">{{ fullName(doc.submitter) }}</dd></div>
               <div class="flex justify-between gap-4"><dt class="text-ink-2">Submitted</dt><dd class="text-right">{{ formatDateTime(doc.submitted_at) }}</dd></div>
+              <template v-if="doc.origin?.kind === 'OFFICE'">
+                <div class="flex justify-between gap-4"><dt class="text-ink-2">{{ doc.origin.main_office ? 'Originating unit' : 'Originating office' }}</dt><dd class="text-right">{{ doc.origin.name }}</dd></div>
+                <div v-if="doc.origin.main_office" class="flex justify-between gap-4"><dt class="text-ink-2">Main office</dt><dd class="text-right">{{ doc.origin.main_office.name }}</dd></div>
+              </template>
+              <div v-else-if="doc.origin?.kind === 'NOT_RECORDED' && doc.status !== 'CREATED'" class="flex justify-between gap-4">
+                <dt class="text-ink-2">Originating office</dt>
+                <dd class="text-right">
+                  Origin not recorded
+                  <button v-if="canRecordOrigin" class="btn btn-ghost btn-sm ml-1" @click="originOpen = true">Record origin</button>
+                </dd>
+              </div>
               <div class="flex justify-between gap-4"><dt class="text-ink-2">Target completion</dt><dd class="text-right">{{ doc.target_at ? formatDateTime(doc.target_at) : doc.status === 'CREATED' ? 'Set on submission' : 'No time limit' }}</dd></div>
               <div v-if="doc.completed_at" class="flex justify-between gap-4"><dt class="text-ink-2">Completed</dt><dd class="text-right">{{ formatDateTime(doc.completed_at) }}</dd></div>
               <div v-if="doc.currentOffice" class="flex justify-between gap-4"><dt class="text-ink-2">Current office</dt><dd class="text-right">{{ doc.currentOffice.name }}</dd></div>
+              <div v-if="doc.next_office_name && doc.status !== 'COMPLETED' && doc.status !== 'RETURNED' && doc.status !== 'CREATED'" class="flex justify-between gap-4"><dt class="text-ink-2">Next office</dt><dd class="text-right">{{ doc.next_office_name }}</dd></div>
               <div v-if="doc.received_by" class="flex justify-between gap-4"><dt class="text-ink-2">Received by</dt><dd class="text-right">{{ fullName(doc.received_by) }}</dd></div>
               <div v-if="doc.liaison" class="flex justify-between gap-4"><dt class="text-ink-2">Messenger</dt><dd class="text-right">{{ fullName(doc.liaison) }}</dd></div>
               <div v-if="deadlineState(doc)" class="flex justify-between gap-4">
@@ -523,6 +621,26 @@ const processing = computed(() => doc.value?.processing ?? null)
       </AppModal>
       <SendBackModal :open="sendBackOpen" :doc="doc" @close="sendBackOpen = false" @sent="onRequested" />
       <ReportIssueModal :open="reportOpen" :doc="doc" @close="reportOpen = false" @reported="refresh()" />
+
+      <AppModal :open="originOpen" title="Record origin" description="Where this document started. Its origin wasn’t recorded when it was submitted. It can be set once and is kept in the audit log; where the document is now and its route don’t change." width="sm" @close="originOpen = false">
+        <form id="origin-form" class="space-y-3" @submit.prevent="recordOrigin">
+          <label class="block">
+            <span class="field-label">Originating office or umbrella office</span>
+            <select v-model="originForm.office_id" class="input" required>
+              <option value="" disabled>Choose an office…</option>
+              <option v-for="o in originOffices" :key="o.id" :value="o.id">{{ o.parent ? `${o.name} (under ${o.parent.name})` : o.name }}</option>
+            </select>
+          </label>
+          <label class="block">
+            <span class="field-label">How do you know?</span>
+            <textarea v-model="originForm.reason" class="input" rows="2" maxlength="500" placeholder="e.g. Routing slip shows it came from this office" required />
+          </label>
+        </form>
+        <template #footer>
+          <button class="btn btn-ghost" @click="originOpen = false">Cancel</button>
+          <button class="btn btn-primary" form="origin-form" :disabled="!originForm.office_id || !originForm.reason.trim() || busy === 'origin'" :aria-busy="busy === 'origin'">Record origin</button>
+        </template>
+      </AppModal>
 
       <AppModal :open="failOpen" title="Report failed delivery" description="The document goes back to its origin office, which will route it again." width="sm" @close="failOpen = false">
         <label class="field-label" for="fail-remarks">What happened?</label>

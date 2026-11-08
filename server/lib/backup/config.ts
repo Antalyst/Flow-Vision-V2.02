@@ -53,6 +53,8 @@ export interface BackupConfig {
   uploadDir: string
   resticBin: string | null
   retain: { daily: number; weekly: number; monthly: number }
+  /** BACKUP_ALLOW_UNENCRYPTED=true: plain packages, honoured only for a database on this computer (see encryptionPassphrase). */
+  allowUnencrypted: boolean
 }
 
 export function readConfig(): BackupConfig {
@@ -68,17 +70,66 @@ export function readConfig(): BackupConfig {
     uploadDir: env.uploadDir,
     resticBin: absolute('BACKUP_RESTIC_BIN'),
     retain: { daily: int('BACKUP_RETAIN_DAILY', 7, 1), weekly: int('BACKUP_RETAIN_WEEKLY', 4, 1), monthly: int('BACKUP_RETAIN_MONTHLY', 6, 1) },
+    allowUnencrypted: process.env.BACKUP_ALLOW_UNENCRYPTED === 'true',
   }
 }
 
-export async function readPassphrase(cfg: BackupConfig) {
+/**
+ * Why a key file's bytes would not survive being typed again on another computer, or null. Windows
+ * PowerShell 5.1 writes a byte-order mark (Set-Content -Encoding utf8) or UTF-16 (Out-File, ">"), and
+ * those bytes become part of the key: the same passphrase typed into a plain file then fails to decrypt.
+ */
+export function keyFileProblem(raw: Buffer, minLength = 16) {
+  if (raw[0] === 0xef && raw[1] === 0xbb && raw[2] === 0xbf) return 'starts with a byte-order mark (saved as "UTF-8 with BOM", e.g. by PowerShell Set-Content -Encoding utf8)'
+  if ((raw[0] === 0xff && raw[1] === 0xfe) || (raw[0] === 0xfe && raw[1] === 0xff) || raw.includes(0)) return 'is UTF-16 text (e.g. written by PowerShell Out-File or ">")'
+  const text = raw.toString('utf8')
+  if (text.includes('�')) return 'is not UTF-8 text'
+  const key = text.replace(/\r?\n$/, '')
+  if (/[\r\n]/.test(key)) return 'has more than one line'
+  if (key !== key.trim()) return 'starts or ends with a space'
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(key)) return 'contains control characters'
+  if (key.length < minLength) return `is shorter than ${minLength} characters`
+  return null
+}
+
+/**
+ * The passphrase as read for decrypting (unchanged since the first version, so every existing backup still
+ * opens), or with `strict` for encrypting a new one: then a file that keyFileProblem rejects is refused.
+ */
+export async function readPassphrase(cfg: BackupConfig, { strict = false } = {}) {
   if (!cfg.passphraseFile) return null
-  const text = await fsp.readFile(cfg.passphraseFile, 'utf8').catch(() => {
+  const raw = await fsp.readFile(cfg.passphraseFile).catch(() => {
     throw new BackupError('PASSPHRASE', 'BACKUP_PASSPHRASE_FILE is set but cannot be read')
   })
-  const pass = text.replace(/\r?\n$/, '')
+  const problem = strict ? keyFileProblem(raw) : null
+  if (problem) {
+    throw new BackupError('PASSPHRASE', `The passphrase file (BACKUP_PASSPHRASE_FILE) ${problem}. Write it again as one line of plain text (Notepad, or [IO.File]::WriteAllText in PowerShell) so the passphrase typed on another computer opens these backups. Nothing was written.`)
+  }
+  const pass = raw.toString('utf8').replace(/\r?\n$/, '')
   if (pass.trim().length < 16) throw new BackupError('PASSPHRASE', 'The backup passphrase (BACKUP_PASSPHRASE_FILE) must be at least 16 characters')
   return pass
+}
+
+const LOCAL_DB_HOSTS = new Set(['localhost', '127.0.0.1', '::1'])
+
+/** Plain (unencrypted) packages: only with BACKUP_ALLOW_UNENCRYPTED=true and a source database on this computer. */
+export const plainAllowed = (cfg: BackupConfig, dbHost: string) => cfg.allowUnencrypted && LOCAL_DB_HOSTS.has(dbHost.trim().toLowerCase())
+
+/**
+ * The passphrase a new package is encrypted with. Encryption is mandatory: without BACKUP_PASSPHRASE_FILE the
+ * backup is refused, except for a throwaway database on this computer with BACKUP_ALLOW_UNENCRYPTED=true
+ * (tests). The hosted database is never local, so its backups are always encrypted.
+ */
+export async function encryptionPassphrase(cfg: BackupConfig, dbHost: string) {
+  if (cfg.passphraseFile) return readPassphrase(cfg, { strict: true })
+  if (plainAllowed(cfg, dbHost)) return null
+  throw new BackupError(
+    'ENCRYPTION_REQUIRED',
+    cfg.allowUnencrypted
+      ? 'BACKUP_ALLOW_UNENCRYPTED applies only to a test database on this computer (DB_HOST localhost); this database is remote, so set BACKUP_PASSPHRASE_FILE. Nothing was written.'
+      : 'Backups are always encrypted: set BACKUP_PASSPHRASE_FILE to the file holding the passphrase (see docs/BACKUP_AND_RECOVERY.md). Nothing was written.',
+  )
 }
 
 const inside = (child: string, parent: string) => {
@@ -159,6 +210,20 @@ const alive = (pid: number) => {
   }
 }
 
+type LockHolder = { pid?: number; host?: string; what?: string; started_at?: string }
+
+/**
+ * A lock left behind by a process on this computer that no longer runs is stale. So is one taken before the
+ * computer last started: after a crash or power cut Windows soon gives its process id to another program,
+ * which would otherwise keep every later backup out.
+ */
+const staleLock = (held: LockHolder) => {
+  if (held.host !== os.hostname()) return false
+  if (held.pid && !alive(held.pid)) return true
+  const started = held.started_at ? Date.parse(held.started_at) : NaN
+  return Number.isFinite(started) && started < Date.now() - os.uptime() * 1000 - 60_000
+}
+
 export async function acquireLock(dir: string, what: string) {
   const file = path.join(dir, LOCK)
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -171,9 +236,8 @@ export async function acquireLock(dir: string, what: string) {
       }
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err
-      const held = JSON.parse(await fsp.readFile(file, 'utf8').catch(() => '{}')) as { pid?: number; host?: string; what?: string; started_at?: string }
-      // A lock left behind by a process on this computer that no longer runs is stale.
-      if (attempt === 0 && held.host === os.hostname() && held.pid && !alive(held.pid)) {
+      const held = JSON.parse(await fsp.readFile(file, 'utf8').catch(() => '{}')) as LockHolder
+      if (attempt === 0 && staleLock(held)) {
         await fsp.rm(file, { force: true })
         continue
       }
@@ -187,8 +251,8 @@ export async function lockInfo(dir: string) {
   const text = await fsp.readFile(path.join(dir, LOCK), 'utf8').catch(() => null)
   if (!text) return null
   try {
-    const held = JSON.parse(text) as { pid?: number; host?: string; what?: string; started_at?: string }
-    if (held.host === os.hostname() && held.pid && !alive(held.pid)) return null
+    const held = JSON.parse(text) as LockHolder
+    if (staleLock(held)) return null
     return { what: held.what ?? null, started_at: held.started_at ?? null }
   } catch {
     return null

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DocumentTypeItem, OrgRoute } from '~/types'
+import type { DocumentTypeItem, InternalRoute, OrgRoute, RoutingMode } from '~/types'
 
 useHead({ title: 'Upload document · FlowVision' })
 
@@ -28,19 +28,48 @@ const typeGroups = computed(() => {
   }
   return [...groups].map(([label, names]) => ({ label, names: [...names] }))
 })
+// Internal Process: offered only when the server says this account's office (a main office with umbrella offices)
+// has an internal route it can use. Its loading or failing never holds up a global upload.
+const {
+  data: internalData,
+  status: internalStatus,
+  error: internalError,
+  refresh: refreshInternal,
+} = await useAsyncData('upload-internal-routes', () => docsApi.internalProcessRoutes(), { lazy: true })
+const internalRoutes = computed<InternalRoute[]>(() => internalData.value?.data ?? [])
+const internalOffice = computed(() => internalData.value?.office ?? null)
+const showModes = computed(() => Boolean(internalData.value?.available) || Boolean(internalError.value))
+
 const form = reactive({
   title: '',
   document_type: '',
   description: '',
+  // Chosen in step 3 when Internal Process is offered (nothing until then); ?route= means Global Routing.
+  routing_mode: (typeof query.route === 'string' && query.route ? 'GLOBAL' : '') as RoutingMode | '',
   // ?route=<id> preselects a route; with a single route there is nothing to choose.
   route_id: (typeof query.route === 'string' && query.route) || '',
+  internal_route_id: '',
 })
+// Without the choice on offer, every document follows a global route, as before.
+const routingMode = computed<RoutingMode | ''>(() => (showModes.value ? form.routing_mode : 'GLOBAL'))
 watchEffect(() => {
   // Only once the routes are here: a ?route= preselection must survive the loading moment.
-  if (!routeData.value) return
+  if (!routeData.value || routingMode.value !== 'GLOBAL') return
   if (!routes.value.some((r) => r.id === form.route_id)) form.route_id = routes.value.length === 1 ? routes.value[0]!.id : ''
 })
-const selectedRoute = computed(() => routes.value.find((r) => r.id === form.route_id) ?? null)
+// Switching the mode clears the other mode's route: a document follows one or the other, never both.
+watch(
+  () => form.routing_mode,
+  (mode) => {
+    if (mode === 'INTERNAL') form.route_id = ''
+    if (mode === 'GLOBAL') form.internal_route_id = ''
+    if (mode === 'INTERNAL' && internalRoutes.value.length === 1) form.internal_route_id = internalRoutes.value[0]!.id
+  },
+)
+const selectedRoute = computed(() => (routingMode.value === 'GLOBAL' ? (routes.value.find((r) => r.id === form.route_id) ?? null) : null))
+const selectedInternal = computed(() => (routingMode.value === 'INTERNAL' ? (internalRoutes.value.find((r) => r.id === form.internal_route_id) ?? null) : null))
+const routeChosen = computed(() => Boolean(selectedRoute.value || selectedInternal.value))
+
 
 const dragging = ref(false)
 const submitting = ref<'draft' | 'submit' | null>(null)
@@ -276,7 +305,7 @@ function onDrop(e: DragEvent) {
 // Pictures only: the number of pages must be given. The AI read doesn't hold up the upload step:
 // the Details step waits for it (or lets it be skipped).
 const pagesOk = computed(() => !askCount.value || (Number.isInteger(pagesManual.value) && (pagesManual.value ?? 0) >= 1 && (pagesManual.value ?? 0) <= 9999))
-const stepDone = computed(() => [pagesOk.value, !analyzing.value && form.title.trim().length > 0, Boolean(selectedRoute.value), true])
+const stepDone = computed(() => [pagesOk.value, !analyzing.value && form.title.trim().length > 0, routeChosen.value, true])
 const reachable = (i: number) => stepDone.value.slice(0, i).every(Boolean)
 const canNext = computed(() => stepDone.value[step.value])
 const canSave = computed(() => stepDone.value[0] && stepDone.value[1] && stepDone.value[2])
@@ -293,7 +322,11 @@ async function send(submit: boolean) {
   let files: File[] | null = null
   try {
     const fd = new FormData()
-    for (const [k, v] of Object.entries(form)) if (v) fd.append(k, v)
+    for (const k of ['title', 'document_type', 'description'] as const) if (form[k]) fd.append(k, form[k])
+    // The routing mode is always sent, with only that mode's route (the server checks the pair again).
+    fd.append('routing_mode', routingMode.value)
+    if (routingMode.value === 'GLOBAL' && form.route_id) fd.append('route_id', form.route_id)
+    if (routingMode.value === 'INTERNAL') fd.append('internal_route_id', form.internal_route_id)
     fd.append('submit', String(submit))
     // One or many files — all under one document and one QR code — within MAX_UPLOAD_BYTES.
     files = await fitFiles(
@@ -526,9 +559,44 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
         </div>
       </div>
 
-      <!-- 3. Route -->
-      <fieldset v-else-if="step === 2">
-        <legend class="field-label">Which route should this document follow?</legend>
+      <!-- 3. Route: Global Routing or (an office with umbrella offices and internal routes) Internal Process -->
+      <!-- min-w-0: a fieldset is min-content wide by default, so a long route preview would widen the page on a phone -->
+      <fieldset v-else-if="step === 2" class="min-w-0">
+        <legend class="field-label">{{ showModes ? 'How should this document be routed?' : 'Which route should this document follow?' }}</legend>
+        <div v-if="showModes" class="mt-1 grid gap-3 sm:grid-cols-2">
+          <label
+            class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-terracotta/40"
+            :class="form.routing_mode === 'GLOBAL' ? 'border-terracotta bg-terracotta/[0.06]' : 'border-line hover:bg-card'"
+          >
+            <input v-model="form.routing_mode" type="radio" name="routing-mode" value="GLOBAL" class="sr-only" />
+            <span class="grid size-10 shrink-0 place-items-center rounded-xl" :class="form.routing_mode === 'GLOBAL' ? 'bg-terracotta text-white' : 'bg-ink/[0.05] text-ink-2'">
+              <FIcon name="globe" :size="18" />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center gap-2 text-sm font-semibold">Global Routing <FIcon v-if="form.routing_mode === 'GLOBAL'" name="check-circle" :size="15" class="text-terracotta" aria-hidden="true" /></span>
+              <span class="mt-0.5 block text-sm text-ink-body">Follow the established organization-wide route through the appropriate offices and departments.</span>
+            </span>
+          </label>
+          <label
+            class="flex cursor-pointer items-start gap-3 rounded-2xl border p-4 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-terracotta/40"
+            :class="form.routing_mode === 'INTERNAL' ? 'border-terracotta bg-terracotta/[0.06]' : 'border-line hover:bg-card'"
+          >
+            <input v-model="form.routing_mode" type="radio" name="routing-mode" value="INTERNAL" class="sr-only" />
+            <span class="grid size-10 shrink-0 place-items-center rounded-xl" :class="form.routing_mode === 'INTERNAL' ? 'bg-terracotta text-white' : 'bg-ink/[0.05] text-ink-2'">
+              <FIcon name="shuffle" :size="18" />
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="flex items-center gap-2 text-sm font-semibold">Internal Process <FIcon v-if="form.routing_mode === 'INTERNAL'" name="check-circle" :size="15" class="text-terracotta" aria-hidden="true" /></span>
+              <span class="mt-0.5 block text-sm text-ink-body">Process this document within your current office using an existing internal route.</span>
+              <span v-if="internalOffice" class="mt-1 block text-xs text-ink-2">Within {{ internalOffice.name }}</span>
+            </span>
+          </label>
+        </div>
+        <p v-if="showModes && !form.routing_mode" class="mt-4 text-sm text-ink-2">Choose Global Routing or Internal Process to continue.</p>
+
+        <!-- Global Routing: the Document Routes, as before -->
+        <div v-if="routingMode === 'GLOBAL'" :class="showModes ? 'mt-6' : ''">
+        <p v-if="showModes" class="field-label">Which Document Route?</p>
         <p v-if="!routes.length" class="text-sm text-ink-2">No routes available yet.</p>
         <div class="mt-1 space-y-2">
           <label
@@ -549,6 +617,43 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
           </label>
         </div>
         <div v-if="selectedRoute" class="mt-6 border-t border-line/60 pt-5"><RouteFlow :steps="selectedRoute.steps" /></div>
+        </div>
+
+        <!-- Internal Process: the internal routes of the account's own office (from the server) -->
+        <div v-else-if="routingMode === 'INTERNAL'" class="mt-6">
+          <p class="field-label">Which internal route of {{ internalOffice?.name ?? 'your office' }}?</p>
+          <p class="mb-3 text-sm text-ink-2">
+            It stays inside {{ internalOffice?.name ?? 'your office' }}: each umbrella office scans it in and passes it on, then it comes back to your office, which
+            approves or returns it. It is not sent to any other office.
+          </p>
+          <div v-if="internalStatus === 'pending' && !internalData" class="space-y-2" role="status" aria-label="Loading internal routes">
+            <div v-for="i in 2" :key="i" class="rounded-xl border border-line p-4"><div class="skeleton h-3.5 w-1/3" /><div class="skeleton mt-2 h-3 w-2/3" /></div>
+          </div>
+          <div v-else-if="internalError" class="flex items-center justify-between gap-3 rounded-xl border border-danger/30 bg-danger/[0.06] p-4 text-sm text-danger-ink" role="alert">
+            <span>Couldn’t load your office’s internal routes. {{ apiErrorMessage(internalError) }}</span>
+            <button type="button" class="btn btn-sm btn-ghost shrink-0" @click="refreshInternal()">Try again</button>
+          </div>
+          <EmptyState v-else-if="!internalRoutes.length" icon="shuffle" title="No internal route to use" :description="internalData?.reason ?? 'Your office has no active internal route.'" />
+          <div v-else class="space-y-2">
+            <label
+              v-for="r in internalRoutes"
+              :key="r.id"
+              class="flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors"
+              :class="form.internal_route_id === r.id ? 'border-terracotta bg-terracotta/[0.06]' : 'border-line hover:bg-card'"
+            >
+              <input v-model="form.internal_route_id" type="radio" name="internal-route" :value="r.id" class="mt-1 accent-terracotta" />
+              <span class="min-w-0 flex-1">
+                <span class="flex flex-wrap items-center gap-2">
+                  <span class="text-sm font-semibold">{{ r.name }}</span>
+                  <span class="text-xs text-ink-2">{{ r.steps.length }} umbrella office{{ r.steps.length === 1 ? '' : 's' }}</span>
+                </span>
+                <span v-if="r.description" class="mt-0.5 block text-sm text-ink-body">{{ r.description }}</span>
+                <span class="mt-1.5 block text-xs text-ink-2">{{ internalProcessChain(r) }}</span>
+              </span>
+            </label>
+          </div>
+          <div v-if="selectedInternal" class="mt-6 border-t border-line/60 pt-5"><RouteFlow :steps="internalProcessFlow(selectedInternal)" /></div>
+        </div>
       </fieldset>
 
       <!-- 4. Review -->
@@ -584,8 +689,13 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
           </div>
         </dl>
         <div v-if="selectedRoute" class="border-t border-line/60 pt-5">
-          <p class="eyebrow mb-4">It will follow: {{ selectedRoute.name }}</p>
+          <p class="eyebrow mb-4">{{ showModes ? 'Global Routing · ' : '' }}It will follow: {{ selectedRoute.name }}</p>
           <RouteFlow :steps="selectedRoute.steps" />
+        </div>
+        <div v-else-if="selectedInternal" class="border-t border-line/60 pt-5">
+          <p class="eyebrow mb-1">Internal Process · {{ selectedInternal.name }}</p>
+          <p class="mb-4 text-sm text-ink-2">Within {{ internalOffice?.name ?? 'your office' }} only: no other office receives it.</p>
+          <RouteFlow :steps="internalProcessFlow(selectedInternal)" />
         </div>
       </div>
 
@@ -599,7 +709,7 @@ const savingLabel = computed(() => (uploadProgress.value && uploadProgress.value
           Continue <FIcon name="arrow-right" :size="16" />
         </button>
         <button v-else class="btn btn-primary" :disabled="!canSave || Boolean(submitting)" :aria-busy="submitting === 'submit'" @click="send(true)">
-          <FIcon name="send" :size="16" /> {{ submitting === 'submit' ? (savingLabel ?? 'Submitting…') : 'Submit to route' }}
+          <FIcon name="send" :size="16" /> {{ submitting === 'submit' ? (savingLabel ?? 'Submitting…') : selectedInternal ? 'Submit to internal process' : 'Submit to route' }}
         </button>
       </div>
     </section>

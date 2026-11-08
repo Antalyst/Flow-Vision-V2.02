@@ -101,7 +101,7 @@ const rangeLabel = computed(() => ({ today: 'Today', '7d': 'Last 7 days', '30d':
     </template>
 
     </AsyncState>
-    <AppModal :open="Boolean(failDoc)" title="Report failed delivery" :description="failDoc ? `${failDoc.tracking_number} goes back to ${failDoc.currentOffice?.name ?? failDoc.origin?.name}.` : undefined" width="sm" @close="failDoc = null">
+    <AppModal :open="Boolean(failDoc)" title="Report failed delivery" :description="failDoc ? `${failDoc.tracking_number} goes back to ${failDoc.currentOffice?.name ?? originPlace(failDoc) ?? 'where it was picked up'}.` : undefined" width="sm" @close="failDoc = null">
       <label class="field-label" for="fail">What happened?</label>
       <textarea id="fail" v-model="failRemarks" rows="3" class="input" placeholder="e.g. Receiving office closed" maxlength="2000" />
       <template #footer>

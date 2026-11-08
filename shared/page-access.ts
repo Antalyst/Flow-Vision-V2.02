@@ -48,6 +48,8 @@ export const GRANTABLE_PAGES: Record<PageRole, GrantablePage[]> = {
     { path: '/documents', label: 'My uploads', group: 'Documents' },
     { path: '/documents/new', label: 'Upload document', group: 'Documents' },
     { path: '/staff/team', label: 'Messengers', group: 'Team' },
+    // Read-only, or editable for staff the Department Head made responsible (server/lib/internal-routes.ts).
+    { path: '/staff/internal-routes', label: 'Internal routes', group: 'Team' },
     ...COLLABORATE,
   ],
   LIAISON: [

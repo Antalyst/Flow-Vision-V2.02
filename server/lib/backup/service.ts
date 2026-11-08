@@ -4,8 +4,10 @@ import { env } from '../env.ts'
 import { audit } from '../audit.ts'
 import type { Actor, RequestMeta } from '../auth.ts'
 import { httpError } from '../errors.ts'
-import { BackupError, checkDestination, lockInfo, readConfig, type BackupConfig } from './config.ts'
+import { BackupError, checkDestination, lockInfo, plainAllowed, readConfig, type BackupConfig } from './config.ts'
 import { createFullBackup, listBackups } from './full.ts'
+import { readHealth, recordRun } from './health.ts'
+import { readStatus } from './restic.ts'
 
 /**
  * The Backups page (ADMIN): available only where it makes sense — a FlowVision server running on
@@ -60,14 +62,21 @@ const describeDestination = async (dir: string | null, what: string) => {
 
 export async function overview() {
   const a = await availability()
-  if (!a.enabled || !a.cfg) return { enabled: false, reason: a.reason, destination: null, copy: null, encrypted: false, job, busy: null, backups: [] }
+  if (!a.enabled || !a.cfg) return { enabled: false, reason: a.reason, destination: null, copy: null, encrypted: false, encryption: null, health: null, restic: null, job, busy: null, backups: [] }
   const cfg = a.cfg
+  const restic = await readStatus(cfg).catch(() => null)
+  const last = restic?.last_snapshot ?? null
   return {
     enabled: true,
     reason: null,
     destination: await describeDestination(cfg.dir, 'Backup folder'),
     copy: await describeDestination(cfg.copyDir, 'Second destination'),
     encrypted: Boolean(cfg.passphraseFile),
+    // Whether new backups can be made here: always encrypted, so a passphrase file must be configured.
+    encryption: { configured: Boolean(cfg.passphraseFile), plain_allowed: plainAllowed(cfg, env.db.host) },
+    // Recorded outcomes of the jobs (command line and this page); nothing here is inferred from a schedule.
+    health: await readHealth(cfg),
+    restic: last ? { last_snapshot: last.slice(0, 8), restore_tested_at: restic?.verified[last] ?? null, files_missing: restic?.incomplete?.[last] ?? 0 } : null,
     job,
     busy: cfg.dir ? await lockInfo(cfg.dir) : null,
     backups: await listBackups(cfg),
@@ -93,11 +102,17 @@ export async function startFullBackup(actor: Actor, meta: RequestMeta) {
     .then(async (r) => {
       current.state = 'done'
       current.result = { name: r.name, status: r.sidecar.status, bytes: r.sidecar.package_bytes, copy: r.copy }
+      const missing = r.sidecar.summary.files_missing
+      await recordRun(cfg, 'full', { status: missing ? 'incomplete' : 'ok', code: null, message: null, detail: { name: r.name, status: r.sidecar.status, files_missing: missing, encrypted: r.sidecar.encrypted, bytes: r.sidecar.package_bytes } })
+      if (r.copy.attempted) {
+        await recordRun(cfg, 'copy', { status: r.copy.ok ? 'ok' : 'failed', code: r.copy.ok ? null : 'COPY_FAILED', message: r.copy.error, detail: { name: r.name, destination: r.copy.destination } })
+      }
       await audit(meta, { action: 'BACKUP_CREATE', entityType: 'backup', entityId: r.sidecar.backup_id, after: { name: r.name, status: r.sidecar.status, copied: r.copy.ok } }).catch(() => {})
     })
     .catch(async (err) => {
       current.state = 'failed'
       current.error = err instanceof BackupError ? err.message : 'The backup failed unexpectedly; see the server log'
+      await recordRun(cfg, 'full', { status: 'failed', code: err instanceof BackupError ? err.code : 'ERROR', message: current.error, detail: null })
       if (!(err instanceof BackupError)) console.error('[backup] failed', err)
       await audit(meta, { action: 'BACKUP_FAILED', entityType: 'backup', entityId: current.id, after: { error: current.error } }).catch(() => {})
     })

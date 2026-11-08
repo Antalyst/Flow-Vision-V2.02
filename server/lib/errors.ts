@@ -18,7 +18,7 @@ export const tooMany = (message: string) => httpError(429, message, 'RATE_LIMITE
 /** Map database errors to client errors; anything unknown stays a 500. */
 export function toHttpError(err: unknown) {
   if (isError(err)) return err
-  const e = err as { name?: string; errors?: Array<{ path?: string; message?: string }> }
+  const e = err as { name?: string; reltype?: string; errors?: Array<{ path?: string; message?: string }> }
   switch (e?.name) {
     case 'SequelizeUniqueConstraintError': {
       const field = e.errors?.[0]?.path
@@ -27,6 +27,8 @@ export function toHttpError(err: unknown) {
     case 'SequelizeValidationError':
       return httpError(400, (e.errors ?? []).map((x) => x.message).join('; '), 'VALIDATION')
     case 'SequelizeForeignKeyConstraintError':
+      // 'parent': deleting a record others still point at (an office that is a document's origin, …).
+      if (e.reltype === 'parent') return httpError(409, 'This record is still in use (for example as a document’s origin office), so it can’t be deleted. Deactivate it instead.', 'IN_USE')
       return httpError(400, 'A referenced record does not exist', 'INVALID_REFERENCE')
     default:
       return err

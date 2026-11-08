@@ -6,6 +6,7 @@ import { assertManagerPlacement, canManageMember, managedTypesOf, officeInclude,
 import { memberDto } from '~~/server/lib/serializers.ts'
 import { cascadeToDelegates, readGrantedPermissions, recordAssignment } from '~~/server/lib/dh-access.ts'
 import { MAIN_OFFICE_ONLY, parsePermissions, type DhPermission } from '../../../shared/dh-permissions.ts'
+import { canManageInternalRoutes, staffManagesInternalRoutes } from '~~/server/lib/internal-routes.ts'
 import * as v from '~~/server/lib/validate.ts'
 
 export default defineApiHandler(async (event) => {
@@ -56,6 +57,22 @@ export default defineApiHandler(async (event) => {
     if (inOwnOffice) await assertManagerPlacement(admin, accountType, office)
     updates.office_id = office?.id ?? null
     updates.department = office?.department ?? null
+
+    // Staff responsible for the office's internal routes: granted only by a Department Head who manages them
+    // (internal-routes.ts), only to STAFF of that head's own main office. Moving the member to another office or
+    // making them a messenger takes it away. (For STAFF, users.permissions holds only this grant.)
+    if ('manages_internal_routes' in body) {
+      if (typeof body.manages_internal_routes !== 'boolean') throw badRequest('manages_internal_routes must be true or false', { field: 'manages_internal_routes' })
+      if (admin.account_type !== 'DEPARTMENT_HEAD' || !canManageInternalRoutes(admin)) {
+        throw forbidden('Only a Department Head who manages the office’s internal routes can make staff responsible for them')
+      }
+      if (accountType !== 'STAFF' || !office || office.id !== admin.office_id) {
+        throw badRequest('Only staff of your own office can be made responsible for its internal routes', { field: 'manages_internal_routes' })
+      }
+      updates.permissions = body.manages_internal_routes ? JSON.stringify(['MANAGE_INTERNAL_ROUTES']) : null
+    } else if (staffManagesInternalRoutes(user) && accountType !== 'DEPARTMENT_HEAD' && (accountType !== 'STAFF' || office?.id !== user.office_id)) {
+      updates.permissions = null
+    }
 
     // Delegated Department Heads: assignment, permission changes and revocation, each recorded.
     const wasDelegate = user.account_type === 'DEPARTMENT_HEAD' && Boolean(user.assigned_by)

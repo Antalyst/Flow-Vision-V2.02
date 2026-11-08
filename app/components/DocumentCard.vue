@@ -24,7 +24,8 @@ const deadline = computed(() => deadlineState(props.doc))
           <ToneBadge v-if="(doc.file_count ?? 0) > 1" tone="neutral" icon="layers">{{ doc.file_count }} files</ToneBadge>
           <ToneBadge v-if="doc.sent_back" tone="danger" icon="flag">Sent back to {{ doc.sent_back.office_name ?? 'previous office' }}</ToneBadge>
           <ToneBadge v-else-if="doc.open_issues" tone="danger" icon="flag">Flagged</ToneBadge>
-          <ToneBadge v-if="doc.internal_route_name" tone="primary" icon="shuffle">Internal: {{ doc.internal_route_name }}</ToneBadge>
+          <ToneBadge v-if="doc.routing_mode === 'INTERNAL'" tone="primary" icon="shuffle">Internal process</ToneBadge>
+          <ToneBadge v-else-if="doc.internal_route_name" tone="primary" icon="shuffle">Internal: {{ doc.internal_route_name }}</ToneBadge>
         </div>
         <NuxtLink
           :to="`/documents/${doc.id}`"
@@ -53,6 +54,9 @@ const deadline = computed(() => deadlineState(props.doc))
     <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-ink-2">
       <span v-if="doc.route_name" class="inline-flex min-w-0 items-center gap-1.5">
         <FIcon name="git-commit" :size="13" /> <span class="truncate">{{ doc.route_name }}</span>
+      </span>
+      <span v-else-if="doc.internal_process_name" class="inline-flex min-w-0 items-center gap-1.5" title="Internal process: inside its office, through its umbrella offices">
+        <FIcon name="shuffle" :size="13" /> <span class="truncate">{{ doc.internal_process_name }}</span>
       </span>
       <span v-if="showSubmitter && doc.submitter" class="inline-flex items-center gap-1.5">
         <FIcon name="user" :size="13" /> {{ fullName(doc.submitter) }}

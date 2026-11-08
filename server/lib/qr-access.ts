@@ -177,6 +177,7 @@ type SlipDoc = {
   document_type?: string | null
   priority: string
   created_at?: string | null
+  routing_mode?: 'GLOBAL' | 'INTERNAL'
   origin?: { name: string | null } | null
   submitter?: { first_name?: string | null; last_name?: string | null } | null
 }
@@ -186,17 +187,19 @@ type SlipRoute = { steps?: Array<{ step_number: number; office?: { name?: string
  * The document-information table of the routing slip (printed under the QR). From what was registered,
  * never from where the document is now: the uploader's office, the organization route's first and last
  * office (an internal route or umbrella hand-off never changes these), and the time it was registered.
+ * An internal process has no organization route: its own office is where it goes and where it ends.
  * Only sent together with the QR itself (callers check qr access first).
  */
 export function routingSlipOf(doc: SlipDoc, route: SlipRoute): RoutingSlip {
   const steps = [...(route?.steps ?? [])].sort((a, b) => a.step_number - b.step_number)
   const name = [doc.submitter?.first_name, doc.submitter?.last_name].filter(Boolean).join(' ').trim()
+  const internal = doc.routing_mode === 'INTERNAL'
   return {
     subject: doc.title,
     document_type: doc.document_type ?? null,
     origin_office: doc.origin?.name ?? null,
-    first_destination: steps[0]?.office?.name ?? null,
-    final_destination: steps.at(-1)?.office?.name ?? null,
+    first_destination: internal ? (doc.origin?.name ?? null) : (steps[0]?.office?.name ?? null),
+    final_destination: internal ? (doc.origin?.name ?? null) : (steps.at(-1)?.office?.name ?? null),
     priority: doc.priority,
     registered_by: name || null,
     registered_at: doc.created_at ?? null,

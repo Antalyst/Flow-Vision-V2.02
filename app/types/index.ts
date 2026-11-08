@@ -83,6 +83,11 @@ export interface FlowDocument {
   status: DocumentStatus
   route_id: string | null
   route_name: string | null
+  /** GLOBAL: an organization Document Route. INTERNAL: an internal process of the uploader's office (no route_id). */
+  routing_mode?: RoutingMode
+  /** An internal process: the internal route it follows, and its name. */
+  internal_process_route_id?: string | null
+  internal_process_name?: string | null
   current_step_number: number | null
   current_office_id: string | null
   received_at: string | null
@@ -150,9 +155,14 @@ export interface DocumentProcessing {
 }
 
 export interface DocumentOrigin {
-  kind: 'OFFICE' | 'ORGANIZATION'
+  /** NOT_RECORDED: a draft, or an older document whose origin wasn't stored (name = "Origin not recorded"). */
+  kind: 'OFFICE' | 'ORGANIZATION' | 'NOT_RECORDED'
   office_id: string | null
   name: string
+  /** The parent office, when the origin is an umbrella office. */
+  main_office?: { id: string; name: string } | null
+  /** Known from the document's own history (never from where the uploader is now). */
+  recorded?: boolean
 }
 
 export interface RouteStep {
@@ -411,6 +421,9 @@ export interface DocumentFileInfo {
   /** Opens the file (the session cookie authorizes it). */
   url: string
 }
+
+/** How a document is routed: an organization Document Route, or an internal process of the uploader's office. */
+export type RoutingMode = 'GLOBAL' | 'INTERNAL'
 
 /** An office's internal route: an ordered path through its umbrella offices. */
 export interface InternalRoute {

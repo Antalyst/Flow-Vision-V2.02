@@ -123,7 +123,7 @@ async function startTransit(id: string) {
         <DocumentCard v-for="d in pickups.data" :key="d.id" :doc="d">
           <template #actions>
             <span class="inline-flex items-center gap-1.5 text-[13px] text-ink-body">
-              <FIcon name="map-pin" :size="14" /> {{ d.currentOffice?.code ?? d.origin?.name }}
+              <FIcon name="map-pin" :size="14" /> {{ d.currentOffice?.code ?? originPlace(d) ?? 'Origin' }}
               <FIcon name="arrow-right" :size="14" class="text-ink-3" /> {{ d.next_office_name }}
             </span>
             <button v-if="d.sent_back" class="btn btn-sm btn-ghost ml-auto" :disabled="busy === `unclaim-${d.id}`" :aria-busy="busy === `unclaim-${d.id}`" @click="giveUp(d)">Cancel claim</button>

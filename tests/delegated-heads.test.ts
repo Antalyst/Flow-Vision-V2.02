@@ -102,7 +102,8 @@ describe('managing accounts', () => {
 
 describe('document buttons follow the permissions (the server checks the same in each command)', () => {
   // A document received at the umbrella office, released to nobody yet, not at the last step.
-  const doc = { id: 'doc', org_id: ORG, status: 'ARRIVED_AT_OFFICE', current_step_number: 2, current_office_id: 'sntr', submitted_by: 'someone' }
+  // On a global Document Route (an internal process — route_id null — has no send-back).
+  const doc = { id: 'doc', org_id: ORG, route_id: 'route', status: 'ARRIVED_AT_OFFICE', current_step_number: 2, current_office_id: 'sntr', submitted_by: 'someone' }
   const ctx = (handlerId: string) => ({ received: true, handlerId, visitLiaisonId: null, isFinalStep: false, nextOfficeId: 'hr', passedBy: null, pendingApproval: null })
 
   it('granted actions show; ungranted ones do not', () => {

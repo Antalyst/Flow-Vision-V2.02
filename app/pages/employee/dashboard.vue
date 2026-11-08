@@ -43,7 +43,10 @@ const pickupDoc = ref<FlowDocument | null>(null)
         <StatCard label="Pending pickup" :value="data.counts.awaiting_pickup" icon="package" tone="neutral" :hint="`${data.counts.received_today} received today`" to="/employee/queue?tab=pickup" />
       </section>
 
-      <OfficeForecast />
+      <OfficeForecast part="office" />
+
+      <!-- A main office's head: the office and its umbrella offices (renders nothing without umbrella offices). -->
+      <UmbrellaPerformance v-if="auth.role === 'DEPARTMENT_HEAD' && !auth.user?.office?.parent_office_id" class="mt-8" />
 
       <section class="mt-8">
         <h2 class="mb-4 text-lg">At your office now</h2>
@@ -78,6 +81,9 @@ const pickupDoc = ref<FlowDocument | null>(null)
           <DocumentCard v-for="d in data.staff_uploads" :key="d.id" :doc="d" show-submitter />
         </div>
       </section>
+
+      <!-- Last on the page: the staff workload cards of the forecast above (same period and data). -->
+      <OfficeForecast part="staff" />
     </template>
 
     </AsyncState>

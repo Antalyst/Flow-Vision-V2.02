@@ -93,7 +93,7 @@ const availabilityLabel = { AVAILABLE: 'free', BUSY: 'busy', OFF_DUTY: 'off duty
       <FIcon name="repeat" :size="16" class="shrink-0" /> Currently {{ fullName(doc.liaison) }}. They'll be told they no longer need to pick it up.
     </p>
     <p class="mb-3 text-xs text-ink-body">
-      {{ atOrigin ? `They pick it up from ${doc?.origin?.name ?? 'the origin'} and bring it to ${doc?.next_office_name ?? 'the first office'}.` : '' }}
+      {{ atOrigin ? `They pick it up from ${doc?.currentOffice?.name ?? originPlace(doc) ?? 'the origin'} and bring it to ${doc?.next_office_name ?? 'the first office'}.` : '' }}
       Only free messengers can be chosen: on duty, with nothing to pick up or deliver<template v-if="doc?.currentOffice">, and from {{ doc.currentOffice.name }}'s own messengers</template>.
     </p>
 

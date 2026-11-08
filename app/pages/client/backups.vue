@@ -29,12 +29,28 @@ interface Job {
   result: { name: string; status: string; bytes: number; copy: { attempted: boolean; ok: boolean; destination: string | null; error: string | null } } | null
   error: string | null
 }
+interface Run {
+  at: string
+  status: 'ok' | 'incomplete' | 'failed'
+  code: string | null
+  message: string | null
+  detail: Record<string, string | number | boolean | null> | null
+}
+interface JobHealth {
+  last_run: Run | null
+  last_ok: Run | null
+  last_failure: Run | null
+}
+type HealthJob = 'full' | 'copy' | 'snapshot' | 'forget' | 'check' | 'check_read_data' | 'restore_test'
 interface Overview {
   enabled: boolean
   reason: string | null
   destination: Destination | null
   copy: Destination | null
   encrypted: boolean
+  encryption: { configured: boolean; plain_allowed: boolean } | null
+  health: Partial<Record<HealthJob, JobHealth>> | null
+  restic: { last_snapshot: string; restore_tested_at: string | null; files_missing: number } | null
   job: Job | null
   busy: { what: string | null; started_at: string | null } | null
   backups: BackupRow[]
@@ -75,6 +91,35 @@ async function verify(b: BackupRow) {
 }
 
 const size = (n: number | null | undefined) => (n == null ? '—' : n >= 1024 ** 3 ? `${(n / 1024 ** 3).toFixed(2)} GB` : `${(n / 1024 ** 2).toFixed(1)} MB`)
+
+// The recorded outcome of each job (backup-health.json), judged by how long ago it last succeeded.
+const DAY = 24 * 60 * 60 * 1000
+const HEALTH_ROWS: Array<{ job: HealthJob; label: string; due: string; maxAge: number }> = [
+  { job: 'full', label: 'Full backup', due: 'weekly', maxAge: 8 * DAY },
+  { job: 'copy', label: 'Copy on the external drive', due: 'with each full backup', maxAge: 8 * DAY },
+  { job: 'snapshot', label: 'Daily snapshot (Restic)', due: 'daily', maxAge: 26 * 60 * 60 * 1000 },
+  { job: 'check_read_data', label: 'Full read of the snapshot repository', due: 'monthly', maxAge: 32 * DAY },
+  { job: 'restore_test', label: 'Test restore into a separate database', due: 'monthly', maxAge: 32 * DAY },
+]
+const healthRows = computed(() =>
+  HEALTH_ROWS.map((row) => {
+    const h = data.value?.health?.[row.job] ?? null
+    const ok = h?.last_ok ?? null
+    const lastRun = h?.last_run ?? null
+    const failedSince = lastRun && lastRun.status !== 'ok' && (!ok || lastRun.at > ok.at) ? lastRun : null
+    const overdue = !ok || Date.now() - new Date(ok.at).getTime() > row.maxAge
+    const state: { tone: Tone; label: string } = !lastRun
+      ? { tone: 'neutral', label: 'Never recorded' }
+      : failedSince?.status === 'failed'
+        ? { tone: 'danger', label: 'Last run failed' }
+        : failedSince?.status === 'incomplete'
+          ? { tone: 'warning', label: 'Last run incomplete' }
+          : overdue
+            ? { tone: 'warning', label: 'Overdue' }
+            : { tone: 'success', label: 'Up to date' }
+    return { ...row, ok, failedSince, state }
+  }),
+)
 
 const STATUS: Record<BackupRow['status'], { tone: Tone; label: string }> = {
   VERIFIED: { tone: 'success', label: 'Verified' },
@@ -130,6 +175,34 @@ const STATUS: Record<BackupRow['status'], { tone: Tone; label: string }> = {
           <p v-else class="text-sm text-danger-ink">{{ data.copy.error }}</p>
         </section>
       </div>
+
+      <section v-if="data.encryption && !data.encryption.configured" class="card card-pad mb-6 border-danger/40" role="alert">
+        <p class="text-sm font-semibold text-danger-ink">{{ data.encryption.plain_allowed ? 'Test mode: backups of this local test database are not encrypted.' : 'New backups will be refused: no encryption passphrase is configured.' }}</p>
+        <p class="mt-1 text-sm text-ink-body">Backups are always encrypted. The server operator sets BACKUP_PASSPHRASE_FILE and keeps the passphrase somewhere other than this computer and the backup drive.</p>
+      </section>
+
+      <!-- Health: what the jobs actually did (recorded by each run), not what is scheduled -->
+      <section class="card mb-6 overflow-hidden" aria-labelledby="backup-health-title">
+        <div class="px-5 pt-4">
+          <h2 id="backup-health-title" class="text-lg">Backup health</h2>
+          <p class="mt-0.5 text-xs text-ink-2">The last recorded result of each job, whether it ran on a schedule, from the command line or from this page.</p>
+        </div>
+        <ul class="mt-3 divide-y divide-line/60">
+          <li v-for="r in healthRows" :key="r.job" class="flex flex-col gap-1 px-5 py-3 sm:flex-row sm:items-start sm:gap-4">
+            <div class="min-w-0 flex-1">
+              <p class="text-sm font-semibold">{{ r.label }} <span class="text-xs font-normal text-ink-2">· {{ r.due }}</span></p>
+              <p class="mt-0.5 text-xs text-ink-body">
+                Last success: {{ r.ok ? formatDateTime(r.ok.at) : 'none recorded' }}
+                <template v-if="r.job === 'snapshot' && data.restic"> · snapshot {{ data.restic.last_snapshot }}, restore-tested {{ data.restic.restore_tested_at ? formatDateTime(data.restic.restore_tested_at) : 'no' }}</template>
+              </p>
+              <p v-if="r.failedSince" class="mt-0.5 break-words text-xs" :class="r.failedSince.status === 'failed' ? 'text-danger-ink' : 'text-amber-ink'">
+                {{ formatDateTime(r.failedSince.at) }}: {{ r.failedSince.message ?? (r.failedSince.detail?.files_missing ? `${r.failedSince.detail.files_missing} referenced file(s) missing from it` : r.failedSince.code) }}
+              </p>
+            </div>
+            <ToneBadge :tone="r.state.tone" dot class="self-start">{{ r.state.label }}</ToneBadge>
+          </li>
+        </ul>
+      </section>
 
       <!-- Current job -->
       <section v-if="data.job || data.busy" class="card card-pad mb-6" aria-live="polite">

@@ -5,6 +5,7 @@ import { parsePageAccess } from '../../shared/page-access.ts'
 import { parsePermissions } from '../../shared/dh-permissions.ts'
 import { dayMinutes, isWorkingTime, nextWorkingStart, workingMinutesBetween } from '../../shared/work-calendar.ts'
 import { loadWorkCalendar, type LoadedCalendar } from './work-calendar.ts'
+import { routingModeOf } from './routing-mode.ts'
 
 /**
  * The database follows the project schema (org_id, sla_days, content, …); the API
@@ -169,8 +170,12 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
   return {
     id: d.id,
     organization_id: d.org_id,
-    route_id: d.route_id,
+    route_id: d.route_id ?? null,
     route_name: val(d, 'route_name') ?? null,
+    // GLOBAL: an organization Document Route. INTERNAL: an internal process of its office (routing-mode.ts).
+    routing_mode: routingModeOf(d),
+    internal_process_route_id: (d.internal_route_id as string | null | undefined) ?? null,
+    internal_process_name: (val(d, 'internal_process_name') as string | null) ?? null,
     tracking_number: trackingNumber(d.id),
     // The routing code printed on the document's QR label ({OFFICE}-{MMDDYY}-{6 digits}, e.g. CHO-SNTR-102026-123456).
     qr_code: val(d, 'qr_code') ?? null,
@@ -214,11 +219,30 @@ function documentDto(d: Row, usersById: Map<string, Row>) {
     submitter: userSummary(d.submitter),
     liaison: liaisonId ? userSummary(usersById.get(liaisonId)) : null,
     received_by: handler ? userSummary(usersById.get(handler)) : null,
-    // Where the document comes from: the uploader's office, or their organization (ADMIN accounts).
-    origin: val(d, 'origin_office_id')
-      ? { kind: 'OFFICE' as const, office_id: val(d, 'origin_office_id') as string, name: val(d, 'origin_office_name') as string }
-      : { kind: 'ORGANIZATION' as const, office_id: null, name: (val(d, 'org_name') as string | null) ?? 'Organization' },
+    // Where the document comes from (document-queries.ts): the office recorded at first submission
+    // (`main_office` = its parent when it is an umbrella office), the organization (an admin upload), or —
+    // a draft, or an older document whose origin wasn't recorded — NOT_RECORDED. Never the uploader's office now.
+    origin: originDto(d),
   }
+}
+
+export const ORIGIN_NOT_RECORDED = 'Origin not recorded'
+
+function originDto(d: Row) {
+  const officeId = val(d, 'origin_office_id') as string | null
+  if (officeId && val(d, 'origin_name')) {
+    return {
+      kind: 'OFFICE' as const,
+      office_id: officeId,
+      name: val(d, 'origin_name') as string,
+      main_office: val(d, 'origin_main_id') ? { id: val(d, 'origin_main_id') as string, name: val(d, 'origin_main_name') as string } : null,
+      recorded: true,
+    }
+  }
+  if (Number(val(d, 'origin_is_organization') ?? 0)) {
+    return { kind: 'ORGANIZATION' as const, office_id: null, name: (val(d, 'org_name') as string | null) ?? 'Organization', main_office: null, recorded: true }
+  }
+  return { kind: 'NOT_RECORDED' as const, office_id: null, name: ORIGIN_NOT_RECORDED, main_office: null, recorded: false }
 }
 
 /**
@@ -491,5 +515,7 @@ export function memberDto(u: Row) {
     assigned_by: (u.assigned_by as string | null) ?? null,
     assigned_at: iso(u.assigned_at),
     permissions: u.account_type === 'DEPARTMENT_HEAD' && u.assigned_by ? parsePermissions(u.permissions) : null,
+    // STAFF its Department Head made responsible for the office's internal routes (internal-routes.ts).
+    manages_internal_routes: u.account_type === 'STAFF' && parsePermissions(u.permissions).includes('MANAGE_INTERNAL_ROUTES'),
   }
 }

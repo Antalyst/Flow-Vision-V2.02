@@ -1,11 +1,11 @@
 import { Op, fn, type WhereOptions } from 'sequelize'
 import type { Actor } from './auth.ts'
 import { Approval, Document, DocumentTracking, Liaison, Office, OrganizationRoute, QrCode, User, sequelize, type AccountType, type Row } from './models.ts'
-import { currentVisit, liaisonWorkloadSql, submittedFromOffice, visibleWhere } from './document-queries.ts'
+import { currentVisit, liaisonWorkloadSql, organizationOriginSql, submittedFromOffice, visibleWhere } from './document-queries.ts'
 import { idsCondition, qrAccessibleIds, qrSearchIds } from './qr-access.ts'
 import { wordsOf } from './knowledge.ts'
 import type { FoundDocument, KnowledgeSourceRef } from './ai-history.ts'
-import { AT_OFFICE, CARRYING } from './serializers.ts'
+import { AT_OFFICE, CARRYING, ORIGIN_NOT_RECORDED } from './serializers.ts'
 import { KNOWLEDGE_FOCUSES, detectFocus, listCharterServices, resolveOfficeTarget, searchKnowledge, type KnowledgeFocus, type OfficeTarget } from './ai-knowledge.ts'
 import { resolveAiContext, scopeDescription, type AiUserContext } from './ai-context.ts'
 import { hasPermission } from './dh-access.ts'
@@ -515,7 +515,8 @@ async function findDocuments(actor: Actor, args: Args) {
     attributes: [
       'id', 'title', 'description', 'category', 'status', 'current_step_number', 'submitted_at', 'completed_at',
       [lit('(SELECT q.qr_code_data FROM qr_codes q WHERE q.document_id = documents.id)'), 'tracking_code'],
-      [lit('(SELECT o.name FROM users u JOIN offices o ON o.id = u.office_id WHERE u.id = documents.submitted_by)'), 'origin_office'],
+      [lit('(SELECT o.name FROM offices o WHERE o.id = documents.origin_office_id)'), 'origin_office'],
+      [lit(`(CASE WHEN ${organizationOriginSql()} THEN 1 ELSE 0 END)`), 'origin_is_organization'],
     ],
     include: [
       { model: Office, as: 'currentOffice', attributes: ['name'] },
@@ -589,7 +590,7 @@ async function findDocuments(actor: Actor, args: Args) {
       status: STATUS_LABEL[String(d.status)] ?? d.status,
       where: whereNow(d),
       uploaded_by: personName(d.submitter),
-      from_office: (d.get('origin_office') as string | null) ?? 'The organization',
+      from_office: (d.get('origin_office') as string | null) ?? (Number(d.get('origin_is_organization') ?? 0) ? 'The organization' : ORIGIN_NOT_RECORDED),
       submitted: humanDate(d.submitted_at),
       ...(d.completed_at && { completed: humanDate(d.completed_at) }),
       ...(matched.length && { matched_in: matched.join(', ') }),

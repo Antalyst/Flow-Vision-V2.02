@@ -117,7 +117,7 @@ const nodeClasses: Record<State, string> = {
           <FIcon v-else :name="origin.kind === 'ORGANIZATION' ? 'home' : 'flag'" :size="18" />
         </span>
         <p class="mt-2 line-clamp-2 text-[13px] leading-snug font-medium">{{ origin.name }}</p>
-        <p class="mt-0.5 text-xs text-ink-2">{{ origin.kind === 'ORGANIZATION' ? 'Organization' : 'Office' }}<template v-if="uploadedBy"> · {{ uploadedBy }}</template></p>
+        <p class="mt-0.5 text-xs text-ink-2">{{ origin.kind === 'ORGANIZATION' ? 'Organization' : origin.kind === 'NOT_RECORDED' ? 'Not recorded' : 'Office' }}<template v-if="uploadedBy"> · {{ uploadedBy }}</template></p>
         <ToneBadge tone="primary" icon="flag" class="mt-2">Origin</ToneBadge>
         <p v-if="tracking && startedAt" class="mt-1 text-[11px] text-ink-2">Started {{ formatDateTime(startedAt) }}</p>
         <ToneBadge v-if="originState" :tone="originState.tone" dot class="mt-2">{{ originState.label }}</ToneBadge>
